@@ -1,0 +1,59 @@
+# Release workflow — Changesets-driven publish to npm with OIDC provenance.
+#
+# Required repository secrets (configure in Settings → Secrets and variables → Actions):
+#   - NPM_TOKEN: an npm automation token with publish access to the @mochi.js scope.
+#                Provenance signing is handled by GitHub's OIDC issuer at runtime;
+#                no additional secret is needed for the signature itself.
+#
+# How it works:
+#   - On push to main, changesets/action@v1 inspects pending .changeset/*.md files.
+#   - If any are present, the action opens (or updates) a "Version Packages" PR
+#     that runs `bun run version-packages`, bumping versions + writing CHANGELOGs.
+#   - When that PR is merged, this workflow runs again, sees no pending changesets,
+#     and instead invokes `bun run release` (= bun run build && changeset publish)
+#     which publishes each updated package to npm with OIDC-signed provenance.
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    name: Version PR or publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Create release PR or publish
+        uses: changesets/action@v1
+        with:
+          version: bun run version-packages
+          publish: bun run release
+          commit: "chore(repo): version packages"
+          title: "chore(repo): version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"

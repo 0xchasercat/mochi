@@ -16,6 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.9
@@ -27,6 +29,34 @@ jobs:
         run: bun run lint
       - name: Test
         run: bun run test
+      # Soft-fail at v0.0 — most early infra PRs don't ship user-visible surface,
+      # so a missing changeset is a warning, not a build failure. Flip to hard-fail
+      # when phase 0.1 (CDP transport) lands per tasks/0004-changesets.md.
+      - name: Changeset status (soft-fail at v0.0)
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -u
+          # Files changed in this PR
+          changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          # Did the PR touch any package source?
+          touched_src=$(printf '%s\n' "$changed" | grep -E '^packages/[^/]+/src/' || true)
+          # Did the PR add any new changeset entry (excluding README/config)?
+          added_changeset=$(printf '%s\n' "$changed" \
+            | grep -E '^\.changeset/.+\.md$' \
+            | grep -v -E '^\.changeset/README\.md$' || true)
+
+          if [ -n "$touched_src" ] && [ -z "$added_changeset" ]; then
+            echo "::warning title=Missing changeset::This PR modifies packages/*/src/** but adds no .changeset/*.md entry. Run 'bun changeset' before merge. Soft-fail at v0.0; will hard-fail when phase 0.1 surface lands."
+          else
+            echo "Changeset check OK (touched_src=$( [ -n \"$touched_src\" ] && echo yes || echo no ), added_changeset=$( [ -n \"$added_changeset\" ] && echo yes || echo no ))."
+          fi
+
+          # Also exercise the changesets CLI so a broken config fails fast.
+          bunx --bun @changesets/cli status || echo "::warning::changeset status returned non-zero (soft-fail at v0.0)"
 
   rust:
     name: Rust — build cdylib + test
