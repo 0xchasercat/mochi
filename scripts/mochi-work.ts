@@ -100,7 +100,7 @@ async function runOut(cmd: readonly string[], opts: RunOpts = {}): Promise<strin
 // Repo introspection.
 // -------------------------------------------------------------------------------------
 
-interface RepoCtx {
+export interface RepoCtx {
   readonly root: string;
 }
 
@@ -749,15 +749,43 @@ async function cmdSubmit(args: ParsedArgs, repo: RepoCtx): Promise<number> {
 // Subcommand: clean
 // -------------------------------------------------------------------------------------
 
-async function isBranchMerged(branch: string, repo: RepoCtx): Promise<boolean> {
-  // `git branch --merged origin/main` lists branches whose tip is reachable from origin/main.
-  const merged = await run(["git", "branch", "--merged", "origin/main"], { cwd: repo.root });
-  if (merged.code !== 0) return false;
-  for (const line of merged.stdout.split(/\r?\n/)) {
-    const name = line.replace(/^[*+ ]+/, "").trim();
-    if (name === branch) return true;
-  }
-  return false;
+/**
+ * Decide whether a branch's work is already present on `origin/main`.
+ *
+ * Two paths, either is sufficient:
+ *
+ *   1. **Ancestor reachability** — `git merge-base --is-ancestor <branch> origin/main`
+ *      returns 0 when `<branch>`'s tip is reachable from `origin/main`. Catches
+ *      fast-forward merges, classic merge commits, and rebase-then-fast-forward.
+ *
+ *   2. **Patch-id equivalence** — `git cherry origin/main <branch>` enumerates
+ *      every commit on `<branch>` that is *not yet* equivalent (by patch-id) to
+ *      a commit on `origin/main`. Lines beginning with `+` are unmerged; lines
+ *      beginning with `-` are equivalent (already on main). When zero `+` lines
+ *      remain, the branch's work is fully on main — this is git's authoritative
+ *      "is this branch's work already present" check, and crucially handles the
+ *      **squash-merge** workflow we use (PLAN.md §15.7), since the squash
+ *      commit on main has the same patch-id as the (single) branch commit.
+ *
+ *      Edge cases handled by the predicate `every(line => !line.startsWith("+"))`:
+ *        - empty stdout (no unique commits → trivially merged) → all() is true
+ *        - all `-` lines (every commit has an equivalent on main) → no `+`, true
+ *        - any `+` line (genuinely unmerged work) → false
+ *
+ * `git cherry` itself never errors on a valid branch + ref pair, so we return
+ * `false` (treat as unmerged) on a non-zero exit out of caution.
+ */
+export async function isBranchMerged(branch: string, repo: RepoCtx): Promise<boolean> {
+  // Path 1: ancestor reachability (fast-forward / classic merge / rebase merges).
+  const ancestor = await run(["git", "merge-base", "--is-ancestor", branch, "origin/main"], {
+    cwd: repo.root,
+  });
+  if (ancestor.code === 0) return true;
+
+  // Path 2: patch-id equivalence (squash-merges; also catches cherry-picks).
+  const cherry = await run(["git", "cherry", "origin/main", branch], { cwd: repo.root });
+  if (cherry.code !== 0) return false;
+  return cherry.stdout.split(/\r?\n/).every((line) => !line.startsWith("+"));
 }
 
 async function confirm(question: string): Promise<boolean> {

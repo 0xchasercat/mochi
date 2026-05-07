@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   affectedPackages,
+  isBranchMerged,
   packageNameFromPath,
   parseArgs,
   touchesSpoofSurface,
@@ -337,6 +338,148 @@ async function writeBrief(repoDir: string, name: string, content: string): Promi
   await Bun.write(join(repoDir, "tasks", name), content);
 }
 
+// -------------------------------------------------------------------------------------
+// Direct tests of `isBranchMerged` against synthesized git scenarios.
+//
+// We construct a working repo with an `origin/main` ref and a feature branch,
+// then drive each detection path independently. No CLI involvement here — we
+// call the exported function with a `RepoCtx` pointed at the temp repo root.
+// -------------------------------------------------------------------------------------
+
+interface MergedFixture {
+  readonly dir: string;
+  readonly cleanup: () => Promise<void>;
+}
+
+async function makeMergedFixture(): Promise<MergedFixture> {
+  const dir = await mkdtemp(join(tmpdir(), "mochi-work-merged-"));
+  const upstream = join(dir, "upstream.git");
+  const repo = join(dir, "repo");
+
+  await runIn(dir, ["git", "init", "--bare", "--initial-branch=main", upstream]);
+  await runIn(dir, ["mkdir", "-p", repo]);
+  await runIn(repo, ["git", "init", "--initial-branch=main"]);
+  await runIn(repo, ["git", "remote", "add", "origin", upstream]);
+  await runIn(repo, ["git", "config", "user.email", "test@example.com"]);
+  await runIn(repo, ["git", "config", "user.name", "Test User"]);
+  await runIn(repo, ["git", "config", "commit.gpgsign", "false"]);
+
+  // Seed an initial commit on main so we have an `origin/main` to compare against.
+  await Bun.write(join(repo, "README.md"), "seed\n");
+  await runIn(repo, ["git", "add", "."]);
+  await runIn(repo, ["git", "commit", "-m", "chore: seed"]);
+  await runIn(repo, ["git", "push", "-u", "origin", "main"]);
+
+  return {
+    dir: repo,
+    cleanup: async () => {
+      await rm(dir, { recursive: true, force: true });
+    },
+  };
+}
+
+describe("isBranchMerged (squash detection)", () => {
+  let mf: MergedFixture | undefined;
+
+  beforeEach(async () => {
+    mf = await makeMergedFixture();
+  });
+
+  afterEach(async () => {
+    if (mf) {
+      await mf.cleanup();
+      mf = undefined;
+    }
+  });
+
+  it("returns true for an ancestor branch (fast-forward case)", async () => {
+    if (!mf) throw new Error("fixture not initialized");
+    // Create a branch that is strictly an ancestor of origin/main: branch off
+    // first commit, advance main beyond it, push main. The branch tip is
+    // reachable from origin/main.
+    await runIn(mf.dir, ["git", "checkout", "-b", "feature/ancestor"]);
+    await runIn(mf.dir, ["git", "checkout", "main"]);
+    await Bun.write(join(mf.dir, "advance.txt"), "advance\n");
+    await runIn(mf.dir, ["git", "add", "."]);
+    await runIn(mf.dir, ["git", "commit", "-m", "chore: advance main"]);
+    await runIn(mf.dir, ["git", "push", "origin", "main"]);
+
+    const merged = await isBranchMerged("feature/ancestor", { root: mf.dir });
+    expect(merged).toBe(true);
+  });
+
+  it("returns true for a squash-merged branch", async () => {
+    if (!mf) throw new Error("fixture not initialized");
+    // Branch with a unique commit, squash-merged into main and pushed. The
+    // branch tip is NOT an ancestor of origin/main, but the patch-id is
+    // equivalent — the canonical squash workflow.
+    await runIn(mf.dir, ["git", "checkout", "-b", "feature/squashed"]);
+    await Bun.write(join(mf.dir, "feature.txt"), "feature body\n");
+    await runIn(mf.dir, ["git", "add", "."]);
+    await runIn(mf.dir, ["git", "commit", "-m", "feat: add feature"]);
+
+    await runIn(mf.dir, ["git", "checkout", "main"]);
+    await runIn(mf.dir, ["git", "merge", "--squash", "feature/squashed"]);
+    await runIn(mf.dir, ["git", "commit", "-m", "feat: add feature (squashed)"]);
+    await runIn(mf.dir, ["git", "push", "origin", "main"]);
+
+    // Sanity: ancestor check would say "no", which is exactly why path 1 fails
+    // and we need path 2.
+    const ancestor = await runIn(mf.dir, [
+      "git",
+      "merge-base",
+      "--is-ancestor",
+      "feature/squashed",
+      "origin/main",
+    ]);
+    expect(ancestor.code).not.toBe(0);
+
+    const merged = await isBranchMerged("feature/squashed", { root: mf.dir });
+    expect(merged).toBe(true);
+  });
+
+  it("returns false for a branch with genuinely unmerged work", async () => {
+    if (!mf) throw new Error("fixture not initialized");
+    await runIn(mf.dir, ["git", "checkout", "-b", "feature/unmerged"]);
+    await Bun.write(join(mf.dir, "wip.txt"), "WIP\n");
+    await runIn(mf.dir, ["git", "add", "."]);
+    await runIn(mf.dir, ["git", "commit", "-m", "wip: not merged"]);
+
+    const merged = await isBranchMerged("feature/unmerged", { root: mf.dir });
+    expect(merged).toBe(false);
+  });
+
+  it("returns true for a brand-new branch with no unique commits", async () => {
+    if (!mf) throw new Error("fixture not initialized");
+    // Fresh branch off main, no extra commits. Tip == origin/main, so it's an
+    // ancestor. Edge case from the brief: "new branch (zero ahead, zero behind)
+    // → treat as merged".
+    await runIn(mf.dir, ["git", "checkout", "-b", "feature/empty"]);
+
+    const merged = await isBranchMerged("feature/empty", { root: mf.dir });
+    expect(merged).toBe(true);
+  });
+
+  it("returns true for a branch whose only commits are cherry-picked onto main", async () => {
+    // Same code path as squash, different workflow: a single commit was
+    // cherry-picked from the branch onto main. `git cherry` reports the
+    // branch commit as `-` (equivalent), so detection returns true.
+    if (!mf) throw new Error("fixture not initialized");
+    await runIn(mf.dir, ["git", "checkout", "-b", "feature/cherrypicked"]);
+    await Bun.write(join(mf.dir, "cherry.txt"), "pickme\n");
+    await runIn(mf.dir, ["git", "add", "."]);
+    await runIn(mf.dir, ["git", "commit", "-m", "feat: pickme"]);
+    const sha = (await runIn(mf.dir, ["git", "rev-parse", "HEAD"])).stdout.trim();
+
+    await runIn(mf.dir, ["git", "checkout", "main"]);
+    await runIn(mf.dir, ["git", "cherry-pick", sha]);
+    await runIn(mf.dir, ["git", "push", "origin", "main"]);
+
+    const merged = await isBranchMerged("feature/cherrypicked", { root: mf.dir });
+    expect(merged).toBe(true);
+  });
+});
+
 describe("mochi-work / cli integration", () => {
   let fixture: Fixture | undefined;
 
@@ -444,6 +587,55 @@ describe("mochi-work / cli integration", () => {
     // The worktree must still exist.
     const list = await runIn(fixture.dir, ["bun", SCRIPT_PATH, "list"]);
     expect(list.stdout).toContain("0042");
+  });
+
+  it("clean (default merged-only) removes a squash-merged worktree", async () => {
+    // Regression test for tasks/0012-bun-work-squash-detection.md.
+    // Branch tip is NOT reachable from origin/main (squash creates a fresh
+    // commit), but the patch-id of the branch's single commit equals the
+    // squash commit's patch-id, so `git cherry` reports zero `+` lines.
+    if (!fixture) throw new Error("fixture not initialized");
+    await writeBrief(fixture.dir, "0042-foo.md", VALID_BRIEF);
+    await runIn(fixture.dir, ["bun", SCRIPT_PATH, "create", "0042", "core"]);
+
+    // Add a commit on the task branch.
+    const wt = join(fixture.dir, "worktrees", "0042");
+    await Bun.write(join(wt, "feature.txt"), "hello squash\n");
+    await runIn(wt, ["git", "add", "."]);
+    await runIn(wt, ["git", "commit", "-m", "feat(core): add feature"]);
+
+    // Squash-merge the task branch into main on the working clone, then push.
+    await runIn(fixture.dir, ["git", "merge", "--squash", "task/core/0042"]);
+    await runIn(fixture.dir, ["git", "commit", "-m", "feat(core): add feature\n\nRefs: #0042"]);
+    await runIn(fixture.dir, ["git", "push", "origin", "main"]);
+
+    // The branch tip must NOT be an ancestor of origin/main (squash semantics).
+    const ancestor = await runIn(fixture.dir, [
+      "git",
+      "merge-base",
+      "--is-ancestor",
+      "task/core/0042",
+      "origin/main",
+    ]);
+    expect(ancestor.code).not.toBe(0);
+
+    // But `git cherry origin/main task/core/0042` must report no `+` lines
+    // (the branch's work is patch-id-equivalent to the squash commit).
+    const cherry = await runIn(fixture.dir, ["git", "cherry", "origin/main", "task/core/0042"]);
+    expect(cherry.code).toBe(0);
+    const plusLines = cherry.stdout.split(/\r?\n/).filter((l) => l.startsWith("+"));
+    expect(plusLines).toEqual([]);
+
+    // Now `bun work clean --yes` must remove the worktree by detecting the
+    // squash via the `git cherry` path.
+    const r = await runIn(fixture.dir, ["bun", SCRIPT_PATH, "clean", "--yes"]);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toMatch(/will remove 1 worktree/);
+    expect(r.stdout).not.toMatch(/nothing to clean/);
+
+    // The worktree must be gone.
+    const list = await runIn(fixture.dir, ["bun", SCRIPT_PATH, "list"]);
+    expect(list.stdout).not.toContain("0042");
   });
 
   it("submit bails on a forced gate failure with a clear hint", async () => {
