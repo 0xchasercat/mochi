@@ -449,21 +449,28 @@ describe("isBranchMerged (squash detection)", () => {
     expect(merged).toBe(false);
   });
 
-  it("returns true for a brand-new branch with no unique commits", async () => {
+  it("returns false for a brand-new branch whose tip exactly equals origin/main", async () => {
     if (!mf) throw new Error("fixture not initialized");
-    // Fresh branch off main, no extra commits. Tip == origin/main, so it's an
-    // ancestor. Edge case from the brief: "new branch (zero ahead, zero behind)
-    // → treat as merged".
+    // Fresh branch off main, no extra commits. Tip == origin/main. This is the
+    // canonical "in-flight worktree, agent hasn't committed yet" case. `bun work
+    // clean` (default mode) MUST treat this as in-flight and skip removal,
+    // otherwise it reaps active work mid-task. Use `--all` to force-remove.
+    // Refs: orchestrator hot-fix that supersedes the original 0012 brief's
+    //   "empty branch → merged" rule.
     await runIn(mf.dir, ["git", "checkout", "-b", "feature/empty"]);
 
     const merged = await isBranchMerged("feature/empty", { root: mf.dir });
-    expect(merged).toBe(true);
+    expect(merged).toBe(false);
   });
 
   it("returns true for a branch whose only commits are cherry-picked onto main", async () => {
     // Same code path as squash, different workflow: a single commit was
     // cherry-picked from the branch onto main. `git cherry` reports the
     // branch commit as `-` (equivalent), so detection returns true.
+    // The intermediate commit on main is intentional — without it, git's
+    // cherry-pick of a single commit straight off the same parent produces
+    // an identical SHA, and the branch tip ends up == main tip (caught by
+    // the in-flight short-circuit, not the cherry path).
     if (!mf) throw new Error("fixture not initialized");
     await runIn(mf.dir, ["git", "checkout", "-b", "feature/cherrypicked"]);
     await Bun.write(join(mf.dir, "cherry.txt"), "pickme\n");
@@ -472,6 +479,11 @@ describe("isBranchMerged (squash detection)", () => {
     const sha = (await runIn(mf.dir, ["git", "rev-parse", "HEAD"])).stdout.trim();
 
     await runIn(mf.dir, ["git", "checkout", "main"]);
+    // Intermediate commit ensures the cherry-pick onto main produces a
+    // distinct SHA from the branch tip.
+    await Bun.write(join(mf.dir, "intermediate.txt"), "intermediate\n");
+    await runIn(mf.dir, ["git", "add", "."]);
+    await runIn(mf.dir, ["git", "commit", "-m", "chore: intermediate"]);
     await runIn(mf.dir, ["git", "cherry-pick", sha]);
     await runIn(mf.dir, ["git", "push", "origin", "main"]);
 
