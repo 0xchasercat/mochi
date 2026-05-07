@@ -776,6 +776,22 @@ async function cmdSubmit(args: ParsedArgs, repo: RepoCtx): Promise<number> {
  * `false` (treat as unmerged) on a non-zero exit out of caution.
  */
 export async function isBranchMerged(branch: string, repo: RepoCtx): Promise<boolean> {
+  // CRITICAL: a branch with zero unique commits ahead of origin/main is treated as
+  // IN-FLIGHT, not merged. Worktrees are created at `bun work create` time before any
+  // agent commits land — `git cherry origin/main <branch>` would return empty (zero
+  // `+` lines) for the trivial reason of no commits, and previous logic mis-classified
+  // these as squash-merged. The result was: `bun work clean` would reap an in-flight
+  // worktree that hadn't checkpointed yet, destroying agent work. Use `--all` to remove
+  // worktrees with no commits regardless of merge status.
+  // Refs: tasks/0012-bun-work-squash-detection.md (predecessor brief; this fix
+  //   supersedes the "new branch with zero unique commits → treat as merged" rule).
+  const aheadOut = await run(["git", "rev-list", "--count", `origin/main..${branch}`], {
+    cwd: repo.root,
+  });
+  if (aheadOut.code !== 0) return false;
+  const ahead = Number.parseInt(aheadOut.stdout.trim(), 10);
+  if (!Number.isFinite(ahead) || ahead === 0) return false;
+
   // Path 1: ancestor reachability (fast-forward / classic merge / rebase merges).
   const ancestor = await run(["git", "merge-base", "--is-ancestor", branch, "origin/main"], {
     cwd: repo.root,
