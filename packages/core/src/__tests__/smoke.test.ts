@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { mochi, NotImplementedError, VERSION } from "../index";
+import { mochi, NotImplementedError, Session, VERSION } from "../index";
 
-describe("@mochi.js/core (claim release)", () => {
+describe("@mochi.js/core (phase 0.1)", () => {
   it("exports a VERSION string", () => {
     expect(typeof VERSION).toBe("string");
     expect(VERSION).toMatch(/^\d+\.\d+\.\d+/);
@@ -13,8 +13,14 @@ describe("@mochi.js/core (claim release)", () => {
     expect(mochi.version).toBe(VERSION);
   });
 
-  it("mochi.launch throws NotImplementedError until phase 0.1", () => {
-    expect(() => mochi.launch()).toThrow(NotImplementedError);
-    expect(() => mochi.launch()).toThrow(/not yet implemented/);
+  it("re-exports the Session class as a constructor", () => {
+    expect(typeof Session).toBe("function");
+  });
+
+  it("exports NotImplementedError for placeholder surfaces", () => {
+    const err = new NotImplementedError("page.humanClick");
+    expect(err).toBeInstanceOf(Error);
+    expect(err.name).toBe("NotImplementedError");
+    expect(err.api).toBe("page.humanClick");
   });
 });

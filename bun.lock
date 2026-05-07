@@ -32,6 +32,9 @@
     "packages/core": {
       "name": "@mochi.js/core",
       "version": "0.0.1",
+      "dependencies": {
+        "@mochi.js/consistency": "workspace:*",
+      },
     },
     "packages/harness": {
       "name": "@mochi.js/harness",
@@ -52,6 +55,9 @@
     "packages/profiles": {
       "name": "@mochi.js/profiles",
       "version": "0.0.1",
+      "dependencies": {
+        "@mochi.js/consistency": "workspace:*",
+      },
     },
   },
   "packages": {

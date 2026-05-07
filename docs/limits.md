@@ -52,4 +52,37 @@ The following are **expected** limits we'll formalize as the framework is built.
 
 ---
 
+## v0.1 (CDP transport landed) — known limits
+
+### `page.evaluate(fn)` is `Runtime.callFunctionOn`-based, not full `Runtime.evaluate`
+
+**Status:** known limit
+**Root cause:** PLAN.md §8.2 forbids `Runtime.enable`, and PLAN.md §8.4 forbids `Runtime.evaluate` with `includeCommandLineAPI:true` and `Page.createIsolatedWorld` for naming a world. Without those, the only way to run a function in main world is `Runtime.callFunctionOn` against the document's `objectId` — which has lossier return-value semantics than full `Runtime.evaluate`.
+**Affected APIs:** `Page.evaluate(fn)` consumers.
+**What works:** any function whose return value is JSON-serializable (string, number, boolean, plain object, array). `this` inside the function is the document.
+**What doesn't:** returning DOM nodes, functions, `undefined`, circular structures, classes, or Maps/Sets — these are coerced or dropped per CDP `returnByValue:true` semantics. Argument-passing into `evaluate` is also unsupported at v0.1 (the brief deferred this); pass values via DOM data attributes or globals.
+**Mitigation:** documented; phase 0.x will add an `evaluateHandle`-style API that returns a `RemoteObject` wrapper for non-serializable returns.
+**Tracking:** none yet — file when needed.
+
+### `Page.goto(url, { waitUntil: "networkidle" })` not implemented
+
+**Status:** partial coverage (mapped to `"load"`)
+**Root cause:** `networkidle` requires the `Network` domain, which we keep disabled by default per PLAN.md §8.2 ("Network.enable globally on the root target — only attached per-frame when needed"). v0.1 does not implement the per-frame Network attach yet.
+**Mitigation:** v0.1 silently uses `"load"` semantics when `"networkidle"` is requested. `"load"` and `"domcontentloaded"` work as expected.
+**Tracking:** to be addressed in a follow-up task once Network domain enablement is properly scoped per-frame.
+
+### `Session.fetch`, `Page.humanClick`, `Page.humanType`, `Page.humanScroll`, `Page.screenshot`
+
+**Status:** placeholder — `NotImplementedError`
+**Root cause:** out of scope for phase 0.1 per `tasks/0011-cdp-pipe-transport.md`. Phase 0.6 wires `Session.fetch`; phase 0.8 wires the human-input surface; `screenshot` lands in a follow-up.
+**Mitigation:** none needed; the error message names the API and the phase.
+
+### `Session.cookies()` URL filter is host-only
+
+**Status:** partial coverage
+**Root cause:** v0.1 reads cookies via `Storage.getCookies` on the root browser target (the only domain that exposes a global cookie list without per-page Network enablement). The CDP `Storage.getCookies` does not accept an URL filter; we filter client-side by hostname suffix.
+**Mitigation:** path/secure/SameSite filtering can be applied by the caller on the returned array. Full URL semantics will land alongside per-frame Network in a later phase.
+
+---
+
 *This file is owned collectively by every contributor. Add to it the moment you discover a limit; the framework's credibility lives here.*

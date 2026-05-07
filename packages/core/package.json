@@ -48,6 +48,9 @@
     "lint": "biome check src/",
     "build": "echo 'no build step yet — Bun consumes src/ directly'"
   },
+  "dependencies": {
+    "@mochi.js/consistency": "workspace:*"
+  },
   "publishConfig": {
     "access": "public"
   }
