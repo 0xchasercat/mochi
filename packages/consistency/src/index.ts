@@ -8,19 +8,13 @@
  */
 export const VERSION = "0.0.1" as const;
 
-/** Placeholder; real shape lands with the schema codegen in phase 0.0+. */
-export interface ProfileV1 {
-  readonly id: string;
-  readonly version: string;
-}
+export type { MatrixV1 } from "./generated/matrix";
+// Canonical types are generated from schemas/*.schema.json by `bun run codegen`.
+// @mochi.js/consistency *owns* both ProfileV1 and MatrixV1 — see PLAN.md §5.6.
+export type { ProfileV1 } from "./generated/profile";
 
-/** Placeholder; real shape mirrors ProfileV1 with seed-resolved values. */
-export interface MatrixV1 {
-  readonly profile: ProfileV1;
-  readonly seed: string;
-  readonly derivedAt: string;
-  readonly consistencyEngineVersion: string;
-}
+import type { MatrixV1 } from "./generated/matrix";
+import type { ProfileV1 } from "./generated/profile";
 
 /**
  * Derive a Matrix from a profile + seed. Lands in phase 0.2.

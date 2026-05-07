@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mochi.js/schemas/diff-report.schema.json",
+  "title": "DiffReportV1",
+  "description": "Output of @mochi.js/harness — a structured diff between a captured Probe Manifest and a committed baseline, with categorized verdict. PR gate fails iff counts.material > 0. See PLAN.md §6.4 and §13.3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "reportVersion",
+    "generatedAt",
+    "profile",
+    "verdict",
+    "counts",
+    "structuralMatchPct",
+    "diffs"
+  ],
+  "properties": {
+    "reportVersion": {
+      "type": "string",
+      "const": "1",
+      "description": "Schema major version. Bump on breaking changes."
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp at which the diff was computed."
+    },
+    "profile": {
+      "type": "string",
+      "description": "ProfileV1.id this report targets.",
+      "minLength": 1
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["EQUIVALENT", "DIVERGED"],
+      "description": "EQUIVALENT iff counts.material === 0."
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["material", "intentional", "guidClass"],
+      "properties": {
+        "material": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Non-allowlisted, non-intentional divergences. PR-blocking."
+        },
+        "intentional": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Divergences listed in the profile's expected-divergences.json."
+        },
+        "guidClass": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Per-session GUID-class entropy that matched the allowlist regex."
+        }
+      }
+    },
+    "structuralMatchPct": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Percentage of fields whose paths AND values both matched."
+    },
+    "diffs": {
+      "type": "array",
+      "description": "Per-path diff entries. Order is stable: path-sorted, then category-sorted.",
+      "items": { "$ref": "#/$defs/diffEntry" }
+    }
+  },
+  "$defs": {
+    "jsonValue": {
+      "description": "Any JSON-encodable value: null, boolean, number, string, array, or object.",
+      "anyOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "number" },
+        { "type": "string" },
+        { "type": "array", "items": { "$ref": "#/$defs/jsonValue" } },
+        { "type": "object", "additionalProperties": { "$ref": "#/$defs/jsonValue" } }
+      ]
+    },
+    "diffEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "category", "expected", "actual"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Dotted JSON path into the manifest, e.g. 'page.tls.ja4'."
+        },
+        "category": {
+          "type": "string",
+          "enum": ["guid-class", "intentional", "material"],
+          "description": "Categorization rule applied. material is PR-blocking."
+        },
+        "expected": {
+          "description": "Value from the baseline manifest at this path. Any JSON value, including null.",
+          "$ref": "#/$defs/jsonValue"
+        },
+        "actual": {
+          "description": "Value from the captured manifest at this path. Any JSON value, including null.",
+          "$ref": "#/$defs/jsonValue"
+        },
+        "rule": {
+          "type": "string",
+          "description": "Optional human-readable identifier of the categorization rule that fired."
+        }
+      }
+    }
+  }
+}

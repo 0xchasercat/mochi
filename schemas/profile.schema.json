@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mochi.js/schemas/profile.schema.json",
+  "title": "ProfileV1",
+  "description": "A device-class profile consumed by @mochi.js/consistency. Declares the deterministic capabilities of a single (hardware, OS, browser) class. Instantiated for a specific seed by deriveMatrix() to produce a MatrixV1. See PLAN.md §6.1.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "version",
+    "engine",
+    "browser",
+    "os",
+    "device",
+    "display",
+    "gpu",
+    "audio",
+    "fonts",
+    "timezone",
+    "locale",
+    "languages",
+    "behavior",
+    "wreqPreset",
+    "userAgent",
+    "uaCh",
+    "entropyBudget"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Stable profile identifier, e.g. 'mac-m2-chrome-stable'.",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "description": "Semver version of this profile document.",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[A-Za-z0-9.-]+)?$"
+    },
+    "engine": {
+      "type": "string",
+      "description": "JS engine family. v1 invariant: chromium-only (PLAN.md I-4, decision #4).",
+      "enum": ["chromium"]
+    },
+    "browser": {
+      "type": "object",
+      "description": "Browser identity this profile spoofs.",
+      "additionalProperties": false,
+      "required": ["name", "channel", "minVersion", "maxVersion"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Branded browser name. v1: chromium-family only.",
+          "enum": ["chrome", "edge", "brave", "arc", "opera"]
+        },
+        "channel": {
+          "type": "string",
+          "description": "Release channel.",
+          "enum": ["stable", "beta", "dev", "canary"]
+        },
+        "minVersion": {
+          "type": "string",
+          "description": "Inclusive lower bound on the Chromium-for-Testing major version this profile is verified against."
+        },
+        "maxVersion": {
+          "type": "string",
+          "description": "Inclusive upper bound on the Chromium-for-Testing major version this profile is verified against."
+        }
+      }
+    },
+    "os": {
+      "type": "object",
+      "description": "Host OS identity.",
+      "additionalProperties": false,
+      "required": ["name", "version", "arch"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "enum": ["macos", "windows", "linux"]
+        },
+        "version": {
+          "type": "string",
+          "description": "OS marketing version, e.g. '14' for macOS Sonoma."
+        },
+        "arch": {
+          "type": "string",
+          "enum": ["arm64", "x64", "x86"]
+        }
+      }
+    },
+    "device": {
+      "type": "object",
+      "description": "Hardware identity.",
+      "additionalProperties": false,
+      "required": ["vendor", "model", "cpuFamily", "cores", "memoryGB"],
+      "properties": {
+        "vendor": { "type": "string" },
+        "model": { "type": "string" },
+        "cpuFamily": { "type": "string" },
+        "cores": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Logical core count exposed to navigator.hardwareConcurrency."
+        },
+        "memoryGB": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Physical RAM in GiB. navigator.deviceMemory caps at 8."
+        }
+      }
+    },
+    "display": {
+      "type": "object",
+      "description": "Display geometry surfaced via window.screen / matchMedia / visualViewport.",
+      "additionalProperties": false,
+      "required": ["width", "height", "dpr", "colorDepth", "pixelDepth"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "dpr": { "type": "number", "exclusiveMinimum": 0 },
+        "colorDepth": { "type": "integer", "minimum": 1 },
+        "pixelDepth": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "gpu": {
+      "type": "object",
+      "description": "GPU identity surfaced via WebGL/WebGPU. Locks the canvas/webgl/webgpu render-hash chain.",
+      "additionalProperties": false,
+      "required": [
+        "vendor",
+        "renderer",
+        "webglUnmaskedVendor",
+        "webglUnmaskedRenderer",
+        "webglMaxTextureSize",
+        "webglMaxColorAttachments",
+        "webglExtensions"
+      ],
+      "properties": {
+        "vendor": { "type": "string" },
+        "renderer": { "type": "string" },
+        "webglUnmaskedVendor": { "type": "string" },
+        "webglUnmaskedRenderer": { "type": "string" },
+        "webglMaxTextureSize": { "type": "integer", "minimum": 1 },
+        "webglMaxColorAttachments": { "type": "integer", "minimum": 1 },
+        "webglExtensions": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "audio": {
+      "type": "object",
+      "description": "AudioContext capabilities surfaced via OfflineAudioContext / AudioContext.",
+      "additionalProperties": false,
+      "required": ["contextSampleRate", "audioWorkletLatency", "destinationMaxChannelCount"],
+      "properties": {
+        "contextSampleRate": { "type": "integer", "minimum": 1 },
+        "audioWorkletLatency": { "type": "number", "minimum": 0 },
+        "destinationMaxChannelCount": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "fonts": {
+      "type": "object",
+      "description": "Installed-font inventory used for font enumeration probes.",
+      "additionalProperties": false,
+      "required": ["family", "list"],
+      "properties": {
+        "family": {
+          "type": "string",
+          "description": "Curated pack identifier, e.g. 'macos-system-arial-pack'."
+        },
+        "list": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "timezone": {
+      "type": "string",
+      "description": "IANA timezone identifier, e.g. 'America/Los_Angeles'."
+    },
+    "locale": {
+      "type": "string",
+      "description": "Primary BCP 47 locale, e.g. 'en-US'."
+    },
+    "languages": {
+      "type": "array",
+      "description": "navigator.languages ordered list. First entry must match `locale`.",
+      "minItems": 1,
+      "items": { "type": "string" }
+    },
+    "behavior": {
+      "type": "object",
+      "description": "Per-profile behavioral parameters consumed by @mochi.js/behavioral.",
+      "additionalProperties": false,
+      "required": ["hand", "tremor", "wpm", "scrollStyle"],
+      "properties": {
+        "hand": {
+          "type": "string",
+          "enum": ["left", "right"]
+        },
+        "tremor": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Per-axis Gaussian jitter amplitude, in pixel-equivalents."
+        },
+        "wpm": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Mean typing speed in words per minute."
+        },
+        "scrollStyle": {
+          "type": "string",
+          "enum": ["smooth", "stepped", "inertial"]
+        }
+      }
+    },
+    "wreqPreset": {
+      "type": "string",
+      "description": "Preset name accepted by the wreq Rust crate, e.g. 'chrome_131_macos'. Maps profile -> TLS/H2 fingerprint.",
+      "minLength": 1
+    },
+    "userAgent": {
+      "type": "string",
+      "description": "Full navigator.userAgent string this profile spoofs.",
+      "minLength": 1
+    },
+    "uaCh": {
+      "type": "object",
+      "description": "User-Agent Client Hints (sec-ch-ua, sec-ch-ua-platform, etc.). Headers as observed on the wire.",
+      "additionalProperties": { "type": "string" }
+    },
+    "entropyBudget": {
+      "type": "object",
+      "description": "Declares which fields are device-fixed vs. seed-varying. PLAN.md §6.1.",
+      "additionalProperties": false,
+      "required": ["fixed", "perSeed"],
+      "properties": {
+        "fixed": {
+          "type": "array",
+          "description": "Dotted paths into this profile that are constants across all seeds.",
+          "items": { "type": "string" }
+        },
+        "perSeed": {
+          "type": "array",
+          "description": "Dotted paths that resolve deterministically per (profile, seed) within the profile's declared bounds.",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

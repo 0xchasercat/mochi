@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mochi.js/schemas/matrix.schema.json",
+  "title": "MatrixV1",
+  "description": "A ProfileV1 instantiated for a specific seed. Same shape as ProfileV1 (every property re-declared via $ref to profile.schema.json), with three additional required fields: seed, derivedAt, consistencyEngineVersion. Consumed by @mochi.js/inject. JSON-serializable; round-trips losslessly. See PLAN.md §6.2.",
+  "type": "object",
+  "unevaluatedProperties": false,
+  "required": [
+    "id",
+    "version",
+    "engine",
+    "browser",
+    "os",
+    "device",
+    "display",
+    "gpu",
+    "audio",
+    "fonts",
+    "timezone",
+    "locale",
+    "languages",
+    "behavior",
+    "wreqPreset",
+    "userAgent",
+    "uaCh",
+    "entropyBudget",
+    "seed",
+    "derivedAt",
+    "consistencyEngineVersion"
+  ],
+  "allOf": [{ "$ref": "profile.schema.json" }],
+  "properties": {
+    "seed": {
+      "type": "string",
+      "description": "The deterministic per-session entropy seed passed to mochi.launch().",
+      "minLength": 1
+    },
+    "derivedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp at which deriveMatrix() produced this snapshot."
+    },
+    "consistencyEngineVersion": {
+      "type": "string",
+      "description": "Version of @mochi.js/consistency that produced this matrix.",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[A-Za-z0-9.-]+)?$"
+    }
+  }
+}

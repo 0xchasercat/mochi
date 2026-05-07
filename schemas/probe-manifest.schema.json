@@ -1,0 +1,268 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://peekaboo/schemas/probe-manifest.schema.json",
+  "$comment": "Vendored from Peekaboo's schema. Sync quarterly per PLAN.md §6.3. Do not hand-edit.",
+  "title": "Probe Manifest",
+  "description": "Canonical schema for a single page's probe manifest. One manifest per (target, axis-cell) capture. Built from VV8/FV8 traces (and HTTP/2/TLS captures) by the trace post-processor. Consumed by (1) the replica to drive an equivalent collection surface, (2) the equivalence harness to diff replica vs. real Bing.",
+  "type": "object",
+  "required": ["manifestVersion", "capture", "page", "probes"],
+  "additionalProperties": false,
+  "properties": {
+    "manifestVersion": {
+      "type": "string",
+      "const": "1",
+      "description": "Schema major version. Bump on breaking changes."
+    },
+    "capture": {
+      "type": "object",
+      "description": "Provenance: how this manifest was produced. Critical for reproducing.",
+      "required": ["captureId", "tool", "capturedAt", "axisCell"],
+      "additionalProperties": false,
+      "properties": {
+        "captureId": { "type": "string", "description": "UUID of the capture run." },
+        "tool": {
+          "type": "object",
+          "required": ["name", "version"],
+          "properties": {
+            "name": { "enum": ["visiblev8", "fv8", "playwright-cdp", "manual"] },
+            "version": { "type": "string" },
+            "chromiumVersion": { "type": "string" },
+            "v8Patch": { "type": "string", "description": "VV8/FV8 patch identifier or commit." }
+          }
+        },
+        "capturedAt": { "type": "string", "format": "date-time" },
+        "axisCell": {
+          "type": "object",
+          "description": "Position in the recon matrix. All axes are nullable for ad-hoc captures.",
+          "additionalProperties": false,
+          "properties": {
+            "entry": { "type": "string", "description": "homepage|serp:<query>|images|videos|news|maps" },
+            "userState": { "enum": ["cold", "warm", "msa-signed-in"] },
+            "uaProfile": { "type": "string", "description": "edge-desktop|chrome-desktop|safari-desktop|firefox-desktop|chrome-android|safari-ios" },
+            "geo": { "type": "string", "description": "ISO 3166-1 alpha-2 country code of egress IP." },
+            "egressIpType": { "enum": ["datacenter", "residential", "mobile", "tor", "vpn"] },
+            "botSignal": {
+              "type": "object",
+              "description": "Which bot tells were exposed during this capture.",
+              "properties": {
+                "navigatorWebdriver": { "type": "boolean" },
+                "headlessChrome": { "type": "boolean" },
+                "missingPlugins": { "type": "boolean" },
+                "phantomJs": { "type": "boolean" },
+                "seleniumGlobals": { "type": "boolean" },
+                "stealthPlugin": { "type": "boolean", "description": "puppeteer-extra-stealth applied." }
+              }
+            },
+            "interaction": { "enum": ["none", "scroll", "click-result", "type-and-search"] }
+          }
+        },
+        "egressIp": { "type": "string" },
+        "egressAsn": { "type": "string" },
+        "proxy": { "type": ["string", "null"] }
+      }
+    },
+    "page": {
+      "type": "object",
+      "description": "Top-level page facts independent of probes.",
+      "required": ["url", "loadOutcome"],
+      "additionalProperties": false,
+      "properties": {
+        "url": { "type": "string", "format": "uri" },
+        "finalUrl": { "type": "string", "format": "uri", "description": "After redirects." },
+        "loadOutcome": { "enum": ["success", "timeout", "navigation-error", "renderer-crashed", "blocked-by-server"] },
+        "httpStatus": { "type": "integer" },
+        "httpVersion": { "enum": ["1.1", "2", "3"] },
+        "tls": {
+          "type": "object",
+          "description": "TLS fingerprint observed in our outbound ClientHello.",
+          "properties": {
+            "ja3": { "type": "string" },
+            "ja3Hash": { "type": "string" },
+            "ja4": { "type": "string" },
+            "extensionsOrder": { "type": "array", "items": { "type": "string" } },
+            "alpn": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "h2Settings": {
+          "type": "object",
+          "description": "HTTP/2 SETTINGS frame and frame-ordering signature (Akamai-style).",
+          "properties": {
+            "akamaiHash": { "type": "string" },
+            "akamaiText": { "type": "string" },
+            "settings": { "type": "object", "additionalProperties": { "type": "integer" } },
+            "windowUpdate": { "type": "integer" },
+            "headerOrder": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "responseHeaders": {
+          "type": "object",
+          "description": "Verbatim response header order + values from the document.",
+          "additionalProperties": { "type": "string" }
+        },
+        "cookiesSet": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string" },
+              "domain": { "type": "string" },
+              "path": { "type": "string" },
+              "expires": { "type": "string" },
+              "secure": { "type": "boolean" },
+              "httpOnly": { "type": "boolean" },
+              "sameSite": { "enum": ["Strict", "Lax", "None"] }
+            }
+          }
+        },
+        "storage": {
+          "type": "object",
+          "description": "localStorage/sessionStorage/IndexedDB keys observed by end-of-capture.",
+          "properties": {
+            "localStorage": { "type": "array", "items": { "type": "string" } },
+            "sessionStorage": { "type": "array", "items": { "type": "string" } },
+            "indexedDb": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "scriptInventory": {
+          "type": "array",
+          "description": "Every JS file or inline block executed, in load order.",
+          "items": {
+            "type": "object",
+            "required": ["scriptId", "origin"],
+            "properties": {
+              "scriptId": { "type": "string", "description": "Stable per-capture id; same script across captures resolves via sha256." },
+              "url": { "type": "string", "format": "uri" },
+              "inline": { "type": "boolean" },
+              "sizeBytes": { "type": "integer" },
+              "sha256": { "type": "string" },
+              "origin": { "type": "string", "description": "first-party host or third-party host that served it." },
+              "executionContext": { "enum": ["main", "iframe", "worker", "service-worker", "shared-worker", "audio-worklet"] },
+              "executionOrder": { "type": "integer", "description": "Load/execute order across the page." }
+            }
+          }
+        }
+      }
+    },
+    "probes": {
+      "type": "array",
+      "description": "Ordered list of native API touches observed by VV8/FV8. THIS IS THE CORE.",
+      "items": { "$ref": "#/$defs/probe" }
+    },
+    "behavioral": {
+      "type": "object",
+      "description": "Inputs delivered to the page (mouse, keyboard, scroll, focus) AND what was observed listening for them.",
+      "properties": {
+        "inputsDelivered": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": { "enum": ["mousemove", "click", "keydown", "keyup", "scroll", "focus", "blur", "visibilitychange"] },
+              "tMs": { "type": "number" },
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "key": { "type": "string" },
+              "target": { "type": "string" }
+            }
+          }
+        },
+        "listenersAttached": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "event": { "type": "string" },
+              "target": { "type": "string", "description": "window|document|<selector>" },
+              "scriptId": { "type": "string" },
+              "passive": { "type": "boolean" },
+              "capture": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+    "telemetryEgress": {
+      "type": "array",
+      "description": "Every outbound request the page makes (XHR/fetch/sendBeacon/img/script/iframe). What Bing sends home.",
+      "items": {
+        "type": "object",
+        "required": ["url", "method", "tMs"],
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "method": { "type": "string" },
+          "tMs": { "type": "number" },
+          "initiator": { "enum": ["xhr", "fetch", "beacon", "img", "script", "stylesheet", "iframe", "websocket", "navigation"] },
+          "scriptId": { "type": "string" },
+          "requestHeaders": { "type": "object", "additionalProperties": { "type": "string" } },
+          "requestBody": { "type": "string", "description": "Truncated/redacted as needed." },
+          "responseStatus": { "type": "integer" },
+          "responseSize": { "type": "integer" }
+        }
+      }
+    },
+    "identityChain": {
+      "type": "object",
+      "description": "Resolved values for the MUID->SUIH->IG->cvid->SID->RGUID chain (or its equivalents).",
+      "additionalProperties": { "type": "string" }
+    },
+    "diffHints": {
+      "type": "object",
+      "description": "Optional precomputed signals that make replica equivalence-checking cheaper.",
+      "properties": {
+        "probeCallSiteHistogram": {
+          "type": "object",
+          "description": "Map of probe callsite -> count.",
+          "additionalProperties": { "type": "integer" }
+        },
+        "uniqueApiSurface": {
+          "type": "array",
+          "description": "Sorted unique (object,member,kind) triples touched anywhere.",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "probe": {
+      "type": "object",
+      "required": ["seq", "tMs", "scriptId", "object", "member", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "seq": { "type": "integer", "description": "Monotonic order of this probe within the capture." },
+        "tMs": { "type": "number", "description": "ms since capture t0." },
+        "scriptId": { "type": "string", "description": "Reference into page.scriptInventory." },
+        "callsite": {
+          "type": "object",
+          "description": "Where in the script the probe was emitted.",
+          "properties": {
+            "line": { "type": "integer" },
+            "column": { "type": "integer" },
+            "function": { "type": "string" }
+          }
+        },
+        "executionContext": { "enum": ["main", "iframe", "worker", "service-worker", "shared-worker", "audio-worklet"] },
+        "realmId": { "type": "string", "description": "VV8 realm/context id; lets us segregate cross-frame probes." },
+        "object": { "type": "string", "description": "Constructor name or global, e.g. 'Window', 'HTMLCanvasElement', 'CanvasRenderingContext2D', 'AudioContext', 'navigator', 'screen'." },
+        "member": { "type": "string", "description": "Property or method name, e.g. 'userAgent', 'toDataURL', 'getChannelData'." },
+        "kind": { "enum": ["get", "set", "call", "construct"] },
+        "args": {
+          "type": "array",
+          "description": "Stringified arguments (truncated). Order matters for fingerprinting.",
+          "items": { "type": "string" }
+        },
+        "argTypes": { "type": "array", "items": { "type": "string" } },
+        "returnTypeHint": { "type": "string" },
+        "returnSize": { "type": "integer", "description": "Byte size of returned blob/string when applicable (e.g. toDataURL output length)." },
+        "forced": { "type": "boolean", "description": "True when surfaced by FV8 forced-execution rather than natural execution." },
+        "forcedBranchCondition": { "type": "string", "description": "If forced, the original branch predicate FV8 short-circuited (e.g. 'navigator.webdriver === undefined')." },
+        "category": {
+          "type": "string",
+          "description": "Optional hand-curated bucket: canvas|audio|webgl|webgpu|fonts|navigator|screen|storage|permissions|sensors|webrtc|timing|css|wasm|input-biometrics|cross-origin|other.",
+          "enum": ["canvas", "audio", "webgl", "webgpu", "fonts", "navigator", "screen", "storage", "permissions", "sensors", "webrtc", "timing", "css", "wasm", "input-biometrics", "cross-origin", "media-devices", "speech", "battery", "gamepad", "wake-lock", "service-worker", "iframe-side-channel", "csp-bypass", "client-hints", "trust-tokens", "topics", "fedcm", "other"]
+        },
+        "tags": { "type": "array", "items": { "type": "string" }, "description": "Free-form labels for ad-hoc grouping." }
+      }
+    }
+  }
+}

@@ -7,7 +7,16 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!**/dist", "!**/node_modules", "!**/target", "!**/coverage", "!worktrees"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/node_modules",
+      "!**/target",
+      "!**/coverage",
+      "!worktrees",
+      "!packages/*/src/generated",
+      "!schemas/probe-manifest.schema.json"
+    ]
   },
   "formatter": {
     "enabled": true,

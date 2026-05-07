@@ -22,12 +22,12 @@
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "test": "bun test --bail",
-    "test:contract": "bun test tests/contract/ 2>/dev/null || echo 'no contract tests yet'",
+    "test:contract": "bun test tests/contract/",
     "work": "bun scripts/mochi-work.ts",
     "harness:smoke": "echo '[harness] phase 0.5 placeholder — see PLAN.md §13' ",
     "harness:full": "echo '[harness] phase 0.5 placeholder — see PLAN.md §13'",
     "harness:diff": "echo '[harness] phase 0.5 placeholder — see PLAN.md §13'",
-    "codegen": "echo '[codegen] phase 0.0+ placeholder'",
+    "codegen": "bun scripts/codegen.ts",
     "build": "bun run --filter '*' build",
     "rust:build": "cargo build --release --manifest-path packages/net-rs/Cargo.toml",
     "rust:test": "cargo test --manifest-path packages/net-rs/Cargo.toml",
@@ -42,6 +42,7 @@
     "@commitlint/cli": "^19.6.0",
     "@commitlint/config-conventional": "^19.6.0",
     "@types/bun": "latest",
+    "json-schema-to-typescript": "^15.0.4",
     "typescript": "^5.7.0"
   }
 }

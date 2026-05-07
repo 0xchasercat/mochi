@@ -12,18 +12,20 @@
  */
 export const VERSION = "0.0.1" as const;
 
-export type Verdict = "EQUIVALENT" | "DIVERGED";
+export type { DiffEntry, DiffReportV1, JsonValue } from "./generated/diff-report";
+// Canonical types are generated from schemas/*.schema.json by `bun run codegen`.
+// ProbeManifestV1 is vendored verbatim from Peekaboo (PLAN.md §6.3).
+export type { Probe, ProbeManifestV1 } from "./generated/probe-manifest";
 
-export interface DiffReport {
-  readonly verdict: Verdict;
-  readonly counts: { material: number; intentional: number; guidClass: number };
-  readonly structuralMatchPct: number;
-}
+import type { DiffReportV1 } from "./generated/diff-report";
+
+/** Convenience alias: the verdict enum carried by DiffReportV1. */
+export type Verdict = DiffReportV1["verdict"];
 
 /**
  * Capture a Probe Manifest and diff against the profile baseline. Lands in phase 0.5.
  */
-export async function diff(_args: { profile: string; manifest: unknown }): Promise<DiffReport> {
+export async function diff(_args: { profile: string; manifest: unknown }): Promise<DiffReportV1> {
   throw new Error(
     "@mochi.js/harness.diff is not yet implemented (v0.0.1 claim). " +
       "Lands in phase 0.5; see PLAN.md §13.",

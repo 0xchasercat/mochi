@@ -14,6 +14,11 @@
  */
 export const VERSION = "0.0.1" as const;
 
+// ProfileV1's canonical source-of-truth lives in @mochi.js/consistency.
+// Re-exported here through a generated shim so this package is a pure consumer
+// of the type without duplicating the shape. See PLAN.md §5.6.
+export type { ProfileV1 } from "./generated/profile";
+
 /** ProfileV1 IDs that will ship in the v1 catalog. None are populated yet. */
 export const KNOWN_PROFILE_IDS = [
   "mac-m2-chrome-stable",
