@@ -29,4 +29,32 @@ describe("@mochi.js/cli (claim release)", () => {
     const code = await main(["work", "list"]);
     expect(code).toBe(0);
   });
+
+  it("main(['browsers']) prints help and returns nonzero (no action provided)", async () => {
+    const code = await main(["browsers"]);
+    expect(code).not.toBe(0);
+  });
+
+  it("main(['browsers', '--help']) prints help and returns 0", async () => {
+    const code = await main(["browsers", "--help"]);
+    expect(code).toBe(0);
+  });
+
+  it("main(['browsers', 'list']) returns 0 even with no installs", async () => {
+    // Use a fresh tmp root so the test doesn't depend on the user's ~/.mochi.
+    const prev = process.env.MOCHI_BROWSERS_ROOT;
+    process.env.MOCHI_BROWSERS_ROOT = `/tmp/mochi-test-list-${Date.now()}`;
+    try {
+      const code = await main(["browsers", "list"]);
+      expect(code).toBe(0);
+    } finally {
+      if (prev === undefined) delete process.env.MOCHI_BROWSERS_ROOT;
+      else process.env.MOCHI_BROWSERS_ROOT = prev;
+    }
+  });
+
+  it("main(['browsers', 'unknown']) returns nonzero", async () => {
+    const code = await main(["browsers", "unknown-action-xyz"]);
+    expect(code).not.toBe(0);
+  });
 });

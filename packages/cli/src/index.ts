@@ -2,11 +2,32 @@
  * @mochi.js/cli — programmatic CLI surface (also exposed as the `mochi` binary).
  *
  * v0.0.1 claim release; subcommands land progressively (phase 0.4: capture; 0.5: harness;
- * 0.0+: work; 0.11: browsers install).
+ * 0.0+: work; 0.1: browsers install).
  *
  * @see PLAN.md §5.8
  */
 export const VERSION = "0.0.1" as const;
+
+/**
+ * Programmatic re-exports for downstream consumers (notably `@mochi.js/core`,
+ * task 0011). Keep this list narrow — the CLI is a tool, not a library.
+ */
+export {
+  type CftPlatform,
+  type Channel,
+  ChromiumNotFoundError,
+  defaultInstallRoot,
+  detectPlatform,
+  type InstalledBrowser,
+  type InstallMeta,
+  type InstallResult,
+  install as installChromium,
+  listInstalled,
+  PINNED_FALLBACK_VERSION,
+  type ResolveChromiumOpts,
+  type ResolvedChromium,
+  resolveChromiumBinary,
+} from "./browsers/index";
 
 export const SUBCOMMANDS = ["browsers", "capture", "harness", "work", "version"] as const;
 export type Subcommand = (typeof SUBCOMMANDS)[number];
@@ -60,6 +81,10 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
   if (arg === "work") {
     return proxyToWork(argv.slice(1));
+  }
+  if (arg === "browsers") {
+    const { runBrowsers } = await import("./browsers/subcommand");
+    return runBrowsers(argv.slice(1));
   }
   console.error(
     `mochi v${VERSION} (claim release)\n` +

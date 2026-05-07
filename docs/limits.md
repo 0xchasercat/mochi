@@ -24,6 +24,19 @@ This file will populate as the framework lands. Entries follow this template:
 
 ---
 
+## Live entries
+
+### CfT download integrity (no upstream-published SHA256)
+
+**Status:** partial coverage
+**Root cause:** Google's Chromium-for-Testing registry does not publish per-asset SHA256 hashes — none of the manifest endpoints (`known-good-versions-with-downloads.json`, `last-known-good-versions-with-downloads.json`) carry hash fields, and there are no sidecar `.sha256` files in the GCS bucket. Verified 2026-05-08.
+**Affected probes:** integrity / supply-chain (not a fingerprint vector — listed here because the task brief expected manifest-published hashes).
+**Mitigation:** `mochi browsers install` computes SHA256 itself during the streamed download and records it in `<installDir>/.mochi-meta.json`. Users can pass `--sha256 <hex>` to verify against a hash they obtained out-of-band. `--force` reinstalls naturally re-verify by recomputing.
+**User workaround:** Pin `--sha256 <hex>` in any environment that requires verified-binary integrity. mochi cannot derive the hash from the registry alone.
+**Tracking:** none — fundamental until Google publishes hashes.
+
+---
+
 ## Anticipated v1 entries (will be populated as discovered during development)
 
 The following are **expected** limits we'll formalize as the framework is built. Listed here for awareness; each will get a full entry when it lands in code.
