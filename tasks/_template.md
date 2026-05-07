@@ -37,7 +37,7 @@
 
 ## Validation
 
-<!-- Exact commands the agent should run before `mochi-work submit`. -->
+<!-- Exact commands the agent should run before `bun work submit <id>`. -->
 
 ```sh
 bun typecheck
@@ -45,4 +45,10 @@ bun lint
 bun test --filter=@mochi.js/<pkg>
 bun test:contract --pkg=<pkg>
 # additional task-specific commands here
+```
+
+Once gates are green, open the PR with:
+
+```sh
+bun work submit <id> --draft
 ```

@@ -22,4 +22,11 @@ describe("@mochi.js/cli (claim release)", () => {
     const code = await main(["nope"]);
     expect(code).not.toBe(0);
   });
+
+  it("main(['work', 'list']) proxies to scripts/mochi-work.ts and returns 0", async () => {
+    // `list` works even with zero worktrees; the proxy resolves the repo root
+    // automatically by walking up from cwd.
+    const code = await main(["work", "list"]);
+    expect(code).toBe(0);
+  });
 });

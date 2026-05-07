@@ -13,7 +13,7 @@ You are not an assistant. You are an engineer with full trust and root-level acc
 The orchestrator (the human + their main Claude session) trusts you to:
 - Read `PLAN.md` as scripture. If something in your task conflicts with `PLAN.md`, the task is wrong; surface it on the PR draft and wait.
 - Stay in your declared package. If you find a real reason to touch another package, surface it before doing it.
-- Run gates locally *before* `mochi-work submit`. Failing CI on the orchestrator's eyes wastes review cycles.
+- Run gates locally *before* `bun work submit`. Failing CI on the orchestrator's eyes wastes review cycles.
 - Update `docs/limits.md` and PROVENANCE files in the *same* PR that creates the limit or changes the profile. Drift is a bug.
 - Push back when something is wrong. Silence is a failure mode.
 
@@ -47,20 +47,23 @@ If your task asks you to violate any of these, **stop**. Surface it on the draft
 
 ```
 1. orchestrator writes tasks/<id>.md and commits to main
-2. orchestrator runs: mochi-work create <id> <package>
+2. orchestrator runs: bun work create <id> <package>
 3. → spawns subagent (you) into worktrees/<id>/ on branch task/<package>/<id>
 4. subagent reads PLAN.md, AGENTS.md, tasks/<id>.md
 5. subagent works; commits using conventional format
 6. subagent runs gates locally
-7. subagent runs: mochi-work submit <id>
+7. subagent runs: bun work submit <id>
 8. → opens draft PR with template prefilled
 9. orchestrator reviews PR
 10. subagent addresses feedback in same worktree
 11. orchestrator squash-merges to main
-12. mochi-work clean (subagent or orchestrator) removes the worktree
+12. bun work clean (subagent or orchestrator) removes the worktree
 ```
 
 You only execute steps 4–7 and 10. The orchestrator handles the bookends.
+
+`bun work` is a thin wrapper over `scripts/mochi-work.ts` (Bun-native, no CLI
+framework deps). `bun work --help` prints the full surface; see PLAN.md §15.2.
 
 ---
 
@@ -160,7 +163,7 @@ The PR squash-commit message is the PR title; format it the same way.
 
 ---
 
-## 8. Gates you run before `mochi-work submit`
+## 8. Gates you run before `bun work submit`
 
 ```sh
 # from the worktree root
@@ -172,7 +175,7 @@ bun test:contract --pkg=<your-package>
 bun harness:smoke --affected   # if you touched inject/consistency/profiles
 ```
 
-`mochi-work submit` runs these in order and refuses to push if any fail.
+`bun work submit <task-id>` runs these in order and refuses to push if any fail.
 
 You may also run:
 ```sh
@@ -235,7 +238,7 @@ Work in:       worktrees/<id>/
 Branch name:   task/<package>/<id>
 Commit format: <type>(<scope>): <subject>\n\nRefs: #<id>
 Gates:         typecheck, lint, test, test:contract, harness:smoke
-Submit:        mochi-work submit <id>
+Submit:        bun work submit <id>
 Don't touch:   PLAN.md decisions, main branch, other packages' source
 Push back:     on the draft PR, citing PLAN.md / brief
 ```
