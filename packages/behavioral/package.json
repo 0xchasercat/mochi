@@ -1,0 +1,45 @@
+{
+  "name": "@mochi.js/behavioral",
+  "version": "0.0.1",
+  "description": "Biomechanical input synthesis for mochi — cubic Bezier + Fitts's Law + Gaussian jitter for humanClick / humanType / humanScroll.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "bun": ">=1.1"
+  },
+  "homepage": "https://github.com/0xchasercat/mochi",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0xchasercat/mochi.git",
+    "directory": "packages/behavioral"
+  },
+  "keywords": [
+    "mochi",
+    "automation",
+    "human",
+    "bezier",
+    "fitts"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test src/",
+    "lint": "biome check src/",
+    "build": "echo 'no build step yet'"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

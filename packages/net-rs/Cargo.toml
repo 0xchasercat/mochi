@@ -1,0 +1,15 @@
+[package]
+name = "mochi-net"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Network impersonation FFI for mochi — wraps wreq behind a stable C ABI for Bun:FFI."
+
+[lib]
+name = "mochi_net"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# wreq + tokio land in phase 0.6 (see PLAN.md §10).

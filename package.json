@@ -1,0 +1,42 @@
+{
+  "name": "mochi-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "mochi monorepo — see PLAN.md and packages/core for the public surface.",
+  "homepage": "https://github.com/0xchasercat/mochi",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0xchasercat/mochi.git"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "bun": ">=1.1"
+  },
+  "scripts": {
+    "typecheck": "bun run --filter '*' typecheck",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "test": "bun test --bail",
+    "test:contract": "bun test tests/contract/ 2>/dev/null || echo 'no contract tests yet'",
+    "harness:smoke": "echo '[harness] phase 0.5 placeholder — see PLAN.md §13' ",
+    "harness:full": "echo '[harness] phase 0.5 placeholder — see PLAN.md §13'",
+    "harness:diff": "echo '[harness] phase 0.5 placeholder — see PLAN.md §13'",
+    "codegen": "echo '[codegen] phase 0.0+ placeholder'",
+    "build": "bun run --filter '*' build",
+    "rust:build": "cargo build --release --manifest-path packages/net-rs/Cargo.toml",
+    "rust:test": "cargo test --manifest-path packages/net-rs/Cargo.toml",
+    "prepare": "git config --local core.hooksPath .githooks 2>/dev/null || true"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.2",
+    "@commitlint/cli": "^19.6.0",
+    "@commitlint/config-conventional": "^19.6.0",
+    "@types/bun": "latest",
+    "typescript": "^5.7.0"
+  }
+}

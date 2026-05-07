@@ -1,0 +1,44 @@
+{
+  "name": "@mochi.js/harness",
+  "version": "0.0.1",
+  "description": "Probe Manifest validation harness for mochi — captures, normalizes, and diffs against committed baselines. The Zero-Diff PR gate.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "bun": ">=1.1"
+  },
+  "homepage": "https://github.com/0xchasercat/mochi",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0xchasercat/mochi.git",
+    "directory": "packages/harness"
+  },
+  "keywords": [
+    "mochi",
+    "validation",
+    "fingerprint",
+    "diff"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test src/",
+    "lint": "biome check src/",
+    "build": "echo 'no build step yet'"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

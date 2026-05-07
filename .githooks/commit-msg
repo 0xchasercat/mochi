@@ -1,0 +1,11 @@
+#!/bin/sh
+# Conventional Commits enforcement (see PLAN.md §15.4 / commitlint.config.mjs).
+# Activated via `core.hooksPath = .githooks` (set by `bun install` prepare script).
+
+# Skip if commitlint isn't installed yet (e.g., before first `bun install`).
+if [ ! -d node_modules/@commitlint/cli ]; then
+  echo "[commit-msg] commitlint not installed; skipping. Run \`bun install\` to enable." >&2
+  exit 0
+fi
+
+bunx commitlint --edit "$1"

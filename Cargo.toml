@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = ["packages/net-rs"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+license = "MIT"
+authors = ["mochi contributors"]
+repository = "https://github.com/0xchasercat/mochi"
+
+[workspace.dependencies]
+# wreq + tokio land in phase 0.6 (PLAN.md §10).
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

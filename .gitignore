@@ -1,0 +1,52 @@
+# dependencies
+node_modules/
+.bun/
+
+# build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# rust
+target/
+Cargo.lock.bak
+
+# native artifacts (downloaded by postinstall, not committed)
+packages/net-rs/native/
+
+# captured browser binaries (downloaded by `mochi browsers install`)
+.mochi/browsers/
+
+# worktrees harness scratch
+worktrees/
+
+# harness output
+.mochi/harness-output/
+traces/
+
+# os
+.DS_Store
+Thumbs.db
+
+# editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# env
+.env
+.env.local
+.env.*.local
+
+# misc
+*.tsbuildinfo
+.turbo/
+coverage/
+.nyc_output/

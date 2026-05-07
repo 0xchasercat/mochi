@@ -1,0 +1,50 @@
+{
+  "name": "@mochi.js/net-rs",
+  "version": "0.0.1",
+  "description": "Prebuilt Rust+wreq cdylib for @mochi.js/net (FFI binding). Distributes platform-specific binaries via npm postinstall.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src",
+    "Cargo.toml",
+    "README.md"
+  ],
+  "engines": {
+    "bun": ">=1.1"
+  },
+  "homepage": "https://github.com/0xchasercat/mochi",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0xchasercat/mochi.git",
+    "directory": "packages/net-rs"
+  },
+  "keywords": [
+    "mochi",
+    "ffi",
+    "rust",
+    "wreq",
+    "tls",
+    "ja3",
+    "ja4"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test src/",
+    "lint": "biome check src/",
+    "build:rust": "cargo build --release --manifest-path Cargo.toml",
+    "test:rust": "cargo test --manifest-path Cargo.toml",
+    "build": "echo 'no JS build; cargo build:rust handles native artifact'"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
