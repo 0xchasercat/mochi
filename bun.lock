@@ -34,6 +34,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@mochi.js/consistency": "workspace:*",
+        "@mochi.js/inject": "workspace:*",
       },
     },
     "packages/harness": {
@@ -43,6 +44,9 @@
     "packages/inject": {
       "name": "@mochi.js/inject",
       "version": "0.0.1",
+      "dependencies": {
+        "@mochi.js/consistency": "workspace:*",
+      },
     },
     "packages/net": {
       "name": "@mochi.js/net",

@@ -66,6 +66,15 @@ export interface PageInit {
   sessionId: string;
   /** Initial URL (typically "about:blank"). */
   initialUrl: string;
+  /**
+   * Identifier returned by `Page.addScriptToEvaluateOnNewDocument` when the
+   * inject payload was installed at session-newPage time. Tracked here so
+   * `Page.close()` can call `Page.removeScriptToEvaluateOnNewDocument` —
+   * required by PLAN.md §8.4 to keep the per-target identifier list bounded.
+   *
+   * Optional: zero-spoofing test setups (or future no-inject paths) may omit.
+   */
+  injectScriptIdentifier?: string;
 }
 
 export class Page {
@@ -81,12 +90,15 @@ export class Page {
    * and OOPIF correlation).
    */
   private _mainFrameId: string | null = null;
+  /** Inject script identifier (see {@link PageInit.injectScriptIdentifier}). */
+  private readonly injectScriptIdentifier: string | null;
 
   constructor(init: PageInit) {
     this.router = init.router;
     this.targetId = init.targetId;
     this.sessionId = init.sessionId;
     this.currentUrl = init.initialUrl;
+    this.injectScriptIdentifier = init.injectScriptIdentifier ?? null;
     this.subscribeFrameTopology();
   }
 
@@ -243,6 +255,20 @@ export class Page {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    // PLAN.md §8.4 — un-register the inject script so the per-target
+    // identifier list stays bounded. Best-effort: if the page is already
+    // gone the remove call will fail and we ignore it.
+    if (this.injectScriptIdentifier !== null) {
+      try {
+        await this.router.send(
+          "Page.removeScriptToEvaluateOnNewDocument",
+          { identifier: this.injectScriptIdentifier },
+          { sessionId: this.sessionId },
+        );
+      } catch {
+        // Ignore — target might already be gone.
+      }
+    }
     try {
       // Target.closeTarget runs on the *root* (browser) target, not the page
       // session — it's how we tell the browser to kill that page.

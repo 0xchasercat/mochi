@@ -49,7 +49,8 @@
     "build": "echo 'no build step yet — Bun consumes src/ directly'"
   },
   "dependencies": {
-    "@mochi.js/consistency": "workspace:*"
+    "@mochi.js/consistency": "workspace:*",
+    "@mochi.js/inject": "workspace:*"
   },
   "publishConfig": {
     "access": "public"

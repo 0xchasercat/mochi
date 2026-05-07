@@ -52,6 +52,73 @@ The following are **expected** limits we'll formalize as the framework is built.
 
 ---
 
+## v0.3 (inject engine landed) — known limits
+
+### Audio fingerprinting (`OfflineAudioContext`) is NOT spoofed at v0.3
+
+**Status:** known limit
+**Root cause:** Faithful audio spoofing requires precomputed per-(profile, sample-rate) byte tables that don't exist until `@mochi.js/profiles` ships its first capture (phase 0.7). Runtime synthesis can't match real Chromium output to byte equality.
+**Affected probes:** `OfflineAudioContext.startRendering()` byte hash, FPJS Pro audio component, creep.js audio.
+**Mitigation:** v0.3 leaves the audio surface bare. A probe that hits it sees the raw Chromium audio fingerprint, which mismatches the spoofed UA family. Sites that fingerprint audio cross-checked with UA can detect the mismatch.
+**User workaround:** none at JS layer. Pin the matched profile + Chromium-for-Testing version (phase 0.4 onward) so that the bare audio fingerprint *also* matches the device class.
+**Tracking:** phase 0.7.
+
+### Canvas fingerprinting (`HTMLCanvasElement.toDataURL`) is NOT spoofed at v0.3
+
+**Status:** known limit
+**Root cause:** Same as audio — faithful canvas spoofing needs precomputed hash maps for the standard probe payloads + per-pixel noise injection for unknown payloads. Both require profile-bound data tables that land in phase 0.7.
+**Affected probes:** Browserleaks canvas, FPJS visitor-id (canvas component), creep.js canvas.
+**Mitigation:** v0.3 leaves canvas bare. Same UA-mismatch caveat as audio.
+**User workaround:** same as audio.
+**Tracking:** phase 0.7.
+
+### WebGPU adapter info is NOT spoofed at v0.3
+
+**Status:** known limit
+**Root cause:** WebGPU `requestAdapter().requestAdapterInfo()` exposes `architecture`/`description`/`device`/`vendor` strings. These haven't been added to `MatrixV1` yet — they require additional consistency-engine rules to lock against the existing `gpu.{vendor, renderer}` slot.
+**Affected probes:** WebGPU adapter info readout, browserleaks webgpu.
+**Mitigation:** none at v0.3 — bare Chromium values.
+**User workaround:** none at JS layer in v0.3.
+**Tracking:** phase 0.7 (consistency engine full).
+
+### `MediaDevices.enumerateDevices()` is NOT spoofed at v0.3
+
+**Status:** known limit
+**Root cause:** Persistent device-id spoofing requires (a) the matrix to declare a stable per-(profile, seed) device list and (b) the inject layer to wrap the async `enumerateDevices` Promise. Neither lands until phase 0.7.
+**Affected probes:** WebRTC device enumeration probes, FPJS hardware tab.
+**Mitigation:** v0.3 leaves bare Chromium output (typically empty in headless mode).
+**User workaround:** none at JS layer in v0.3.
+**Tracking:** phase 0.7.
+
+### `SpeechSynthesis.getVoices()` is NOT spoofed at v0.3
+
+**Status:** known limit
+**Root cause:** Voice-list spoofing requires per-OS voice catalog data (mac voices vs Windows voices vs Linux voices) — to land alongside fonts in phase 0.7.
+**Affected probes:** speech-synthesis probes (creepjs speech).
+**Mitigation:** none at v0.3.
+**User workaround:** none.
+**Tracking:** phase 0.7.
+
+### `Notification.permission` and `Permissions.query` use bare Chrome behavior
+
+**Status:** known limit
+**Root cause:** v0.3 deliberately doesn't override these — they're more about page-permission state (which mochi sessions don't grant) than fingerprintable surface. The bare Chromium values match what a fresh-profile, never-prompted user would see.
+**Affected probes:** anti-bot heuristics that compare `Notification.permission === "denied"` against UA.
+**Mitigation:** none — the bare values are already the "stealth-correct" values.
+**User workaround:** none needed.
+**Tracking:** revisit when a probe actually flags this.
+
+### Worker context injection has a smaller stealth ceiling than main-world
+
+**Status:** known limit (architectural — JS-layer ceiling)
+**Root cause:** `Page.addScriptToEvaluateOnNewDocument` doesn't apply to worker targets — Chromium has no equivalent "run before any script" hook for workers. The best mochi can do is `Runtime.evaluate` against the paused worker target on `Target.attachedToTarget`. That evaluate runs *just after* the worker's V8 isolate is created but uses the standard Runtime domain rather than a pre-script-runner hook. A determined fingerprint script in a Worker can race our injection or detect the slightly-different invocation timing.
+**Affected probes:** any probe that runs first-thing inside a `Worker` / `SharedWorker` / `ServiceWorker` / `AudioWorklet` and compares results to main-thread results.
+**Mitigation:** PLAN.md §8.4 + PLAN.md §8.2 — we use `Target.setAutoAttach({waitForDebuggerOnStart:true})` so the worker is paused at creation; we evaluate the payload against it; then we resume via `Runtime.runIfWaitingForDebugger`. No `Runtime.enable` ever sent.
+**User workaround:** none at JS layer. Profiles can be marked "worker-stealth-sensitive" in v2 so that user code can opt out of probes that use workers.
+**Tracking:** Chromium upstream. Likely never lands as a public CDP method (security-sensitive).
+
+---
+
 ## v0.1 (CDP transport landed) — known limits
 
 ### `page.evaluate(fn)` is `Runtime.callFunctionOn`-based, not full `Runtime.evaluate`
