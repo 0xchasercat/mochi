@@ -87,11 +87,11 @@ You touch *one* primary package. Direct contract consumers (packages that import
 | Your package | What you import freely | What you DO NOT import |
 |---|---|---|
 | `@mochi.js/core` | `@mochi.js/consistency`, `@mochi.js/inject`, `@mochi.js/behavioral`, `@mochi.js/profiles`, `@mochi.js/net` | nothing else |
-| `@mochi.js/consistency` | `@mochi.js/profiles` (types only) | `@mochi.js/core`, `@mochi.js/inject` |
+| `@mochi.js/consistency` | nothing (canonical owner of `ProfileV1`/`MatrixV1` via codegen from `schemas/`) | `@mochi.js/core`, `@mochi.js/inject`, `@mochi.js/profiles` |
 | `@mochi.js/inject` | `@mochi.js/consistency` (types only) | `@mochi.js/core` |
 | `@mochi.js/net` | `@mochi.js/net-rs` (FFI binding) | `@mochi.js/core` |
 | `@mochi.js/behavioral` | nothing | nothing |
-| `@mochi.js/profiles` | nothing (data-only package) | nothing |
+| `@mochi.js/profiles` | `@mochi.js/consistency` (types only — re-exports `ProfileV1` from the canonical generated source) | runtime imports of any package |
 | `@mochi.js/harness` | all of the above (it's a consumer) | n/a |
 | `@mochi.js/cli` | all of the above | n/a |
 
