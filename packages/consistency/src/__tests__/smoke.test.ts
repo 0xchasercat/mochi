@@ -1,10 +1,17 @@
+/**
+ * Smoke test for @mochi.js/consistency v0.2.
+ *
+ * Verifies the package's public surface — VERSION, deriveMatrix shape,
+ * and the engine version stamp. Per-rule unit tests live alongside in
+ * `__tests__/rules.test.ts`; determinism + DAG tests live in their own
+ * test files.
+ */
 import { describe, expect, it } from "bun:test";
-import { deriveMatrix, type ProfileV1, VERSION } from "../index";
+import { CONSISTENCY_ENGINE_VERSION, deriveMatrix, type ProfileV1, RULES, VERSION } from "../index";
 
 /**
- * Minimal valid ProfileV1 fixture. Real profiles live in @mochi.js/profiles
- * (phase 0.4); this fixture exists only so the v0.0.1 claim test can pass a
- * type-correct argument to the not-yet-implemented deriveMatrix() throw-path.
+ * Minimal valid ProfileV1 fixture covering the Mac M2 catalog profile.
+ * Real profiles ship with `@mochi.js/profiles` (phase 0.4).
  */
 const FIXTURE: ProfileV1 = {
   id: "test-profile",
@@ -42,12 +49,30 @@ const FIXTURE: ProfileV1 = {
   entropyBudget: { fixed: ["gpu.vendor"], perSeed: ["display.width"] },
 };
 
-describe("@mochi.js/consistency (claim release)", () => {
-  it("exports VERSION", () => {
+describe("@mochi.js/consistency (v0.2 smoke)", () => {
+  it("exports a semver-shaped VERSION", () => {
     expect(VERSION).toMatch(/^\d+\.\d+\.\d+/);
   });
 
-  it("deriveMatrix throws until phase 0.2", () => {
-    expect(() => deriveMatrix(FIXTURE, "seed")).toThrow(/not yet implemented/);
+  it("exports a semver-shaped CONSISTENCY_ENGINE_VERSION", () => {
+    expect(CONSISTENCY_ENGINE_VERSION).toBe("0.2.0");
+  });
+
+  it("ships at least the 30 v0.2 rules", () => {
+    expect(RULES.length).toBeGreaterThanOrEqual(30);
+  });
+
+  it("deriveMatrix returns a MatrixV1 with seed + engine version stamped", () => {
+    const matrix = deriveMatrix(FIXTURE, "seed-1");
+    expect(matrix.seed).toBe("seed-1");
+    expect(matrix.consistencyEngineVersion).toBe(CONSISTENCY_ENGINE_VERSION);
+    expect(typeof matrix.derivedAt).toBe("string");
+    // Sanity: the matrix carries the profile identity unchanged.
+    expect(matrix.id).toBe(FIXTURE.id);
+    expect(matrix.engine).toBe("chromium");
+  });
+
+  it("rejects empty seeds", () => {
+    expect(() => deriveMatrix(FIXTURE, "")).toThrow(/non-empty/);
   });
 });

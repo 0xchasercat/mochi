@@ -5,9 +5,9 @@
  * `Page` objects. Closing the session kills the browser and removes the
  * ephemeral user-data-dir. PLAN.md §5.1 / §7.
  *
- * v0.1 exposes a *stub* MatrixV1 — derived trivially from `(profile, seed)`
- * with placeholder values. Phase 0.2 swaps this for the real
- * `@mochi.js/consistency` deriveMatrix() output.
+ * v0.2 exposes a real, relationally-locked `MatrixV1` derived by
+ * `@mochi.js/consistency.deriveMatrix(profile, seed)`. The Matrix is
+ * deterministic per `(profile, seed)` (excluding `derivedAt`).
  *
  * @see PLAN.md §7
  */
@@ -42,8 +42,8 @@ export interface StorageSnapshot {
 
 export class Session {
   /**
-   * The resolved Matrix for this session. v0.1 is a stub; phase 0.2 wires
-   * the real `@mochi.js/consistency` engine.
+   * The resolved Matrix for this session — a relationally-locked snapshot
+   * of `(profile, seed)` produced by `@mochi.js/consistency.deriveMatrix`.
    */
   readonly profile: MatrixV1;
   readonly seed: string;
