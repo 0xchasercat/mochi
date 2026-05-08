@@ -72,7 +72,17 @@ const CANONICAL_SEED = "contract-pin-seed";
  * fail the test. Update this hash AND the harness baselines together when
  * the payload's bytes intentionally change.
  *
- * Last updated 2026-05-09 alongside tasks/0250-mouseevent-screen-coords.md
+ * Last updated 2026-05-09 alongside tasks/0261-uach-network-metadata.md
+ * (R-042..R-046: UA-CH metadata struct fields — `sec-ch-ua-arch`,
+ * `sec-ch-ua-bitness`, `sec-ch-ua-mobile`, `sec-ch-ua-model`, and
+ * single-string `ua-full-version`. These rules now write into
+ * `matrix.uaCh`, which `client-hints.ts` reads — same matrix slots core
+ * passes to `Network.setUserAgentOverride.userAgentMetadata`. The inject
+ * payload's bytes shift because the now-populated keys flow through to
+ * `SPOOF_*` constants in the emitted JS, plus the new `SPOOF_UA_FULL_VERSION`
+ * source path. Module count is unchanged (15).
+ *
+ * Previously last updated 2026-05-09 alongside tasks/0250-mouseevent-screen-coords.md
  * (R-041: MouseEvent.screenX/screenY prototype patch — closes the I-5
  * relational leak on CDP-dispatched mouse events. PRB-cited prototype
  * getter patch installed in a new `mouse-event-screen` inject module;
@@ -87,7 +97,7 @@ const CANONICAL_SEED = "contract-pin-seed";
  * absent) and plugins (curated 5-plugin PluginArray only when underlying
  * browser reports an empty list).
  */
-const PINNED_SHA256 = "ec63d2987b678356d9048567cd98374743fdd2129358d49215a2c0e04612750f";
+const PINNED_SHA256 = "2b116bdcd47c863f9b7089fd04e65479c7d1590d17264e7f93703aeabb091787";
 
 describe("contract: @mochi.js/inject buildPayload sha256 is byte-stable per (profile, seed)", () => {
   it("buildPayload(deriveMatrix(profile, seed)) is deterministic", () => {

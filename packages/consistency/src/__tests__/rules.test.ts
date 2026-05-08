@@ -284,4 +284,43 @@ describe("rules — v0.2 ruleset (golden lock)", () => {
       winMatrix.uaCh["mouseEvent-screen-formula"],
     );
   });
+
+  // ---- task 0261 rules (R-042..R-046) — UA-CH metadata struct ------------
+
+  it("R-042: sec-ch-ua-arch is quoted arm on apple-silicon, x86 on win-x64", () => {
+    expect(macMatrix.uaCh["sec-ch-ua-arch"]).toBe('"arm"');
+    expect(winMatrix.uaCh["sec-ch-ua-arch"]).toBe('"x86"');
+  });
+
+  it("R-043: sec-ch-ua-bitness is quoted '64' on 64-bit profiles (never numeric)", () => {
+    expect(macMatrix.uaCh["sec-ch-ua-bitness"]).toBe('"64"');
+    expect(winMatrix.uaCh["sec-ch-ua-bitness"]).toBe('"64"');
+    // Type assertion — a future regression that ships numeric `bitness`
+    // would still match the JSON-encoded "64" via .toBe but typeof would
+    // shift; the contract test in tests/contract/uach-network-parity also
+    // covers the CDP-level `typeof` invariant.
+    expect(typeof macMatrix.uaCh["sec-ch-ua-bitness"]).toBe("string");
+  });
+
+  it("R-044: sec-ch-ua-mobile is ?0 for desktop (Structured-Headers boolean)", () => {
+    expect(macMatrix.uaCh["sec-ch-ua-mobile"]).toBe("?0");
+    expect(winMatrix.uaCh["sec-ch-ua-mobile"]).toBe("?0");
+  });
+
+  it("R-045: sec-ch-ua-model is empty quoted string for desktop OSes (per spec)", () => {
+    expect(macMatrix.uaCh["sec-ch-ua-model"]).toBe('""');
+    expect(winMatrix.uaCh["sec-ch-ua-model"]).toBe('""');
+  });
+
+  it("R-046: ua-full-version is the branded entry's version from R-031's list", () => {
+    const macFullList = JSON.parse(macMatrix.uaCh["ua-full-version-list"] ?? "[]") as {
+      brand: string;
+      version: string;
+    }[];
+    expect(macMatrix.uaCh["ua-full-version"]).toBe(macFullList[0]?.version);
+    // For Chrome 131 the tip table pins this — pinning the literal here
+    // catches a regression that flipped the branded entry to GREASE
+    // (which would emit "8.0.0.0" — explicitly NOT what we want).
+    expect(macMatrix.uaCh["ua-full-version"]).toBe("131.0.6778.110");
+  });
 });
