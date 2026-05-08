@@ -70,7 +70,32 @@ export interface SpawnConfig {
    * do NOT fall back to host locale — locale must come from the matrix.
    */
   locale?: string;
+  /**
+   * Outer window geometry to pin via `--window-size=<width>,<height>`. When
+   * supplied, Chromium's OS-level outer-window dimensions match the spoofed
+   * `screen.*` so `window.outerWidth/outerHeight` (read at the OS level
+   * under `--headless=new`) don't expose the default 800×600 leak that
+   * `fingerprint-scan.com` flags. Both dimensions must be finite positive
+   * integers; otherwise the flag is omitted. Sourced from
+   * `matrix.display.{width,height}` by `launch.ts` — the matrix is canonical.
+   *
+   * @see UDC `__init__.py:410-411`, UDC issue #2242, task 0252.
+   */
+  windowSize?: { width: number; height: number };
 }
+
+/**
+ * Flags we deliberately strip from any user-supplied extra args. UDC ships
+ * with `--start-maximized`; mochi must not — it produces host-OS-dependent
+ * geometry that drifts from the matrix's `display.*` spoof and re-introduces
+ * the same outer-window mismatch `--window-size` is here to close.
+ *
+ * Applied to `extraArgs` and to the `MOCHI_EXTRA_ARGS` env split so users /
+ * CI cannot accidentally re-introduce non-determinism.
+ *
+ * @see task 0252 success criterion #3.
+ */
+const FORBIDDEN_FLAG_PREFIXES: readonly string[] = ["--start-maximized"];
 
 /**
  * The handle returned by {@link spawnChromium}. Owns the user-data-dir, the
@@ -103,58 +128,9 @@ export interface ChromiumProcess {
  * user-supplied `--lang=<override>` in `args` wins (Chromium honors last
  * occurrence on the command line for this flag).
  */
-export function buildChromiumArgs(cfg: SpawnConfig, userDataDir: string): string[] {
-  const args: string[] = [`--user-data-dir=${userDataDir}`, ...DEFAULT_CHROMIUM_FLAGS];
-  if (cfg.headless) {
-    // Modern headless mode (matches stable Chrome behavior more closely than
-    // legacy --headless). The `=new` is critical — old `--headless` is
-    // detectable.
-    args.push("--headless=new");
-  }
-  if (cfg.proxy !== undefined && cfg.proxy.length > 0) {
-    args.push(`--proxy-server=${cfg.proxy}`);
-  }
-  // Matrix-derived primary locale — feeds Chromium's `Accept-Language`
-  // header so the network surface matches the JS-layer `navigator.language`
-  // spoof (PLAN.md I-5). Pushed BEFORE `extraArgs` so a user-supplied
-  // override in `args` can win on the command line if absolutely needed —
-  // Chromium honors the last-occurrence on the line for `--lang`.
-  if (cfg.locale !== undefined && cfg.locale.length > 0) {
-    args.push(`--lang=${cfg.locale}`);
-  }
-  if (cfg.extraArgs !== undefined && cfg.extraArgs.length > 0) {
-    args.push(...cfg.extraArgs);
-  }
-  // Whitespace-separated extra args from the environment. Same effect as
-  // `LaunchOptions.args` but settable from outside the calling code — load-
-  // bearing for CI environments that need `--no-sandbox` (Linux user-namespace
-  // sandbox doesn't work in unprivileged containers / GH Actions runners) and
-  // for ad-hoc local debugging without touching test fixtures. Production code
-  // SHOULD NOT set this — `--no-sandbox` is a fingerprint leak in real-user
-  // contexts. PLAN.md §8.6 explicitly omits it from DEFAULT_CHROMIUM_FLAGS.
-  const envExtra = process.env.MOCHI_EXTRA_ARGS;
-  if (typeof envExtra === "string" && envExtra.trim().length > 0) {
-    args.push(...envExtra.trim().split(/\s+/));
-  }
-  return args;
-}
-
-/**
- * Spawn Chromium with `--remote-debugging-pipe` and the standard flag set.
- *
- * Pipe FD convention (Chromium CDP pipe spec, matches Puppeteer / Playwright):
- *   - FD 3 in the *child* is the read end. The parent writes commands to it.
- *   - FD 4 in the *child* is the write end. The parent reads responses from it.
- *
- * Note: task brief 0011 has the FD direction labels reversed; we follow
- * Chromium's actual convention here so the protocol works. Either way Bun's
- * `stdio: ["pipe", "pipe", "pipe", "pipe", "pipe"]` allocates two extra pipes
- * and gives us back numeric FDs at `proc.stdio[3]` and `proc.stdio[4]`.
- */
 export async function spawnChromium(cfg: SpawnConfig): Promise<ChromiumProcess> {
   const userDataDir = await mkdtemp(join(tmpdir(), "mochi-"));
-
-  const args = buildChromiumArgs(cfg, userDataDir);
+  const args = buildChromiumArgs(cfg, userDataDir, process.env.MOCHI_EXTRA_ARGS);
 
   const proc = Bun.spawn([cfg.binary, ...args], {
     // stdin, stdout, stderr, then two extra pipes for CDP framing.
@@ -238,6 +214,90 @@ export async function spawnChromium(cfg: SpawnConfig): Promise<ChromiumProcess> 
     writer,
     close,
   };
+}
+
+/**
+ * Pure builder for the Chromium argv used by {@link spawnChromium}. Extracted
+ * so tests can assert flag composition (window-size, headless, forbidden-flag
+ * scrub, env extras) without spawning a real binary.
+ *
+ * @param cfg        — the {@link SpawnConfig} the caller passed.
+ * @param userDataDir — absolute path to the ephemeral profile dir.
+ * @param envExtra   — value of `MOCHI_EXTRA_ARGS` (pass `process.env.MOCHI_EXTRA_ARGS`
+ *                    in production; tests pass a string or `undefined`).
+ */
+export function buildChromiumArgs(
+  cfg: SpawnConfig,
+  userDataDir: string,
+  envExtra: string | undefined,
+): string[] {
+  const args: string[] = [`--user-data-dir=${userDataDir}`, ...DEFAULT_CHROMIUM_FLAGS];
+  if (cfg.headless) {
+    // Modern headless mode (matches stable Chrome behavior more closely than
+    // legacy --headless). The `=new` is critical — old `--headless` is
+    // detectable.
+    args.push("--headless=new");
+  }
+  if (cfg.proxy !== undefined && cfg.proxy.length > 0) {
+    args.push(`--proxy-server=${cfg.proxy}`);
+  }
+  // Matrix-derived primary locale — feeds Chromium's `Accept-Language`
+  // header so the network surface matches the JS-layer `navigator.language`
+  // spoof (PLAN.md I-5). Pushed BEFORE `extraArgs` so a user-supplied
+  // override in `args` can win on the command line if absolutely needed —
+  // Chromium honors the last-occurrence on the line for `--lang`. Task 0251.
+  if (cfg.locale !== undefined && cfg.locale.length > 0) {
+    args.push(`--lang=${cfg.locale}`);
+  }
+  // `--window-size=<W>,<H>` — pin the OS-level outer window so
+  // `window.outerWidth/outerHeight` match `matrix.display.*` instead of
+  // Chromium's headless 800×600 default. The matrix is canonical: when
+  // `display.{width,height}` is missing or non-finite we omit the flag
+  // rather than fall back to a hardcoded value (a hardcoded value would
+  // mismatch a profile that legitimately uses different dimensions). Task 0252.
+  if (cfg.windowSize !== undefined) {
+    const { width, height } = cfg.windowSize;
+    if (
+      Number.isFinite(width) &&
+      Number.isFinite(height) &&
+      Number.isInteger(width) &&
+      Number.isInteger(height) &&
+      width > 0 &&
+      height > 0
+    ) {
+      args.push(`--window-size=${width},${height}`);
+    }
+  }
+  if (cfg.extraArgs !== undefined && cfg.extraArgs.length > 0) {
+    args.push(...stripForbiddenFlags(cfg.extraArgs));
+  }
+  // Whitespace-separated extra args from the environment. Same effect as
+  // `LaunchOptions.args` but settable from outside the calling code — load-
+  // bearing for CI environments that need `--no-sandbox` (Linux user-namespace
+  // sandbox doesn't work in unprivileged containers / GH Actions runners) and
+  // for ad-hoc local debugging without touching test fixtures. Production code
+  // SHOULD NOT set this — `--no-sandbox` is a fingerprint leak in real-user
+  // contexts. PLAN.md §8.6 explicitly omits it from DEFAULT_CHROMIUM_FLAGS.
+  if (typeof envExtra === "string" && envExtra.trim().length > 0) {
+    args.push(...stripForbiddenFlags(envExtra.trim().split(/\s+/)));
+  }
+  return args;
+}
+
+/**
+ * Drop any flag in `args` whose prefix matches {@link FORBIDDEN_FLAG_PREFIXES}.
+ * Match is `=` / boundary-aware so `--start-maximized` and
+ * `--start-maximized=1` both go, but `--start-maximized-foo` (hypothetical)
+ * would not. Preserves order of surviving args.
+ */
+function stripForbiddenFlags(args: readonly string[]): string[] {
+  return args.filter((arg) => {
+    for (const prefix of FORBIDDEN_FLAG_PREFIXES) {
+      if (arg === prefix) return false;
+      if (arg.startsWith(`${prefix}=`)) return false;
+    }
+    return true;
+  });
 }
 
 /** Read-and-discard a ReadableStream so Chromium's pipe buffers don't fill. */
