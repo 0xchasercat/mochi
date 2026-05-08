@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
   buildChromiumArgs,
   DEFAULT_CHROMIUM_FLAGS,
+  diagnoseEarlyExitTail,
   HERMETIC_ONLY_CHROMIUM_FLAGS,
   type SpawnConfig,
 } from "../proc";
@@ -332,5 +333,51 @@ describe("buildChromiumArgs — task 0256 (hermetic-mode knob)", () => {
     expect(firstHermeticIdx).toBeGreaterThan(lastDefaultIdx);
     expect(headlessIdx).toBeGreaterThan(firstHermeticIdx);
     expect(extrasIdx).toBeGreaterThan(headlessIdx);
+  });
+});
+
+/**
+ * Diagnostic-tail classifier — task 0259. Locks the two patterns we currently
+ * surface (root-sandbox refusal and missing shared libs) against regressions
+ * without spawning a real Chromium.
+ */
+describe("diagnoseEarlyExitTail", () => {
+  it("returns the empty string when no known pattern matches", () => {
+    expect(diagnoseEarlyExitTail("some unrelated stderr noise")).toBe("");
+    expect(diagnoseEarlyExitTail("")).toBe("");
+  });
+
+  it("emits the root-sandbox hint for the canonical Chromium message", () => {
+    const tail =
+      "[1234:1234:0508/120000.000:ERROR:zygote_host_impl_linux.cc(90)] " +
+      "Running as root without --no-sandbox is not supported. See " +
+      "https://crbug.com/638180.";
+    const hint = diagnoseEarlyExitTail(tail);
+    expect(hint).toContain("Chromium refuses to start as root");
+    expect(hint).toContain("Run as a non-root user");
+    expect(hint).toContain("chrome-sandbox");
+    expect(hint).toContain("--no-sandbox");
+  });
+
+  it("emits the missing-lib hint with the offending .so name", () => {
+    const tail =
+      "chrome: error while loading shared libraries: libnss3.so: " +
+      "cannot open shared object file: No such file or directory";
+    const hint = diagnoseEarlyExitTail(tail);
+    expect(hint).toContain("libnss3.so");
+    expect(hint).toContain("Chromium failed to load a system library");
+    expect(hint).toContain("mochi browsers install");
+    expect(hint).toContain("https://mochijs.com/docs/getting-started/install");
+  });
+
+  it("prefers the root-sandbox hint when both patterns are present (root surfaces first)", () => {
+    // Defensive: a misconfigured rootful container could plausibly hit both;
+    // surface the root one because that's the load-bearing fix.
+    const tail =
+      "Running as root without --no-sandbox is not supported.\n" +
+      "error while loading shared libraries: libnss3.so: cannot open ...";
+    const hint = diagnoseEarlyExitTail(tail);
+    expect(hint).toContain("Chromium refuses to start as root");
+    expect(hint).not.toContain("libnss3.so");
   });
 });

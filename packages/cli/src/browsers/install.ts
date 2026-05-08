@@ -31,6 +31,11 @@
 import { mkdir, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  formatMissingLibHint,
+  LINUX_RUNTIME_DEPS_APT_LINE,
+  MISSING_SHARED_LIB_RE,
+} from "../lib/linux-deps";
+import {
   type ChannelManifest,
   fetchChannelManifest,
   fetchKnownGoodManifest,
@@ -87,6 +92,35 @@ export class DownloadError extends Error {
   constructor(cause: "network" | "http", message: string) {
     super(message);
     this.cause = cause;
+  }
+}
+
+/**
+ * Thrown by the post-extract `--version` smoke when the freshly-installed
+ * Chromium binary fails to launch. Most often a missing shared library on a
+ * fresh Linux server (the `cause === "missing-libs"` discriminant); rarer
+ * causes (`cause === "exec"`) include a partial extract, a corrupt zip, or
+ * the binary lacking its executable bit.
+ *
+ * The CLI's `reportError` formats this with a clear, actionable hint —
+ * task 0259 closes the visibility gap between "install said done" and
+ * "first launch crashes opaquely".
+ */
+export class BinarySmokeError extends Error {
+  override readonly name = "BinarySmokeError";
+  override readonly cause: "missing-libs" | "exec";
+  readonly missingLib: string | null;
+  readonly stderrTail: string;
+  constructor(
+    cause: "missing-libs" | "exec",
+    message: string,
+    missingLib: string | null,
+    stderrTail: string,
+  ) {
+    super(message);
+    this.cause = cause;
+    this.missingLib = missingLib;
+    this.stderrTail = stderrTail;
   }
 }
 
@@ -260,6 +294,13 @@ export interface InstallOpts {
   readonly log?: (line: string) => void;
   /** CLI version string to embed in `.mochi-meta.json`. */
   readonly mochiCliVersion: string;
+  /**
+   * Skip the post-extract `<binary> --version` smoke. Used by tests that
+   * stage a fake CfT layout where the "binary" is a script that doesn't
+   * implement `--version`. Production calls leave this at the default (off).
+   * Task 0259.
+   */
+  readonly skipBinarySmoke?: boolean;
 }
 
 export interface InstallResult {
@@ -299,6 +340,16 @@ export async function install(opts: InstallOpts): Promise<InstallResult> {
   const existing = await readInstallMeta(dir);
   if (existing && !opts.force) {
     log(`already installed at ${dir}`);
+    // Re-run the post-extract binary smoke even on the cached path. A user
+    // who hit task 0259's missing-libs failure on first install will most
+    // commonly re-run `mochi browsers install` after the apt-get; without
+    // this we'd silently short-circuit and they'd hit the same opaque
+    // BrowserCrashedError on `mochi.launch()`. Skipped on non-Linux (no
+    // shared-library failure mode) and when explicitly disabled for tests.
+    if (opts.platform === "linux64" && opts.skipBinarySmoke !== true) {
+      const smoke = assertBinaryLaunches(binaryPath);
+      log(`Chromium binary verified — launches cleanly (${smoke.versionLine})`);
+    }
     return {
       installDir: dir,
       binaryPath,
@@ -354,6 +405,16 @@ export async function install(opts: InstallOpts): Promise<InstallResult> {
       mochiCliVersion: opts.mochiCliVersion,
     };
     await Bun.write(join(dir, META_FILENAME), JSON.stringify(meta, null, 2));
+
+    // Post-extract binary smoke (Linux only; macOS / Windows ship the
+    // runtime deps via the OS itself). Throws BinarySmokeError if the binary
+    // fails `--version` — most often a missing system lib on a fresh server.
+    // The error message includes the verbatim apt install line so the user
+    // can paste-and-run. Task 0259.
+    if (opts.platform === "linux64" && opts.skipBinarySmoke !== true) {
+      const smoke = assertBinaryLaunches(binaryPath);
+      log(`Chromium binary verified — launches cleanly (${smoke.versionLine})`);
+    }
 
     return {
       installDir: dir,
@@ -456,6 +517,115 @@ async function unzipTo(zipPath: string, dest: string): Promise<void> {
     }
     throw err;
   }
+}
+
+/**
+ * Result of the post-install `--version` smoke. The install command writes
+ * `ok === true` to stdout as positive confirmation; `ok === false` triggers
+ * a `BinarySmokeError` so the caller can format a remediation hint.
+ */
+export interface BinarySmokeResult {
+  readonly ok: boolean;
+  readonly versionLine: string;
+  readonly exitCode: number;
+  readonly stderrTail: string;
+  readonly missingLib: string | null;
+}
+
+/**
+ * Spawn `<binary> --version` and classify the result. Synchronous-style
+ * (`spawnSync`) because the install command is intrinsically blocking — we
+ * want this verification to gate the "installed at <dir>" log line.
+ *
+ * On a fresh Linux server without the runtime deps, Chromium emits
+ * `error while loading shared libraries: <name>.so` to stderr and exits
+ * non-zero; we parse the offending lib name out so the `BinarySmokeError`
+ * shape carries it for the caller's hint.
+ *
+ * @see tasks/0259-linux-first-run-experience.md
+ */
+export function smokeBinary(binaryPath: string): BinarySmokeResult {
+  // `Bun.spawnSync` throws (not returns non-zero) when the binary at
+  // `cmd[0]` is missing entirely (ENOENT) or unexecutable. We catch and
+  // synthesize a non-ok result so callers don't have to wrap each call —
+  // the smoke is supposed to be a single yes/no boundary.
+  let proc: Bun.SyncSubprocess | undefined;
+  let spawnErr: unknown;
+  try {
+    proc = Bun.spawnSync({
+      cmd: [binaryPath, "--version"],
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+  } catch (err) {
+    spawnErr = err;
+  }
+  if (proc === undefined) {
+    const msg = spawnErr instanceof Error ? spawnErr.message : String(spawnErr);
+    return {
+      ok: false,
+      versionLine: "",
+      exitCode: -1,
+      stderrTail: msg,
+      missingLib: null,
+    };
+  }
+  const stdout = (proc.stdout ?? new Uint8Array()).toString();
+  const stderr = (proc.stderr ?? new Uint8Array()).toString();
+  const exitCode = proc.exitCode ?? -1;
+  const versionLine = stdout.trim().split("\n")[0] ?? "";
+  const stderrTail = stderr.trim().split("\n").slice(-12).join("\n");
+  if (exitCode === 0 && versionLine.length > 0) {
+    return {
+      ok: true,
+      versionLine,
+      exitCode,
+      stderrTail,
+      missingLib: null,
+    };
+  }
+  const m = MISSING_SHARED_LIB_RE.exec(stderr);
+  return {
+    ok: false,
+    versionLine,
+    exitCode,
+    stderrTail,
+    missingLib: m !== null ? (m[1] ?? null) : null,
+  };
+}
+
+/**
+ * Run the post-install smoke and throw `BinarySmokeError` on failure with
+ * a fully-formatted remediation hint. Pulled out of `install()` so tests
+ * can target the smoke path without staging a fake CfT zip.
+ */
+export function assertBinaryLaunches(binaryPath: string): BinarySmokeResult {
+  const result = smokeBinary(binaryPath);
+  if (result.ok) return result;
+  // Missing-shared-library path: Chromium printed the offending .so name.
+  // We surface the canonical apt install line so the user can paste-and-run.
+  if (result.missingLib !== null || /shared libraries/i.test(result.stderrTail)) {
+    throw new BinarySmokeError(
+      "missing-libs",
+      `Chromium binary at ${binaryPath} failed --version with missing shared libraries.${formatMissingLibHint(
+        result.missingLib,
+      )}\n\nStderr tail:\n${result.stderrTail || "(empty)"}`,
+      result.missingLib,
+      result.stderrTail,
+    );
+  }
+  // Catch-all: exec failed for some other reason (partial extract, missing
+  // exec bit, ENOENT). Different remediation path — the user re-runs install
+  // with --force, or checks file permissions.
+  throw new BinarySmokeError(
+    "exec",
+    `Chromium binary at ${binaryPath} failed --version (exit ${result.exitCode}). ` +
+      "The install may be partial or the binary may be missing its executable bit. " +
+      "Try `mochi browsers install --force` to redownload.\n\n" +
+      `Stderr tail:\n${result.stderrTail || "(empty)"}`,
+    null,
+    result.stderrTail,
+  );
 }
 
 /**

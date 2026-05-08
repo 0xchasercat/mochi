@@ -19,9 +19,16 @@
  */
 import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
+import { userInfo } from "node:os";
 import { createInterface } from "node:readline/promises";
 import { listInstalled, resolveChromiumBinary } from "./index";
-import { DownloadError, install, Sha256MismatchError, UnzipError } from "./install";
+import {
+  BinarySmokeError,
+  DownloadError,
+  install,
+  Sha256MismatchError,
+  UnzipError,
+} from "./install";
 import {
   binaryPathFor,
   type CftPlatform,
@@ -226,6 +233,26 @@ async function runInstall(args: readonly string[]): Promise<number> {
   const expectedSha = asString(parsed.flags.sha256);
   if (expectedSha !== undefined && !/^[0-9a-f]{64}$/i.test(expectedSha)) {
     return reportError(new UsageError(`--sha256 must be 64 hex characters; got ${expectedSha}`));
+  }
+
+  // Task 0259 — light root warning at install time. Linux Chromium refuses
+  // to launch as root unless --no-sandbox or the SUID helper is wired up;
+  // we only warn (some CI / Docker setups legitimately run as root) so the
+  // first-time user sees the gotcha BEFORE the launch crashes opaquely.
+  // macOS / Windows root-uid semantics differ — Linux-only.
+  if (process.platform === "linux") {
+    try {
+      if (userInfo().uid === 0) {
+        process.stderr.write(
+          "warning: running as root. Chromium refuses to start under the user-namespace\n" +
+            "         sandbox as root — `mochi.launch()` will fail with EPIPE unless you\n" +
+            "         run as a non-root user, `chmod 4755` chrome-sandbox, or pass\n" +
+            "         args: ['--no-sandbox'] (fingerprint leak, see PLAN.md §8.6).\n",
+        );
+      }
+    } catch {
+      // userInfo() can throw on exotic platforms — best-effort only.
+    }
   }
 
   try {
@@ -469,6 +496,13 @@ function reportError(err: unknown): number {
   }
   if (err instanceof UnzipError) {
     process.stderr.write(`mochi browsers: unzip failed: ${err.message}\n`);
+    return 1;
+  }
+  if (err instanceof BinarySmokeError) {
+    // Task 0259 — the install succeeded on disk but the binary does not
+    // launch. Print the full hint (apt line + docs URL) on stderr and exit
+    // non-zero so CI / scripts know the install isn't truly done.
+    process.stderr.write(`mochi browsers: ${err.message}\n`);
     return 1;
   }
   if (err instanceof Error) {
