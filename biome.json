@@ -63,7 +63,7 @@
   },
   "overrides": [
     {
-      "includes": ["packages/cli/**", "scripts/**"],
+      "includes": ["packages/cli/**", "scripts/**", "packages/net-rs/scripts/**"],
       "linter": {
         "rules": {
           "suspicious": {
