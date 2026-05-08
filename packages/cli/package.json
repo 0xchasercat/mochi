@@ -1,6 +1,6 @@
 {
   "name": "@mochi.js/cli",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "The mochi command — browsers install, capture, harness, work. The CLI surface for mochi.",
   "license": "MIT",
   "type": "module",
