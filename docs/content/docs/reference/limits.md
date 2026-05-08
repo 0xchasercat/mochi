@@ -279,10 +279,10 @@ environment / network policy until the flag lands.
 
 ### Worker context injection has a smaller stealth ceiling than main-world
 
-**Status:** known limit (architectural — JS-layer ceiling)
-**Root cause:** `Page.addScriptToEvaluateOnNewDocument` doesn't apply to worker targets — Chromium has no equivalent "run before any script" hook for workers. The best mochi can do is `Runtime.evaluate` against the paused worker target on `Target.attachedToTarget`. That evaluate runs *just after* the worker's V8 isolate is created but uses the standard Runtime domain rather than a pre-script-runner hook. A determined fingerprint script in a Worker can race our injection or detect the slightly-different invocation timing.
+**Status:** known limit (architectural — JS-layer ceiling). Race window tightened in v0.2 (task 0254) but the underlying ceiling remains.
+**Root cause:** `Page.addScriptToEvaluateOnNewDocument` doesn't apply to worker targets — Chromium has no equivalent "run before any script" hook for workers. The best mochi can do is bind to the worker's V8 isolate after creation but before user code runs. A determined fingerprint script in a Worker can still race our injection or detect the slightly-different invocation timing.
 **Affected probes:** any probe that runs first-thing inside a `Worker` / `SharedWorker` / `ServiceWorker` / `AudioWorklet` and compares results to main-thread results.
-**Mitigation:** PLAN.md §8.4 + PLAN.md §8.2 — we use `Target.setAutoAttach({waitForDebuggerOnStart:true})` so the worker is paused at creation; we evaluate the payload against it; then we resume via `Runtime.runIfWaitingForDebugger`. No `Runtime.enable` ever sent.
+**Mitigation:** PLAN.md §8.4 + PLAN.md §8.2. We use `Target.setAutoAttach({waitForDebuggerOnStart:true})` so the worker is paused at creation. v0.2 (task 0254 — patchright `crServiceWorkerPatch.ts:32-43`, `crPagePatch.ts:404-417`) tightens the inject window: pre-`runIfWaitingForDebugger` we send `Runtime.evaluate("globalThis", { serialization: "idOnly" })`, parse `objectId.split(".")[1]` for the worker's executionContextId, then deliver the payload via `Runtime.callFunctionOn({ functionDeclaration, executionContextId, returnByValue: true })`. Compared to v0.1.x's bare `Runtime.evaluate({ expression: payload.code })`, the bound-context call is harder to race because the contextId is captured in a single round-trip and reused — but it doesn't close the gap to a pre-script hook. No `Runtime.enable` ever sent.
 **User workaround:** none at JS layer. Profiles can be marked "worker-stealth-sensitive" in v2 so that user code can opt out of probes that use workers.
 **Tracking:** Chromium upstream. Likely never lands as a public CDP method (security-sensitive).
 
