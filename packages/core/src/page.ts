@@ -38,7 +38,6 @@ import type {
   PierceDomNode,
   RemoteObject,
 } from "./cdp/types";
-import { NotImplementedError } from "./errors";
 import { ElementHandle } from "./page/element-handle";
 import { findPiercingMatches } from "./page/piercing";
 import { parseSelector } from "./page/selector";
@@ -154,6 +153,49 @@ export interface HumanScrollOptions {
   to: string | { x: number; y: number };
   /** Total time budget (ms). Default 500. */
   duration?: number;
+}
+
+/**
+ * Options for `Page.screenshot`. Maps directly onto CDP `Page.captureScreenshot`
+ * params with a thin compatibility layer for `fullPage` (which CDP doesn't
+ * model directly — we synthesize it from `Page.getLayoutMetrics` +
+ * `Emulation.setDeviceMetricsOverride`).
+ *
+ * @see PLAN.md §8.2 — `Page.captureScreenshot` is NOT on the forbidden list
+ *      (only `Runtime.enable` and `Page.createIsolatedWorld` are).
+ */
+export interface ScreenshotOptions {
+  /** Image format. Default `"png"`. */
+  format?: "png" | "jpeg" | "webp";
+  /**
+   * Compression quality, 0..100. JPEG/WebP only — silently ignored for PNG by
+   * the CDP layer (we still pass it through; CDP just drops it).
+   */
+  quality?: number;
+  /**
+   * Capture beyond the visible viewport — i.e. the full document height.
+   * Implementation: `Page.getLayoutMetrics` for content size, override the
+   * device metrics to that size via `Emulation.setDeviceMetricsOverride`,
+   * capture, then `Emulation.clearDeviceMetricsOverride` to restore (always,
+   * even on capture failure).
+   */
+  fullPage?: boolean;
+  /**
+   * Capture only a rectangular region (CSS pixels). Mutually exclusive with
+   * `fullPage` — if both are set, `clip` wins (CDP semantics).
+   */
+  clip?: { x: number; y: number; width: number; height: number; scale?: number };
+  /**
+   * Render the page background as transparent (PNG only). For JPEG this is a
+   * no-op since JPEG has no alpha channel.
+   */
+  omitBackground?: boolean;
+  /**
+   * Output encoding. `"binary"` (default) returns `Uint8Array`; `"base64"`
+   * returns the raw CDP base64 string. The discriminated overloads of
+   * `Page.screenshot` narrow the return type accordingly.
+   */
+  encoding?: "binary" | "base64";
 }
 
 export class Page {
@@ -875,8 +917,95 @@ export class Page {
     return handles;
   }
 
-  screenshot(_opts?: unknown): Promise<Uint8Array> {
-    return Promise.reject(new NotImplementedError("page.screenshot"));
+  /**
+   * Capture a screenshot of the page via CDP `Page.captureScreenshot`.
+   *
+   * Default: PNG-encoded `Uint8Array` of the visible viewport. Pass
+   * `fullPage: true` to capture beyond the viewport (we round-trip through
+   * `Emulation.setDeviceMetricsOverride` and restore via
+   * `Emulation.clearDeviceMetricsOverride` afterwards — guaranteed even on
+   * capture failure). Pass `encoding: "base64"` to skip the base64 → bytes
+   * decode and get the raw CDP string back.
+   *
+   * Out of scope at v0.2 (tracked separately):
+   *   - Element-bounded screenshot (`{ element: handle }`) — needs
+   *     `DOM.getBoxModel` integration.
+   *   - PDF generation — `Page.printToPDF` lives in its own brief.
+   *
+   * @see PLAN.md §8.2 — `Page.captureScreenshot` is permitted; only
+   *      `Runtime.enable` and `Page.createIsolatedWorld` are forbidden.
+   */
+  screenshot(opts: ScreenshotOptions & { encoding: "base64" }): Promise<string>;
+  screenshot(opts?: ScreenshotOptions & { encoding?: "binary" }): Promise<Uint8Array>;
+  async screenshot(opts: ScreenshotOptions = {}): Promise<Uint8Array | string> {
+    this.assertOpen();
+    const format = opts.format ?? "png";
+    // CDP `Page.captureScreenshot` params. We pass `captureBeyondViewport`
+    // for fullPage *in addition to* the device-metrics override below — the
+    // override changes the layout viewport for the capture, while
+    // `captureBeyondViewport` lets the renderer paint past the visible area
+    // for the duration of the capture (belt-and-braces; either alone has
+    // edge cases on long pages).
+    const params: Record<string, unknown> = { format };
+    if (opts.quality !== undefined && (format === "jpeg" || format === "webp")) {
+      params.quality = opts.quality;
+    }
+    if (opts.clip !== undefined) {
+      // CDP requires `scale` — default 1 if caller didn't set it.
+      params.clip = { ...opts.clip, scale: opts.clip.scale ?? 1 };
+    }
+    if (opts.omitBackground === true) {
+      params.omitBackground = true;
+    }
+
+    // fullPage round-trip. We capture the layout metrics first, then size
+    // the device viewport up to the content size, capture, then clear the
+    // override. The `try/finally` is load-bearing — if `captureScreenshot`
+    // throws (e.g. target detached mid-capture) we still need to restore
+    // the viewport so subsequent calls don't see a frozen oversized layout.
+    let restoreOverride = false;
+    if (opts.fullPage === true && opts.clip === undefined) {
+      const metrics = await this.send<{
+        contentSize: { width: number; height: number };
+        layoutViewport: { clientWidth: number; clientHeight: number };
+      }>("Page.getLayoutMetrics");
+      const width = Math.ceil(metrics.contentSize.width);
+      const height = Math.ceil(metrics.contentSize.height);
+      await this.send("Emulation.setDeviceMetricsOverride", {
+        width,
+        height,
+        deviceScaleFactor: 0,
+        mobile: false,
+      });
+      restoreOverride = true;
+      params.captureBeyondViewport = true;
+    }
+
+    let result: { data: string };
+    try {
+      result = await this.send<{ data: string }>("Page.captureScreenshot", params);
+    } finally {
+      if (restoreOverride) {
+        // Always clear, even if capture threw. Best-effort: if the target is
+        // gone the clear will fail and we swallow it — the page is unusable
+        // anyway and the override dies with the target.
+        try {
+          await this.send("Emulation.clearDeviceMetricsOverride");
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    const encoding = opts.encoding ?? "binary";
+    if (encoding === "base64") {
+      return result.data;
+    }
+    // Decode base64 → bytes via Bun-native `Buffer.from`. The Buffer is a
+    // Uint8Array subclass; we slice into a plain Uint8Array view backed by
+    // the same memory so the public type is the standard one.
+    const buf = Buffer.from(result.data, "base64");
+    return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
   }
 
   // ---- internals --------------------------------------------------------------

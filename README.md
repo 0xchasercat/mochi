@@ -80,7 +80,7 @@ Direct port from [`docs/limits.md`](docs/limits.md) — the architectural-honest
 | Trace recording / replay (`mochi record` → `humanClick(sel, { trace })`) | deferred | API surface forward-compatible; recorder lands in v1.x. |
 | JA4/JA3/H2-coherent `session.fetch` via `wreq` | works | Prebuilt cdylibs for darwin-{arm64,x64}, linux-{x64,arm64}, win32-x64. |
 | `session.fetch` on FreeBSD / Alpine musl / Windows arm64 | partial | No prebuilt; falls back to local `cargo build`. |
-| `Page.screenshot` | not implemented | Phase 0.x follow-up. |
+| `Page.screenshot` | works | PNG/JPEG/WebP via CDP `Page.captureScreenshot`; `fullPage`, `clip`, `omitBackground`, `quality`, `encoding` opts. Element-bounded capture (`{ element: handle }`) is a separate brief. |
 | Proxy auth (HTTP/HTTPS/SOCKS5) | works | Inline URL or `ProxyConfig` shape; CDP `Fetch.authRequired`, no extension. |
 | Proxy-PAC scripts | not yet | Use system network policy until the flag lands. |
 | Turnstile auto-click | not yet | Tracked in task 0220. |

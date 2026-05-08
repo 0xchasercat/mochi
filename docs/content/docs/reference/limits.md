@@ -495,11 +495,17 @@ default synth fails real classifiers; this entry is for awareness.
 **Mitigation:** v0.1 silently uses `"load"` semantics when `"networkidle"` is requested. `"load"` and `"domcontentloaded"` work as expected.
 **Tracking:** to be addressed in a follow-up task once Network domain enablement is properly scoped per-frame.
 
-### `Session.fetch`, `Page.screenshot`
+### `Session.fetch`
 
 **Status:** placeholder — `NotImplementedError`
-**Root cause:** out of scope for phase 0.1 per `tasks/0011-cdp-pipe-transport.md`. Phase 0.6 wires `Session.fetch`; `screenshot` lands in a follow-up.
+**Root cause:** out of scope for phase 0.1 per `tasks/0011-cdp-pipe-transport.md`. Phase 0.6 wires `Session.fetch`.
 **Mitigation:** none needed; the error message names the API and the phase.
+
+### `Page.screenshot({ element })` element-bounded capture
+
+**Status:** not implemented (full-page + clip + viewport modes work)
+**Root cause:** element-bounded capture requires `DOM.getBoxModel` to derive the clip rect from an `ElementHandle` — tracked separately.
+**Mitigation:** call `Page.screenshot({ clip: { x, y, width, height } })` with manually-derived coordinates, or use `fullPage: true` and crop client-side.
 
 > Phase 0.8 graduated `Page.humanClick` / `Page.humanType` / `Page.humanScroll`
 > from placeholder to real implementations. See the "v0.8" section above for
