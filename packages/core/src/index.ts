@@ -23,6 +23,7 @@ export {
 export { NotImplementedError } from "./errors";
 // Public surface — exported here so users only need `@mochi.js/core`.
 export {
+  type ChallengeLaunchOptions,
   type LaunchOptions,
   launch,
   type Mochi,

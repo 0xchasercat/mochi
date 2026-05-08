@@ -28,6 +28,38 @@ export interface ProxyConfig {
 }
 
 /**
+ * Per-challenge convenience options surfaced via `LaunchOptions.challenges`.
+ *
+ * v0.2 implements `turnstile.autoClick` only. Other entries (hCaptcha,
+ * reCAPTCHA, etc.) are reserved for v0.3+ — see `@mochi.js/challenges`
+ * README.
+ *
+ * When `turnstile.autoClick: true`, the `Session` calls
+ * `installTurnstileAutoClick(page)` on every page returned by `newPage`.
+ * The handle is disposed automatically on page close.
+ *
+ * The full `TurnstileOptions` (timeout / humanize / onSolved / onEscalation)
+ * are passed through unchanged. See
+ * `@mochi.js/challenges#TurnstileOptions`.
+ */
+export interface ChallengeLaunchOptions {
+  turnstile?: {
+    /** When `true`, auto-install Turnstile detection + click on every newPage. */
+    autoClick?: boolean;
+    /** Override the per-widget post-click timeout (ms). Default 30_000. */
+    timeout?: number;
+    /** When `false`, use a fast non-humanized click path. Default `true`. */
+    humanize?: boolean;
+    /** Fired when a widget reports a token. */
+    onSolved?: (token: string) => void;
+    /** Fired on image-challenge / managed-variant / timeout. */
+    onEscalation?: (reason: "image-challenge" | "managed" | "timeout") => void;
+    /** Override the DOM-poll cadence (ms). Default 500. */
+    pollIntervalMs?: number;
+  };
+}
+
+/**
  * Options accepted by `mochi.launch`.
  *
  * v0.2 behavior of fields:
@@ -75,6 +107,19 @@ export interface LaunchOptions {
    * Chromium); task 0040.
    */
   bypassInject?: boolean;
+  /**
+   * Convenience layer toggles for common bot-defense widgets. When
+   * `challenges.turnstile.autoClick` is `true`, every page returned by
+   * `Session.newPage` has `installTurnstileAutoClick(page, opts)` wired
+   * automatically — the Bezier+Fitts behavioral synth handles the click,
+   * an optional `onSolved` callback fires when the response token appears,
+   * and `onEscalation` fires on image-challenge / managed-variant / timeout.
+   *
+   * See `@mochi.js/challenges` for the full surface and the limits page
+   * for the v0.2 scope (visible-checkbox variants only — image/audio
+   * solving is v0.3+).
+   */
+  challenges?: ChallengeLaunchOptions;
 }
 
 /**
@@ -112,6 +157,7 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
     // `@mochi.js/net` (wreq) accepts the full `user:pass@host` URL form.
     ...(normalized !== undefined ? { netProxy: normalized.netProxy } : {}),
     ...(normalized?.auth !== undefined ? { proxyAuth: normalized.auth } : {}),
+    ...(opts.challenges !== undefined ? { challenges: opts.challenges } : {}),
   });
   return session;
 }

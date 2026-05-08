@@ -352,6 +352,55 @@ export class Page {
     return result.cookies;
   }
 
+  /**
+   * Install an additional main-world script that runs on every new document
+   * via `Page.addScriptToEvaluateOnNewDocument({ runImmediately: true,
+   * worldName: "" })`. Returns the CDP identifier so callers can later
+   * remove it via {@link removeInitScript}.
+   *
+   * `worldName: ""` is critical — any non-empty string creates an isolated
+   * world (PLAN.md §8.4) which is detectable. `runImmediately: true` ensures
+   * the script also runs against the current document if one already exists,
+   * not just on the next navigation.
+   *
+   * Use cases:
+   *   - The `@mochi.js/challenges` Turnstile detector (mounts a
+   *     `MutationObserver` + Symbol-keyed reader on `document` in the page's
+   *     main world, before any page script runs).
+   *   - Any future per-page convenience layer that needs main-world
+   *     mutation observation.
+   *
+   * The session-level inject payload is installed separately on every
+   * `newPage()` and is NOT routed through this method — convenience-layer
+   * scripts compose on top of it.
+   */
+  async addInitScript(source: string): Promise<string> {
+    this.assertOpen();
+    const result = await this.send<{ identifier: string }>(
+      "Page.addScriptToEvaluateOnNewDocument",
+      {
+        source,
+        runImmediately: true,
+        worldName: "",
+      },
+    );
+    return result.identifier;
+  }
+
+  /**
+   * Remove a previously-installed init script by its identifier (returned
+   * from {@link addInitScript}). Best-effort — silently ignores failures
+   * (e.g. the target was already closed).
+   */
+  async removeInitScript(identifier: string): Promise<void> {
+    if (this.closed) return;
+    try {
+      await this.send("Page.removeScriptToEvaluateOnNewDocument", { identifier });
+    } catch {
+      // Ignore — target might already be gone.
+    }
+  }
+
   /** Tear down the page. Does not close the session's other pages. */
   async close(): Promise<void> {
     if (this.closed) return;

@@ -38,6 +38,21 @@ mochi solves three things at once:
 
 It does not patch Chromium. It does not depend on proprietary infrastructure. It works against stock Chromium-for-Testing on a developer's laptop. When the JS-only ceiling is binding (Runtime.enable detection, FPU/JIT divergence in cross-engine spoofing), the docs say so plainly.
 
+## Convenience layers
+
+For common bot-defense widgets, mochi ships opt-in convenience layers under `@mochi.js/challenges`. These are thin wrappers around the existing inject + behavioral pipelines — no new fingerprint surface.
+
+```ts
+const session = await mochi.launch({
+  profile: "...",
+  seed: "...",
+  challenges: { turnstile: { autoClick: true } },
+});
+// Every page from this session auto-clicks visible Turnstile checkboxes.
+```
+
+v0.2 covers: Cloudflare Turnstile (visible-checkbox variants only). Image/audio/managed escalations fire an `onEscalation` callback rather than clicking blindly. See [`packages/challenges/README.md`](packages/challenges/README.md) and [`docs/limits.md`](docs/limits.md).
+
 ## Why Bun-only?
 
 - `Bun:FFI` lets us bridge to Rust (`wreq`) without N-API overhead.

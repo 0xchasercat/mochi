@@ -23,6 +23,7 @@ export default {
         "repo",
         "docs",
         "schemas",
+        "challenges",
       ],
     ],
     "scope-empty": [2, "never"],

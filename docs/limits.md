@@ -26,6 +26,15 @@ This file will populate as the framework lands. Entries follow this template:
 
 ## Live entries
 
+### Turnstile auto-click — visible-checkbox variants only
+
+**Status:** partial coverage
+**Root cause:** v0.2 ships only the visible-checkbox auto-click flow. Cloudflare Turnstile escalates a fraction of visitors to image / audio / managed-mode challenges that require either a 3rd-party solver (2captcha / anti-captcha) or fail the bot heuristics outright. The convenience layer in `@mochi.js/challenges` deliberately does NOT click randomly into image-challenge iframes; it surfaces escalations via `onEscalation(reason)` (`"image-challenge" | "managed" | "timeout"`) and bails.
+**Affected probes:** Cloudflare Turnstile in environments where the bot heuristics escalate beyond the first checkbox.
+**Mitigation:** Pass `challenges.turnstile.autoClick: true` to `mochi.launch()` for the ~80% of deployments that show a visible checkbox — the click goes through the existing behavioral synth (Bezier path + Fitts's-Law dwell from `@mochi.js/behavioral`). Hook `onEscalation` to fire your own solver in the remaining cases.
+**User workaround:** Wire a 3rd-party solver in `onEscalation` (v0.3 will ship a first-party hook surface). For the invisible / managed variants the auto-click layer is a no-op — those resolve on page load via Turnstile's own bot heuristics, which is a function of mochi's stealth posture (handled by the inject + behavioral pipelines).
+**Tracking:** task 0220 for the auto-click; image / audio / managed solving deferred to v0.3.
+
 ### CfT download integrity (no upstream-published SHA256)
 
 **Status:** partial coverage

@@ -1,0 +1,45 @@
+{
+  "name": "@mochi.js/challenges",
+  "version": "0.1.0",
+  "description": "Convenience layer for Cloudflare Turnstile auto-click — opt-in, behavioral-synth-backed, no new fingerprint surface.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "bun": ">=1.1"
+  },
+  "homepage": "https://github.com/0xchasercat/mochi",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0xchasercat/mochi.git",
+    "directory": "packages/challenges"
+  },
+  "keywords": [
+    "mochi",
+    "turnstile",
+    "cloudflare",
+    "challenge",
+    "stealth"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test src/",
+    "lint": "biome check src/",
+    "build": "echo 'no build step yet'"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
