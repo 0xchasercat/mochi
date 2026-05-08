@@ -13,7 +13,14 @@ concurrency:
 jobs:
   ts:
     name: TS — typecheck + lint + test
-    runs-on: ubuntu-latest
+    # Self-hosted bare-metal runner (chaser-runner — 9950X3D / NVMe gen5 /
+    # 128 GB DDR5). Keeps PR-fast tight; the matrix-OS prebuilds in
+    # build-prebuilds.yml stay on GitHub-hosted because the chaser-runner is
+    # Linux/x64 only and prebuilds need mac + win + arm.
+    # NOTE: until this repo goes public, fork-PR risk doesn't apply. When
+    # we open-source, gate self-hosted with `if: github.event.pull_request.head.repo.full_name == github.repository`
+    # (or split into a "trusted" workflow that only fires post-approval).
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -186,7 +193,10 @@ jobs:
 
   rust:
     name: Rust — build cdylib + test
-    runs-on: ubuntu-latest
+    # Same chaser-runner. Cargo + Rust toolchain caches persist across runs
+    # on the self-hosted runner, so a warm cdylib build is sub-second vs.
+    # ~30s on ubuntu-latest. dtolnay/rust-toolchain@stable is idempotent.
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

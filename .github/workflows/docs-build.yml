@@ -26,7 +26,9 @@ concurrency:
 jobs:
   build:
     name: Astro build
-    runs-on: ubuntu-latest
+    # Self-hosted (chaser-runner). Astro build is pure CPU + Bun — no
+    # special hardware needed; bare-metal just makes it instant.
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2

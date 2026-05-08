@@ -31,7 +31,12 @@ permissions:
 jobs:
   release:
     name: Version PR or publish
-    runs-on: ubuntu-latest
+    # Self-hosted (chaser-runner). Linux/x64 — same gate workload as
+    # pr-fast.yml, plus the Trusted-Publishing OIDC exchange to npm.
+    # OIDC works on self-hosted runners identically (id-token: write
+    # populates ACTIONS_ID_TOKEN_REQUEST_URL/TOKEN regardless of runner
+    # provider). NPM provenance signing is sigstore — also runner-agnostic.
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
