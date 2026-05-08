@@ -177,6 +177,12 @@ bun harness:smoke --affected   # if you touched inject/consistency/profiles
 
 `bun work submit <task-id>` runs these in order and refuses to push if any fail.
 
+**Backstop**: a `pre-push` git hook (`.githooks/pre-push`) runs the same gate sequence on EVERY `git push` regardless of how it was invoked — `bun work submit`, `git push -u origin <branch>` followed by `gh pr create`, or anything else. Activated automatically by `bun install` (the `prepare` script sets `core.hooksPath = .githooks`). If the hook is missing on your worktree, run `bun install` once at the repo root.
+
+The pre-push gate exists because broken commits had been making it to PR-fast and only failing in CI 5–10 min later. The hook closes the gap: typecheck + lint + test + test:contract all run locally before the branch leaves the machine. Same exit code, same hint text as `bun work submit` would emit. Cold-cache wall-time ≈ 30s; warm ≈ 10s.
+
+**Bypass** (`git push --no-verify`) is reserved for documented emergencies (release automation, hot-fixes where CI is the gate). Never bypass to ship broken code — CI rejects it anyway.
+
 You may also run:
 ```sh
 bun harness:diff <profile>  # local-fixture manifest diff vs the profile baseline
