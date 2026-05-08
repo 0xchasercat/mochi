@@ -10,7 +10,17 @@ authors = ["mochi contributors"]
 repository = "https://github.com/0xchasercat/mochi"
 
 [workspace.dependencies]
-# wreq + tokio land in phase 0.6 (PLAN.md §10).
+# Phase 0.6 — net FFI deps (PLAN.md §10).
+# wreq is Apache-2.0 (verified against crates.io 2026-05). The companion
+# wreq-util crate that ships pre-built `Emulation::Chrome*` profiles is
+# GPL-3.0/LGPL-3.0 — copyleft, incompatible with I-2 ("fully open-source,
+# MIT-licensed"). We therefore use `wreq` only and author a minimal Chrome-
+# style `EmulationProvider` in-tree (Apache-2.0, our authorship). See
+# packages/net-rs/src/ffi/preset.rs and docs/limits.md.
+wreq = { version = "5.3.0", default-features = false, features = ["json", "socks"] }
+tokio = { version = "1.42", default-features = false, features = ["rt", "macros", "sync", "time"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 [profile.release]
 lto = true

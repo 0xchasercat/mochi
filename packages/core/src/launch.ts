@@ -100,6 +100,9 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
     seed: opts.seed,
     ...(opts.timeout !== undefined ? { defaultTimeoutMs: opts.timeout } : {}),
     ...(opts.bypassInject === true ? { bypassInject: true } : {}),
+    // Forward the same proxy used for the browser to the net FFI so
+    // out-of-band Session.fetch traffic shares the apparent egress.
+    ...(proxyArg !== undefined ? { netProxy: proxyArg } : {}),
   });
   return session;
 }

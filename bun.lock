@@ -43,6 +43,7 @@
         "@mochi.js/behavioral": "workspace:*",
         "@mochi.js/consistency": "workspace:*",
         "@mochi.js/inject": "workspace:*",
+        "@mochi.js/net": "workspace:*",
       },
     },
     "packages/harness": {
@@ -59,6 +60,9 @@
     "packages/net": {
       "name": "@mochi.js/net",
       "version": "0.0.1",
+      "dependencies": {
+        "@mochi.js/net-rs": "workspace:*",
+      },
     },
     "packages/net-rs": {
       "name": "@mochi.js/net-rs",

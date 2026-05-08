@@ -14,12 +14,34 @@
 
 import type { MatrixV1 } from "@mochi.js/consistency";
 import { buildPayload, type PayloadResult } from "@mochi.js/inject";
+import {
+  openCtx as defaultOpenCtx,
+  requestOnCtx as defaultRequestOnCtx,
+  type NetCtx,
+  type NetFetchInit,
+} from "@mochi.js/net";
 import { MessageRouter } from "./cdp/router";
 import type { AttachedToTargetEvent } from "./cdp/types";
-import { NotImplementedError } from "./errors";
 import { Page } from "./page";
 import type { ChromiumProcess } from "./proc";
 import { VERSION } from "./version";
+
+/**
+ * Injection seam for the network FFI. Session uses this internally so tests
+ * can stub the FFI layer without spinning up the cdylib. Production code
+ * defaults to `@mochi.js/net`.
+ *
+ * @internal
+ */
+export interface NetAdapter {
+  openCtx(spec: { preset: string; proxy?: string }): NetCtx;
+  requestOnCtx(ctx: NetCtx, url: string, init: NetFetchInit): Response;
+}
+
+const defaultNetAdapter: NetAdapter = {
+  openCtx: defaultOpenCtx,
+  requestOnCtx: defaultRequestOnCtx,
+};
 
 export interface SessionInit {
   proc: ChromiumProcess;
@@ -34,6 +56,21 @@ export interface SessionInit {
    * similar baseline-collection flows. PLAN.md §12.1, task 0040.
    */
   bypassInject?: boolean;
+  /**
+   * Optional outbound proxy URL forwarded to the network FFI for
+   * `Session.fetch` requests. Out-of-band requests honour this independently
+   * of the browser's `--proxy-server` flag (which already sees the proxy via
+   * the CDP launch path).
+   */
+  netProxy?: string;
+  /**
+   * Network adapter override — tests inject a stub here to exercise the
+   * `Session.fetch` wiring without loading the cdylib. Production code does
+   * not pass this; the default uses `@mochi.js/net`.
+   *
+   * @internal
+   */
+  netAdapter?: NetAdapter;
 }
 
 /** Public Cookie shape (re-exported from page.ts). */
@@ -61,6 +98,25 @@ export class Session {
   private readonly _pages: Page[] = [];
   private closed = false;
   /**
+   * Proxy URL forwarded to `@mochi.js/net` for out-of-band fetches. Mirrors
+   * the launch-time `proxy` option but is held here because the net Ctx is
+   * created lazily on first `fetch`.
+   */
+  private readonly netProxy: string | undefined;
+  /**
+   * Lazily-opened Net Ctx for `Session.fetch`. One per Session — wreq's
+   * client pool inside the Rust crate handles connection reuse for repeated
+   * calls. Closed on `Session.close`.
+   */
+  private netCtx: NetCtx | undefined;
+  /**
+   * Pluggable seam for the network FFI. Defaults to `@mochi.js/net`.
+   * Tests inject a stub here.
+   *
+   * @internal
+   */
+  private readonly netAdapter: NetAdapter;
+  /**
    * The compiled inject payload for this session. Built once at construction
    * from the resolved {@link MatrixV1}; reused across every new page and
    * every auto-attached worker target. PLAN.md §5.3 / §8.4.
@@ -86,6 +142,8 @@ export class Session {
     this.profile = init.matrix;
     this.seed = init.seed;
     this.bypassInject = init.bypassInject === true;
+    this.netProxy = init.netProxy;
+    this.netAdapter = init.netAdapter ?? defaultNetAdapter;
     // Skip payload compilation entirely when bypassed — capture flows must
     // not pay the build cost AND must not see the matrix-derived bytes.
     this._payload = this.bypassInject ? null : buildPayload(init.matrix);
@@ -200,9 +258,82 @@ export class Session {
     return { cookies: c, localStorage: {}, sessionStorage: {} };
   }
 
-  /** Out-of-band fetch — phase 0.6 (`@mochi.js/net`). */
-  fetch(_url: string, _init?: RequestInit): Promise<Response> {
-    return Promise.reject(new NotImplementedError("session.fetch"));
+  /**
+   * Out-of-band fetch — issues a request via the Rust `wreq` cdylib so the
+   * wire fingerprint matches the session's profile preset. The browser's
+   * own navigation/XHR/fetch are unaffected (they use Chromium's native
+   * TLS, which already matches a Chrome profile). Returns a standard Web
+   * `Response`. PLAN.md §5.4 / §10.
+   *
+   * Lazy: the per-Session `NetCtx` (Tokio runtime + wreq Client) is created
+   * on the first call and reused for subsequent calls. Closed on
+   * {@link close}.
+   */
+  async fetch(url: string, init?: RequestInit): Promise<Response> {
+    this.assertOpen();
+    const ctx = this.ensureNetCtx();
+    const headers = this.headersToRecord(init?.headers);
+    const body = this.bodyToString(init?.body);
+    return this.netAdapter.requestOnCtx(ctx, url, {
+      method: init?.method ?? "GET",
+      headers,
+      body,
+      preset: this.profile.wreqPreset,
+      ...(this.netProxy !== undefined ? { proxy: this.netProxy } : {}),
+    });
+  }
+
+  /** Lazy-create the per-Session Net Ctx (one Tokio runtime + wreq client). */
+  private ensureNetCtx(): NetCtx {
+    if (this.netCtx === undefined) {
+      this.netCtx = this.netAdapter.openCtx({
+        preset: this.profile.wreqPreset,
+        ...(this.netProxy !== undefined ? { proxy: this.netProxy } : {}),
+      });
+    }
+    return this.netCtx;
+  }
+
+  /** Coerce a Web `Headers` / record / array-pair shape into a plain record. */
+  private headersToRecord(h: HeadersInit | undefined): Record<string, string> {
+    if (h === undefined) return {};
+    if (h instanceof Headers) {
+      const out: Record<string, string> = {};
+      h.forEach((v, k) => {
+        out[k] = v;
+      });
+      return out;
+    }
+    if (Array.isArray(h)) {
+      const out: Record<string, string> = {};
+      for (const pair of h) {
+        const k = pair[0];
+        const v = pair[1];
+        if (typeof k === "string" && typeof v === "string") out[k] = v;
+      }
+      return out;
+    }
+    return { ...(h as Record<string, string>) };
+  }
+
+  /**
+   * Coerce a `RequestInit.body` to a UTF-8 string (the only shape the v0.6
+   * FFI surface accepts). `null`/`undefined` map to `null`. ArrayBuffer-style
+   * inputs are decoded as UTF-8; binary bodies are deferred per task brief.
+   */
+  private bodyToString(b: BodyInit | null | undefined): string | null {
+    if (b === undefined || b === null) return null;
+    if (typeof b === "string") return b;
+    if (b instanceof ArrayBuffer) return new TextDecoder().decode(b);
+    if (ArrayBuffer.isView(b)) {
+      // Includes Uint8Array, Buffer, etc.
+      return new TextDecoder().decode(b as ArrayBufferView);
+    }
+    if (b instanceof URLSearchParams) return b.toString();
+    // Blob / FormData / ReadableStream — out of v0.6 scope.
+    throw new Error(
+      "[mochi] Session.fetch: only string, ArrayBuffer/View, and URLSearchParams bodies are supported in v0.6",
+    );
   }
 
   /**
@@ -220,6 +351,17 @@ export class Session {
       } catch {
         // ignore — best-effort
       }
+    }
+    // Tear down the per-Session Net Ctx if one was opened. `close()` is
+    // idempotent on the Net Ctx as well; calling on never-opened sessions
+    // is a no-op since `netCtx` stays undefined.
+    if (this.netCtx !== undefined) {
+      try {
+        this.netCtx.close();
+      } catch (err) {
+        console.warn("[mochi] net ctx close failed:", err);
+      }
+      this.netCtx = undefined;
     }
     await this.router.close();
     await this.proc.close();

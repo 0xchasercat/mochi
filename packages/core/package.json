@@ -51,7 +51,8 @@
   "dependencies": {
     "@mochi.js/behavioral": "workspace:*",
     "@mochi.js/consistency": "workspace:*",
-    "@mochi.js/inject": "workspace:*"
+    "@mochi.js/inject": "workspace:*",
+    "@mochi.js/net": "workspace:*"
   },
   "publishConfig": {
     "access": "public"
