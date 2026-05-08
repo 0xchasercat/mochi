@@ -43,5 +43,8 @@ export {
   type WaitState,
   type WaitUntil,
 } from "./page";
+// Proxy URL parsing — exported so tests + downstream tools can normalize
+// proxy strings without going through `launch()`.
+export { type ParsedProxy, parseProxyUrl } from "./proxy-auth";
 export { Session, type SessionInit, type StorageSnapshot } from "./session";
 export { VERSION } from "./version";

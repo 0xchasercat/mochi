@@ -13,6 +13,7 @@
 import { deriveMatrix, type ProfileV1 } from "@mochi.js/consistency";
 import { resolveBinary } from "./binary";
 import { spawnChromium } from "./proc";
+import { parseProxyUrl } from "./proxy-auth";
 import { Session } from "./session";
 import { VERSION } from "./version";
 
@@ -35,9 +36,13 @@ export interface ProxyConfig {
  *     `Session.profile` but **not yet injected** into the page (phase 0.3).
  *   - `binary`: explicit override. Highest-priority resolution path.
  *   - `headless`: passes `--headless=new` to Chromium.
- *   - `proxy`: passes `--proxy-server=<value>` to Chromium. ProxyConfig auth
- *     is currently ignored (Chromium needs proxy-auth-extension). Document
- *     in docs/limits.md when we land it.
+ *   - `proxy`: passes `--proxy-server=<server>` to Chromium with credentials
+ *     stripped (Chromium rejects inline auth on that flag). When credentials
+ *     are present (either in the URL form `http://user:pass@host:port` or
+ *     via `ProxyConfig.username`/`password`) the Session installs a CDP
+ *     `Fetch.authRequired` handler so HTTP / HTTPS / SOCKS5 / SOCKS4 proxy
+ *     auth challenges are answered transparently. See
+ *     `packages/core/src/proxy-auth.ts` for the invariant rationale.
  *   - `args`: appended after the default flag set.
  *   - `out.traceDir`: not yet honored at v0.1.
  *   - `timeout`: per-CDP-request default; defaults to 30000ms.
@@ -78,12 +83,14 @@ export interface LaunchOptions {
  */
 export async function launch(opts: LaunchOptions): Promise<Session> {
   const binary = await resolveBinary(opts.binary);
-  const proxyArg = normalizeProxy(opts.proxy);
+  const normalized = normalizeProxy(opts.proxy);
   const proc = await spawnChromium({
     binary,
     extraArgs: opts.args,
     headless: opts.headless ?? false,
-    ...(proxyArg !== undefined ? { proxy: proxyArg } : {}),
+    // Chromium rejects inline auth on `--proxy-server`; pass the
+    // auth-stripped server URL.
+    ...(normalized !== undefined ? { proxy: normalized.server } : {}),
   });
 
   // Resolve the `MatrixV1` for this session via the consistency engine.
@@ -100,9 +107,11 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
     seed: opts.seed,
     ...(opts.timeout !== undefined ? { defaultTimeoutMs: opts.timeout } : {}),
     ...(opts.bypassInject === true ? { bypassInject: true } : {}),
-    // Forward the same proxy used for the browser to the net FFI so
+    // Forward the same proxy (with auth, if any) to the net FFI so
     // out-of-band Session.fetch traffic shares the apparent egress.
-    ...(proxyArg !== undefined ? { netProxy: proxyArg } : {}),
+    // `@mochi.js/net` (wreq) accepts the full `user:pass@host` URL form.
+    ...(normalized !== undefined ? { netProxy: normalized.netProxy } : {}),
+    ...(normalized?.auth !== undefined ? { proxyAuth: normalized.auth } : {}),
   });
   return session;
 }
@@ -121,10 +130,63 @@ export type Mochi = typeof mochi;
 
 // ---- helpers ----------------------------------------------------------------
 
-function normalizeProxy(p: LaunchOptions["proxy"]): string | undefined {
+/**
+ * Reconcile the two `LaunchOptions.proxy` shapes (URL string and
+ * `ProxyConfig` record) into a single normalized record carrying:
+ *   - `server`: auth-stripped URL safe to feed `--proxy-server=`.
+ *   - `netProxy`: the URL handed to the network FFI. Preserves credentials
+ *     (wreq accepts `user:pass@host` inline) so out-of-band fetches
+ *     authenticate against the same proxy.
+ *   - `auth`: parsed credentials for the CDP auth handler. Undefined when
+ *     no creds were supplied.
+ *
+ * Returns `undefined` only when no proxy was configured at all.
+ */
+function normalizeProxy(p: LaunchOptions["proxy"]):
+  | {
+      server: string;
+      netProxy: string;
+      auth?: { username: string; password: string };
+    }
+  | undefined {
   if (p === undefined) return undefined;
-  if (typeof p === "string") return p;
-  return p.server;
+  if (typeof p === "string") {
+    if (p.length === 0) return undefined;
+    const parsed = parseProxyUrl(p);
+    return {
+      server: parsed.server,
+      netProxy: p,
+      ...(parsed.auth !== undefined ? { auth: parsed.auth } : {}),
+    };
+  }
+  // ProxyConfig form. `server` may itself include credentials; if so we
+  // strip them. Explicit username/password fields take precedence.
+  const parsed = parseProxyUrl(p.server);
+  const auth =
+    p.username !== undefined ? { username: p.username, password: p.password ?? "" } : parsed.auth;
+  // Reconstruct the netProxy URL preserving any explicit auth (wreq path).
+  const netProxy = auth !== undefined ? injectAuth(parsed.server, auth) : parsed.server;
+  return {
+    server: parsed.server,
+    netProxy,
+    ...(auth !== undefined ? { auth } : {}),
+  };
+}
+
+/**
+ * Inject `username:password@` into a server URL, percent-encoding both
+ * components so reserved characters round-trip cleanly through wreq's URL
+ * parser.
+ */
+function injectAuth(server: string, auth: { username: string; password: string }): string {
+  const u = encodeURIComponent(auth.username);
+  const p = encodeURIComponent(auth.password);
+  // server is `<protocol>://<host>:<port>` (per parseProxyUrl).
+  const idx = server.indexOf("://");
+  if (idx < 0) return server;
+  const head = server.slice(0, idx + 3);
+  const tail = server.slice(idx + 3);
+  return `${head}${u}:${p}@${tail}`;
 }
 
 /**

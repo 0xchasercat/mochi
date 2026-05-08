@@ -24,6 +24,7 @@ import { MessageRouter } from "./cdp/router";
 import type { AttachedToTargetEvent } from "./cdp/types";
 import { Page } from "./page";
 import type { ChromiumProcess } from "./proc";
+import { installProxyAuth, type ProxyAuthHandle } from "./proxy-auth";
 import { VERSION } from "./version";
 
 /**
@@ -63,6 +64,16 @@ export interface SessionInit {
    * the CDP launch path).
    */
   netProxy?: string;
+  /**
+   * Optional proxy credentials. When set, the Session attaches a CDP
+   * `Fetch.authRequired` listener so HTTP / SOCKS5 proxy auth challenges
+   * are answered transparently. Undefined when no proxy is configured or
+   * the proxy doesn't require auth — in that case `Fetch.enable` is never
+   * sent and the protocol surface stays untouched.
+   *
+   * @see proxy-auth.ts for the §8.2 invariant rationale.
+   */
+  proxyAuth?: { username: string; password: string };
   /**
    * Network adapter override — tests inject a stub here to exercise the
    * `Session.fetch` wiring without loading the cdylib. Production code does
@@ -136,6 +147,12 @@ export class Session {
    * @internal
    */
   private readonly bypassInject: boolean;
+  /**
+   * Live handle for the CDP `Fetch.authRequired` subscription. Created
+   * lazily on construction when `init.proxyAuth` is set; disposed on
+   * `Session.close`. Undefined when the session has no proxy auth.
+   */
+  private proxyAuthHandle: ProxyAuthHandle | undefined;
 
   constructor(init: SessionInit) {
     this.proc = init.proc;
@@ -153,6 +170,27 @@ export class Session {
     this.router.start();
     this.installAutoAttach();
     this.installCrashGuard();
+    // Wire CDP-driven proxy auth only when credentials were supplied. The
+    // no-auth path skips Fetch.enable entirely so we don't pay the
+    // protocol-attach cost or surface any extra CDP traffic.
+    if (init.proxyAuth !== undefined) {
+      // Fire-and-forget: surface failures via console.warn but don't reject
+      // the constructor — pages still launch and unauthenticated traffic
+      // will simply 407, giving callers a recoverable signal.
+      void installProxyAuth(this.router, init.proxyAuth)
+        .then((handle) => {
+          if (this.closed) {
+            void handle.dispose();
+            return;
+          }
+          this.proxyAuthHandle = handle;
+        })
+        .catch((err: unknown) => {
+          if (!this.closed) {
+            console.warn("[mochi] proxy-auth installation failed:", err);
+          }
+        });
+    }
   }
 
   /**
@@ -369,6 +407,16 @@ export class Session {
         console.warn("[mochi] net ctx close failed:", err);
       }
       this.netCtx = undefined;
+    }
+    // Drop the proxy-auth subscription + Fetch.disable BEFORE we tear down
+    // the router so the disable round-trip can still complete.
+    if (this.proxyAuthHandle !== undefined) {
+      try {
+        await this.proxyAuthHandle.dispose();
+      } catch (err) {
+        console.warn("[mochi] proxy-auth dispose failed:", err);
+      }
+      this.proxyAuthHandle = undefined;
     }
     await this.router.close();
     await this.proc.close();

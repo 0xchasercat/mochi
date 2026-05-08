@@ -156,6 +156,37 @@ cadence. None of these are inside mochi's scope — they're operator
 concerns.
 **Tracking:** none — fundamental.
 
+### Proxy authentication — supported (HTTP basic + SOCKS5 user/pass)
+
+**Status:** covered as of task 0160 (replaces the prior "ProxyConfig.auth ignored" limit)
+**Root cause:** Chromium's `--proxy-server=` flag accepts the address but
+rejects inline credentials; the historical workaround
+(`--load-extension <proxy-auth-extension>`) is itself a fingerprint leak
+(`chrome.runtime` weirdness, observable extension ids). mochi instead
+attaches a CDP `Fetch.authRequired` listener (empty patterns,
+`handleAuthRequests: true`) to provide credentials on demand — no
+extension, no `Runtime.enable`, no `Page.createIsolatedWorld`. PLAN.md
+§8.2 invariants are preserved.
+**Affected probes:** none — this is a feature gap closure, not a stealth limit.
+**Mitigation:** pass credentials either as an inline URL
+(`mochi.launch({ proxy: "http://user:pass@host:port" })`) or via the
+explicit `ProxyConfig` shape (`{ server, username, password }`). Both
+forms work for HTTP, HTTPS, SOCKS5, SOCKS4 proxies. Credentials are
+automatically forwarded to the network FFI as well so out-of-band
+`Session.fetch` traffic shares the same authenticated egress.
+**Known gaps:**
+  - **proxy-PAC scripts** are NOT yet supported — there is no
+    `--proxy-pac-url` plumbing today (separate task, low priority).
+  - **SOCKS5 auth at the SOCKS handshake layer** depends on Chromium
+    surfacing the challenge through `Fetch.authRequired`. Tested in modern
+    Chrome stable; some older / patched builds may fail to fire the event
+    cleanly. If you observe SOCKS5 auth failures in CI but the same
+    creds work over HTTP, fall back to an HTTP proxy as the canonical
+    path.
+**User workaround:** for proxy-PAC, configure the proxy via system
+environment / network policy until the flag lands.
+**Tracking:** future task — proxy-PAC support.
+
 ---
 
 ## v0.5 (validation harness landed) — known limits

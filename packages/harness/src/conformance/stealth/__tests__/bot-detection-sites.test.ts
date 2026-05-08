@@ -185,6 +185,19 @@ describeOrSkip(
               waitUntil: "domcontentloaded",
               timeout: 20_000,
             });
+            // Short-circuit when the goto soft-failed AND we have a registered
+            // expected-failure entry. Otherwise we'd run the 12s sleep + the
+            // 30s evaluate against an empty DOM and stack a worker-injection
+            // timeout on top, blowing past the 90s test budget. Belt-and-
+            // suspenders behind the proxy fix (0160): when the proxy makes
+            // the goto succeed (`navigated: true`) we still run the full
+            // assertion path — the happy path stays intact.
+            if (!goto.navigated && expected !== undefined) {
+              process.stderr.write(
+                `[incolumitas] EXPECTED FAILURE per docs/limits.md (${expected.limitsAnchor}): goto did not settle (${goto.reason ?? "unknown"})\n`,
+              );
+              return;
+            }
             if (!goto.navigated) {
               process.stderr.write(
                 "[incolumitas] goto did not settle; attempting evaluate against partial DOM\n",

@@ -110,6 +110,14 @@ jobs:
           MOCHI_E2E: "1"
           MOCHI_ONLINE: "1"
           MOCHI_EXTRA_ARGS: "--no-sandbox"
+          # Residential proxy forwarded to the harness via MOCHI_PROXY (task
+          # 0160). The harness's `launchSharedSession` consumes it and feeds
+          # `mochi.launch({ proxy })` so the live runs egress from a non-DC
+          # IP — the GH-runner IP gets rate-limited / anti-bot escalated by
+          # bot.incolumitas.com. Empty / missing = unproxied (fork PRs).
+          # IMPORTANT: do NOT echo this value anywhere — GitHub auto-masks
+          # it, but defense-in-depth.
+          MOCHI_PROXY: ${{ secrets.HTTP_PROXY }}
         run: bun run conformance:stealth:online
 
       - name: Create release PR or publish

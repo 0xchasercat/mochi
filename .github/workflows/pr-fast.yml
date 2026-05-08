@@ -134,6 +134,20 @@ jobs:
           MOCHI_EXTRA_ARGS: "--no-sandbox"
         run: bun run conformance:stealth
 
+      # Layer 2 (online) mirrors release.yml so PRs catch IP / proxy /
+      # incolumitas regressions before merge — task 0160. Same env shape +
+      # residential proxy from secrets.HTTP_PROXY. Empty secret is OK
+      # (fork PRs); the harness skips the proxy in that case.
+      - name: Stealth conformance — Layer 2 (online)
+        if: github.event_name == 'pull_request'
+        env:
+          MOCHI_E2E: "1"
+          MOCHI_ONLINE: "1"
+          MOCHI_EXTRA_ARGS: "--no-sandbox"
+          # Residential proxy — see release.yml. NEVER echo this value.
+          MOCHI_PROXY: ${{ secrets.HTTP_PROXY }}
+        run: bun run conformance:stealth:online
+
       - name: Humanize conformance (offline)
         if: github.event_name == 'pull_request'
         shell: bash
