@@ -50,6 +50,7 @@ export {
   type HumanTypeOptions,
   Page,
   type PageInit,
+  type ScreenshotOptions,
   type WaitForOptions,
   type WaitState,
   type WaitUntil,

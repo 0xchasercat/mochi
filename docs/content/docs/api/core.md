@@ -80,6 +80,10 @@ Owns one tab + the per-page CDP target.
 
 - `page.waitFor(opts: WaitForOptions): Promise<void>` — selector, function, or `WaitState` (`"load" | "domcontentloaded" | "networkidle"`).
 
+### Capture
+
+- `page.screenshot(opts?: ScreenshotOptions): Promise<Uint8Array | string>` — CDP `Page.captureScreenshot`. Defaults to PNG bytes (`Uint8Array`) of the visible viewport. Pass `fullPage: true` for a full-document capture (round-trips through `Emulation.setDeviceMetricsOverride` and restores). Pass `encoding: "base64"` for the raw CDP string. Element-bounded capture (`{ element: handle }`) is a separate brief.
+
 ## Error classes
 
 - `ChromiumNotFoundError` — Chromium-for-Testing not installed; run `bunx mochi browsers install`.
@@ -87,7 +91,7 @@ Owns one tab + the per-page CDP target.
 - `CdpRemoteError` — a CDP method returned an error response.
 - `CdpTimeoutError` — a CDP request didn't resolve within the configured timeout.
 - `ForbiddenCdpMethodError` — code attempted to send a CDP method on the I-1 / §8.2 forbidden list (`Runtime.enable`, etc.). Internal use; surfaces if you reach into `session._cdp` directly.
-- `NotImplementedError` — a placeholder method that hasn't shipped yet (e.g. `page.screenshot` until Phase 0.x).
+- `NotImplementedError` — a placeholder method that hasn't shipped yet (e.g. `session.fetch` until Phase 0.6).
 
 ## Utilities
 
