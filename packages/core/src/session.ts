@@ -184,6 +184,18 @@ export class Session {
    */
   private readonly challengesOpts: SessionInit["challenges"] | undefined;
   private readonly challengeHandles: ChallengeHandle[] = [];
+  /**
+   * Cache of resolved execution-context ids for worker-style targets,
+   * keyed by the worker session id. Populated by
+   * {@link extractWorkerExecutionContextId} on first attach and reused by
+   * any later worker CDP op that needs an `executionContextId`. Patchright
+   * keeps this on a per-target `CRExecutionContext`; mochi keeps the
+   * Session-local map until we grow a real worker-target abstraction.
+   *
+   * @see crServiceWorkerPatch.ts:32-43, crPagePatch.ts:404-417
+   * @internal
+   */
+  private readonly workerExecutionContextIds = new Map<string, number>();
 
   constructor(init: SessionInit) {
     this.proc = init.proc;
@@ -581,18 +593,35 @@ export class Session {
 
   /**
    * Inject the payload into a freshly-attached target if it's a worker-
-   * style target (dedicated worker, shared worker, service worker, audio
-   * worklet, etc.), then resume it.
+   * style target (dedicated worker, shared worker, audio worklet — service
+   * workers go through the same path; see notes below), then resume it.
    *
    * Worker targets do NOT support `Page.addScriptToEvaluateOnNewDocument`
-   * (no Page domain). PLAN.md §8.4 calls out that we use `Runtime.evaluate`
-   * against the paused worker session before issuing
-   * `Runtime.runIfWaitingForDebugger`. The §8.2 forbidden-method assertion
-   * does NOT trip because we never send `Runtime.enable` — only
-   * `Runtime.evaluate` against an already-paused worker target.
+   * (no Page domain). PLAN.md §8.4 calls out that the worker target accepts
+   * `Runtime.evaluate` even though `Runtime.enable` is forbidden by §8.2.
    *
-   * Caveat: worker injection has a smaller stealth ceiling than main-
-   * world Page injection. Documented in `docs/limits.md`.
+   * The Patchright-cited bootstrap (task 0254 — `crServiceWorkerPatch.ts:32-43`,
+   * `crPagePatch.ts:404-417`) tightens the inject race window:
+   *   1. `Runtime.evaluate("globalThis", { serialization: "idOnly" })` —
+   *      returns a `RemoteObject` whose `objectId` carries the worker's
+   *      execution-context id. `serialization: "idOnly"` skips the value
+   *      preview round-trip we don't need.
+   *   2. Parse `objectId.split(".")[1]` for the contextId. The wire format
+   *      is `"<runtimeAgentId>.<contextId>.<remoteObjectId>"`; we validate
+   *      the split and fail loudly if Chromium has moved the goalposts.
+   *   3. Inject the payload via `Runtime.callFunctionOn({ functionDeclaration,
+   *      executionContextId, returnByValue: true })`. This binds the call
+   *      to the worker's own context rather than relying on
+   *      `Runtime.evaluate`'s implicit context resolution, which is the
+   *      coarser pattern v0.1.x used.
+   *   4. `Runtime.runIfWaitingForDebugger` to resume the target.
+   *
+   * We never send `Runtime.enable` — that's the whole point of extracting
+   * the contextId via the idOnly trick instead of waiting for an
+   * `Runtime.executionContextCreated` event.
+   *
+   * Caveat: worker injection has a smaller stealth ceiling than main-world
+   * Page injection. Documented in `docs/limits.md`.
    */
   private async handleAttachedTarget(
     ev: AttachedToTargetEvent,
@@ -608,12 +637,20 @@ export class Session {
     // PLAN.md §12.1 / task 0040 — capture flow skips worker injection too.
     if (isWorkerLike && !this.bypassInject && this._payload !== null) {
       try {
+        const executionContextId = await this.extractWorkerExecutionContextId(childSessionId);
+        this.workerExecutionContextIds.set(childSessionId, executionContextId);
+        // `Runtime.callFunctionOn` requires either an `objectId` OR an
+        // `executionContextId`. We use the latter — patchright's pattern —
+        // so the call binds to the worker's own context, not whatever
+        // `Runtime.evaluate` happens to resolve. The payload IIFE is wrapped
+        // as a function declaration so `callFunctionOn` accepts it.
         await this.router.send(
-          "Runtime.evaluate",
+          "Runtime.callFunctionOn",
           {
-            expression: this._payload.code,
+            functionDeclaration: `function() { ${this._payload.code} }`,
+            executionContextId,
+            returnByValue: true,
             awaitPromise: false,
-            returnByValue: false,
             // includeCommandLineAPI must remain false (§8.2).
           },
           { sessionId: childSessionId },
@@ -639,6 +676,73 @@ export class Session {
         }
       }
     }
+  }
+
+  /**
+   * Resolve the worker target's execution-context id WITHOUT
+   * `Runtime.enable` — patchright's trick.
+   *
+   * Sends `Runtime.evaluate("globalThis", { serialization: "idOnly" })`
+   * against the paused worker session. The returned `RemoteObject.objectId`
+   * has the on-the-wire shape `"<runtimeAgentId>.<contextId>.<localId>"`
+   * (Chromium >= v131; verified against patchright's parser). We extract
+   * `split(".")[1]` and assert it's a positive integer.
+   *
+   * Throws with a precise diagnostic if Chromium changes the format —
+   * silent fallback would mask a real wire-protocol shift, which we want
+   * to catch in CI rather than ship as a degraded inject path.
+   *
+   * @see crServiceWorkerPatch.ts:32-43
+   */
+  private async extractWorkerExecutionContextId(childSessionId: string): Promise<number> {
+    const evalRes = await this.router.send<{ result: { objectId?: string; type?: string } }>(
+      "Runtime.evaluate",
+      {
+        expression: "globalThis",
+        // idOnly skips full value serialisation — we want the objectId
+        // alone. Supported on Chromium >= v124 (chrome-for-testing v131+
+        // in the mochi profile floor).
+        serialization: "idOnly",
+        // includeCommandLineAPI must remain false (§8.2).
+      },
+      { sessionId: childSessionId },
+    );
+    const objectId = evalRes.result.objectId;
+    if (typeof objectId !== "string" || objectId.length === 0) {
+      throw new Error(
+        `[mochi] worker idOnly bootstrap: Runtime.evaluate("globalThis") returned no objectId (got ${JSON.stringify(evalRes.result)})`,
+      );
+    }
+    const parts = objectId.split(".");
+    // Format: "<runtimeAgentId>.<contextId>.<localId>" — patchright also
+    // pulls index [1]. Refuse to guess if the segment count shifts.
+    if (parts.length < 2) {
+      throw new Error(
+        `[mochi] worker idOnly bootstrap: unexpected objectId shape "${objectId}" (expected dotted segments)`,
+      );
+    }
+    const ctxRaw = parts[1];
+    if (ctxRaw === undefined || ctxRaw.length === 0) {
+      throw new Error(
+        `[mochi] worker idOnly bootstrap: objectId "${objectId}" has empty contextId segment`,
+      );
+    }
+    const contextId = Number.parseInt(ctxRaw, 10);
+    if (!Number.isInteger(contextId) || contextId <= 0 || String(contextId) !== ctxRaw) {
+      throw new Error(
+        `[mochi] worker idOnly bootstrap: contextId segment "${ctxRaw}" of objectId "${objectId}" is not a positive integer`,
+      );
+    }
+    return contextId;
+  }
+
+  /**
+   * Snapshot of the worker → executionContextId cache. Test-only.
+   *
+   * @internal
+   */
+  _internalWorkerExecutionContextIds(): ReadonlyMap<string, number> {
+    return new Map(this.workerExecutionContextIds);
   }
 
   private installCrashGuard(): void {
