@@ -12,6 +12,8 @@
 
 import { deriveMatrix, type ProfileV1 } from "@mochi.js/consistency";
 import { resolveBinary } from "./binary";
+import { type GeoConsistencyMode, reconcileGeoConsistency } from "./geo-consistency";
+import { probeExitGeo } from "./geo-probe";
 import { spawnChromium } from "./proc";
 import { parseProxyUrl } from "./proxy-auth";
 import { Session } from "./session";
@@ -151,6 +153,35 @@ export interface LaunchOptions {
    * solving is v0.3+).
    */
   challenges?: ChallengeLaunchOptions;
+  /**
+   * Reconcile `(matrix.timezone, matrix.locale)` against the proxy's
+   * exit-IP geolocation. Closes the cross-layer leak where a US profile
+   * over an EU proxy would have `Date.getTimezoneOffset()` reporting PT
+   * while the IP geolocates to UTC+1 — the canonical bot signature.
+   *
+   * - `"privacy-fallback"` *(default)* — on mismatch (or probe failure),
+   *   override the matrix to UTC + `en-US`. The session fingerprints as
+   *   a privacy-conscious user (Tor / Brave / hardened-FF style), which
+   *   is benign in most threat models.
+   * - `"auto-correct"` — on mismatch, override the matrix's timezone
+   *   with the IP's timezone and the locale with a primary-locale
+   *   guess for the IP's country. Most "stealth" but trusts mochi's
+   *   IP-derived defaults over the user's declared profile.
+   * - `"strict"` — throw `GeoMismatchError` on mismatch. The user must
+   *   change profile or change proxy. Probe failure (null) does NOT
+   *   throw under strict — that's a network blip, not a mismatch.
+   * - `"off"` — skip the probe entirely. Use in offline tests / when
+   *   the probe service is rate-limited.
+   *
+   * The probe is a single GET through wreq (using the matrix's
+   * `wreqPreset`, so the geo service sees the same JA4/headers as user
+   * traffic). 4-attempt cap, 2s per endpoint. Probe results are NOT
+   * cached across sessions — proxy IPs rotate.
+   *
+   * @see PLAN.md §9 (relational consistency, IP/TZ/Locale axis)
+   * @see tasks/0262-ip-tz-locale-exit-consistency.md
+   */
+  geoConsistency?: GeoConsistencyMode;
 }
 
 /**
@@ -175,6 +206,37 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
   const profile = resolveProfile(opts.profile);
   const matrix = deriveMatrix(profile, opts.seed);
 
+  // Task 0262 — exit-IP / TZ / locale reconciliation.
+  //
+  // Probe the apparent exit IP through the configured proxy (using wreq
+  // with the matrix's `wreqPreset` so the geo service sees the same JA4
+  // / headers as user traffic). Then cross-reference against
+  // `(matrix.timezone, matrix.locale)` and apply `geoConsistency`. The
+  // adjusted matrix flows into BOTH `spawnChromium` (so `--lang` reflects
+  // any override) AND `Session` (so inject + the CDP `Emulation.set
+  // TimezoneOverride` send pick it up). PLAN.md §9.
+  //
+  // `"off"` short-circuits the probe — the probe call itself respects
+  // the mode so we don't pay the network round-trip in offline tests.
+  const geoMode: GeoConsistencyMode = opts.geoConsistency ?? "privacy-fallback";
+  let adjustedMatrix = matrix;
+  if (geoMode !== "off") {
+    const geo = await probeExitGeo({
+      ...(normalized?.netProxy !== undefined ? { proxy: normalized.netProxy } : {}),
+      matrix,
+    });
+    // Strict mode throws GeoMismatchError on real mismatch; let it
+    // propagate up so callers can recover (the orchestrator surfaced
+    // it as the canonical failure mode for "wrong proxy for profile").
+    const result = reconcileGeoConsistency(matrix, geo, geoMode);
+    adjustedMatrix = result.matrix;
+    if (result.action === "privacy-fallback" || result.action === "auto-correct") {
+      console.warn(
+        `[mochi] geoConsistency=${geoMode}: ${result.action} applied — ${result.reason ?? "(no reason)"}`,
+      );
+    }
+  }
+
   const proc = await spawnChromium({
     binary,
     extraArgs: opts.args,
@@ -191,17 +253,26 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
     // inject layer's `navigator.languages` spoof; Chromium derives the
     // q-weighted `Accept-Language` value from the single `--lang` primary
     // automatically. Task 0251.
-    locale: matrix.locale,
+    locale: adjustedMatrix.locale,
     // Pin OS-level outer window from the matrix's display geometry so
     // `window.outerWidth/outerHeight` (which reads from the OS window,
     // NOT the JS-spoofed `screen.*`) matches the spoof. Closes the
     // `fingerprint-scan.com` 800×600 leak under `--headless=new`.
     // UDC fixes the same issue at `__init__.py:410-411`. Task 0252.
-    ...(Number.isInteger(matrix.display.width) &&
-    Number.isInteger(matrix.display.height) &&
-    matrix.display.width > 0 &&
-    matrix.display.height > 0
-      ? { windowSize: { width: matrix.display.width, height: matrix.display.height } }
+    //
+    // (`adjustedMatrix.display` === `matrix.display` since geo reconcile
+    // only touches timezone/locale/languages — but we use the adjusted
+    // ref for forward-compat.)
+    ...(Number.isInteger(adjustedMatrix.display.width) &&
+    Number.isInteger(adjustedMatrix.display.height) &&
+    adjustedMatrix.display.width > 0 &&
+    adjustedMatrix.display.height > 0
+      ? {
+          windowSize: {
+            width: adjustedMatrix.display.width,
+            height: adjustedMatrix.display.height,
+          },
+        }
       : {}),
     // Hermetic harness/CI escape hatch — re-applies the patchright-trim
     // flags (`--disable-component-update`, `--disable-default-apps`,
@@ -213,7 +284,7 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
 
   const session = new Session({
     proc,
-    matrix,
+    matrix: adjustedMatrix,
     seed: opts.seed,
     ...(opts.timeout !== undefined ? { defaultTimeoutMs: opts.timeout } : {}),
     ...(opts.bypassInject === true ? { bypassInject: true } : {}),

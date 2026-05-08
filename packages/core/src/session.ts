@@ -266,7 +266,34 @@ export class Session {
     // (only Runtime.enable is forbidden). We enable here so subsequent
     // addScriptToEvaluateOnNewDocument is honoured by the page domain.
     await this.router.send("Page.enable", undefined, { sessionId: attached.sessionId });
-    // Task 0255 / 0261: defensive UA + UA-CH override at the network layer.
+    // Task 0262: timezone spoof via CDP `Emulation.setTimezoneOverride`.
+    //
+    // Drives BOTH `Intl.DateTimeFormat().resolvedOptions().timeZone` AND
+    // `Date.getTimezoneOffset()` because Chromium's V8 reads from the same
+    // internal timezone source. We do NOT manually rewrite
+    // `Date.prototype.getTimezoneOffset` in inject — that's detectable via
+    // prototype-shape checks. The CDP override is the canonical
+    // mechanism.
+    //
+    // Per the CDP docs (`tot/Emulation/#method-setTimezoneOverride`),
+    // this method does NOT require `Emulation.enable` (it stores override
+    // state directly on the target's `EmulationAgent`). §8.2's bans are
+    // unaffected. Sent per-target before any navigation so the very first
+    // document JS already sees the spoofed zone.
+    //
+    // The empty-string sentinel in the protocol means "clear override";
+    // we never send empty here because that would defeat the purpose.
+    //
+    // Skipped under `bypassInject:true` (PLAN.md §12.1) — capture flows
+    // record the bare browser timezone.
+    if (!this.bypassInject) {
+      await this.router.send(
+        "Emulation.setTimezoneOverride",
+        { timezoneId: this.profile.timezone },
+        { sessionId: attached.sessionId },
+      );
+    }
+    // Task 0255: defensive UA override at the network layer.
     //
     // The inject payload (Page.addScriptToEvaluateOnNewDocument) spoofs
     // `navigator.userAgent` and `navigator.userAgentData` in the JS

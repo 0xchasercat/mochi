@@ -254,6 +254,26 @@ automatically forwarded to the network FFI as well so out-of-band
 environment / network policy until the flag lands.
 **Tracking:** future task — proxy-PAC support.
 
+### Exit IP / timezone / locale consistency — covered (task 0262)
+
+**Status:** covered as of task 0262
+**Root cause:** until task 0262, mochi treated `(matrix.timezone, matrix.locale)` as canonical regardless of where the proxy egressed. A US-West profile (`America/Los_Angeles` + `en-US`) routed through an EU residential proxy produced a mismatch between `Date.getTimezoneOffset()` (-480min) and the IP's geolocation (UTC+1) — the canonical bot signature.
+**Affected probes:** any fingerprinter that cross-references the page-side timezone offset against the request IP's geolocation. Common in CreepJS-style aggregators and bespoke WAF heuristics.
+**Mitigation:** at launch, mochi probes the apparent exit IP through wreq (using the matrix's TLS preset, so the geo service sees the same JA4 / headers as user traffic). 7-endpoint registry, shuffled-sequential, 4-attempt cap, 2s per endpoint. The reconciler cross-references against the matrix and applies one of four `LaunchOptions.geoConsistency` modes:
+  - `"privacy-fallback"` *(default)* — override matrix to `UTC` + `en-US` on mismatch (or probe failure). Fingerprints as a Tor / hardened-FF user. Benign in most threat models because mismatched-tz-vs-IP is the canonical bot signature; UTC + en-US looks like every privacy-conscious user.
+  - `"auto-correct"` — override matrix tz/locale with IP-derived values.
+  - `"strict"` — throw `GeoMismatchError` on mismatch.
+  - `"off"` — skip the probe.
+
+The JS-side timezone is delivered via CDP `Emulation.setTimezoneOverride` per-target — drives both `Intl.DateTimeFormat().resolvedOptions().timeZone` AND `Date.getTimezoneOffset()` because Chromium's V8 reads from the same internal source. NOT manually rewritten in inject (prototype-shape detectable).
+**Known gaps:**
+  - **Probe rate-limiting**: `ipapi.co/json/` is rate-limited from many IPs and frequently returns 429; the probe expects this and falls through. The 4-attempt cap usually finds a working endpoint within 2s.
+  - **Tor exit nodes**: Tor exits sometimes geolocate to wrong countries (the IP is registered to one country but the geo databases lag). Probing through Tor → privacy-fallback is correct behavior; the matrix becomes `UTC` + `en-US`, which is exactly what real Tor users present.
+  - **Locale primary-region table**: `auto-correct` mode falls back to `en-<CC>` for unknown country codes (e.g. fictional country). The lookup table covers the major proxy-egress destinations; obscure regions get a lower stealth ceiling.
+  - **No cross-session caching**: probe results are NOT cached across sessions because proxy IPs rotate; stale cache is worse than no cache. Each launch pays the probe cost (typically <500ms; up to 8s on bad networks).
+**User workaround:** pass `geoConsistency: "off"` for tests / rate-limit-impacted environments. Pass `"strict"` to fail closed when proxy egress doesn't match the declared profile.
+**Tracking:** task 0262, PLAN.md §9.6.
+
 ---
 
 ## v0.5 (validation harness landed) — known limits
