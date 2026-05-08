@@ -1,6 +1,6 @@
 {
   "name": "@mochi.js/net-rs",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Prebuilt Rust+wreq cdylib for @mochi.js/net (FFI binding). Distributes platform-specific binaries via npm postinstall.",
   "license": "MIT",
   "type": "module",

@@ -1,6 +1,6 @@
 {
   "name": "@mochi.js/profiles",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Profile data fixtures for mochi — captured baselines (profile.json + Probe Manifest + audio bytes + canvas hashes) per device class.",
   "license": "MIT",
   "type": "module",
