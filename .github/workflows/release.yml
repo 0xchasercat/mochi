@@ -47,14 +47,25 @@ jobs:
         run: bun install --frozen-lockfile
 
       # Pre-publish conformance gates — v1.0 release blocks on these.
-      # The humanize gate (task 0150) is the authoritative behavioral
-      # check; the stealth gate (task 0140, when merged) covers the
-      # fingerprint-spoofing surface; the existing harness Zero-Diff gate
-      # remains in PR-fast.
+      # PLAN.md I-7 ("the harness is the gate"). Publish is blocked unless
+      # all three pass — with documented expected-failures from
+      # docs/limits.md the only allowed exceptions on the online run.
+      # The existing Probe Manifest harness:diff gate remains in PR-fast.
       - name: Conformance gate — humanize (offline)
         env:
           MOCHI_E2E: "1"
         run: bun run conformance:humanize
+
+      - name: Conformance gate — stealth Layer 1 (offline)
+        env:
+          MOCHI_E2E: "1"
+        run: bun run conformance:stealth
+
+      - name: Conformance gate — stealth Layer 2 (online)
+        env:
+          MOCHI_E2E: "1"
+          MOCHI_ONLINE: "1"
+        run: bun run conformance:stealth:online
 
       - name: Create release PR or publish
         uses: changesets/action@v1

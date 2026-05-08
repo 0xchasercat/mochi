@@ -43,6 +43,29 @@ export {
   type ExpectedDivergences,
   isGuidClassPair,
 } from "./categorize";
+export {
+  EXPECTED_FAILURES as STEALTH_EXPECTED_FAILURES,
+  type ExpectedFailure as StealthExpectedFailure,
+  findExpectedFailure as findStealthExpectedFailure,
+} from "./conformance/stealth/expected-failures";
+// ---- conformance namespace --------------------------------------------------
+// The `conformance/stealth/` subtree ports CloakBrowser's gold-standard
+// `tests/test_stealth.py` to a Bun-native suite. The Bun:test files live
+// next to the helpers; this re-export makes the helpers + expected-failure
+// list importable from `@mochi.js/harness` for downstream tooling.
+//
+// @see packages/harness/src/conformance/stealth/__tests__/
+// @see tasks/0140-stealth-conformance.md
+export {
+  CONFORMANCE_PROFILE,
+  CONFORMANCE_SEED,
+  E2E_ENABLED as STEALTH_E2E_ENABLED,
+  evalExpr as stealthEvalExpr,
+  launchSharedSession as launchStealthSession,
+  ONLINE_ENABLED as STEALTH_ONLINE_ENABLED,
+  withPage as withStealthPage,
+  withRetries as withStealthRetries,
+} from "./conformance/stealth/helpers";
 export { countLeaves, diff } from "./diff";
 export { match, matchAny } from "./match";
 export {

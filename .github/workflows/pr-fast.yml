@@ -54,20 +54,21 @@ jobs:
           else
             echo "Harness smoke OK — Zero-Diff against committed baselines."
           fi
-      # Humanize conformance gate — phase 0.5.x (task 0150).
-      # Mochi-native port of CloakHQ/CloakBrowser tests/test_humanize_unit.mjs +
-      # test_human_visual.mjs. Asserts the behavioral synth produces
-      # event distributions that survive ML-style behavioral classifiers
-      # (Bezier shape, smoothness, keystroke timing distribution, fill
-      # clearing, trajectory composition, native-API integrity).
+      # Conformance gates — phase 0.5.x (tasks 0140 + 0150).
+      # Mochi-native ports of CloakHQ/CloakBrowser tests/test_stealth.py
+      # (webdriver detection — fingerprint-spoofing surface) and
+      # tests/test_humanize_unit.mjs + test_human_visual.mjs (behavioral
+      # synth — Bezier shape, keystroke timing, fill clearing, trajectory).
       #
-      # Hard-fail at v0.5.x+ — the conformance suite is the authoritative
-      # gate for v1.0 release alongside conformance:stealth (0140) and
-      # the existing harness Zero-Diff gate.
-      #
-      # Online subset (bot-detection form against deviceandbrowserinfo.com)
-      # is gated by MOCHI_ONLINE=1 and runs nightly + at release time, not
-      # in the PR-fast lane.
+      # Both HARD-FAIL the PR — per PLAN.md I-7 the harness is the gate.
+      # The release workflow additionally gates on the online layers
+      # (MOCHI_ONLINE=1) before publish.
+      - name: Stealth conformance — Layer 1 (offline)
+        if: github.event_name == 'pull_request'
+        env:
+          MOCHI_E2E: "1"
+        run: bun run conformance:stealth
+
       - name: Humanize conformance (offline)
         if: github.event_name == 'pull_request'
         shell: bash

@@ -33,11 +33,13 @@ import { emitMediaDevicesModule } from "./modules/media-devices";
 import { emitNavigatorModule } from "./modules/navigator";
 import { emitNetworkInfoModule } from "./modules/network-info";
 import { emitPermissionsModule } from "./modules/permissions";
+import { emitPluginsModule } from "./modules/plugins";
 import { emitScreenModule } from "./modules/screen";
 import { emitScreenOrientationModule } from "./modules/screen-orientation";
 import { emitTimingModule } from "./modules/timing";
 import { emitWebglModule } from "./modules/webgl";
 import { emitWebgpuModule } from "./modules/webgpu";
+import { emitWindowChromeModule } from "./modules/window-chrome";
 import { emitDefinePropertyHelper } from "./runtime/defineproperty";
 import { emitToStringCloak } from "./runtime/tostring-cloak";
 
@@ -107,6 +109,12 @@ export function buildPayload(matrix: MatrixV1): PayloadResult {
   parts.push(wrapTry("permissions", emitPermissionsModule(matrix)));
   parts.push(wrapTry("screen-orientation", emitScreenOrientationModule(matrix)));
   parts.push(wrapTry("webgpu", emitWebgpuModule(matrix)));
+  // CloakBrowser-surfaced modules — defensive shims that no-op on real
+  // Chrome.app (where the underlying browser already provides these
+  // surfaces) and install on Chromium-for-Testing where they're absent.
+  // See tasks/0140-stealth-conformance.md.
+  parts.push(wrapTry("window-chrome", emitWindowChromeModule(matrix)));
+  parts.push(wrapTry("plugins", emitPluginsModule(matrix)));
 
   // Self-deletion of any stray __mochi__* properties on window/globalThis
   // — none of our helpers leak there in v0.3 (they're all IIFE-locals),

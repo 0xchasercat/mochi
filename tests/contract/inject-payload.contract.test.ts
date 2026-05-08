@@ -72,14 +72,16 @@ const CANONICAL_SEED = "contract-pin-seed";
  * fail the test. Update this hash AND the harness baselines together when
  * the payload's bytes intentionally change.
  *
- * Last updated 2026-05-08 alongside tasks/0070-consistency-rules-full.md
- * (phase 0.7 JS-rules — adds webgpu, media-devices, permissions, network-info,
- * screen-orientation modules; client-hints learns ua-full-version-list;
- * R-031 + R-032..R-040 land in the consistency engine). The payload now
- * carries 12 spoof modules (was 7) and the matrix derivation produces
- * tip-locked Chrome 131 → 131.0.6778.110, which flows into the UA template.
+ * Last updated 2026-05-08 alongside tasks/0140-stealth-conformance.md
+ * (CloakBrowser-surfaced stealth conformance — adds two defensive shim
+ * modules: window-chrome (mirrors Chrome's window.chrome shape only when
+ * absent) and plugins (curated 5-plugin PluginArray only when underlying
+ * browser reports an empty list). The payload now carries 14 spoof
+ * modules (was 12). Both shims are no-ops on real Chrome.app, where the
+ * surfaces are native, so the existing harness Zero-Diff gate is
+ * unchanged at runtime — only the build-time payload bytes shift.
  */
-const PINNED_SHA256 = "ca9ac971d9e1bae4992baebe23ab2d1ff96fa984ff3b14e865deb133d8b91b59";
+const PINNED_SHA256 = "f9376ce481f5cfdbd0659daa9ed40744201213ab40b26fe031127ec2128752de";
 
 describe("contract: @mochi.js/inject buildPayload sha256 is byte-stable per (profile, seed)", () => {
   it("buildPayload(deriveMatrix(profile, seed)) is deterministic", () => {
