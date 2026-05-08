@@ -28,58 +28,8 @@ import {
 } from "../../packages/challenges/src/index";
 import type { ProfileV1 } from "../../packages/consistency/src/index";
 import { deriveMatrix } from "../../packages/consistency/src/index";
-import type { PipeReader, PipeWriter } from "../../packages/core/src/cdp/transport";
 import { Session } from "../../packages/core/src/session";
-
-interface RecordedFrame {
-  raw: string;
-  parsed: { id?: number; method?: string; params?: unknown; sessionId?: string };
-}
-
-function makeFakePipes(): {
-  reader: PipeReader;
-  writer: PipeWriter;
-  written: RecordedFrame[];
-  inject: (msg: object) => void;
-} {
-  const written: RecordedFrame[] = [];
-  let pushChunk: ((chunk: Uint8Array) => void) | null = null;
-  const stream = new ReadableStream<Uint8Array>({
-    start(ctrl) {
-      pushChunk = (chunk) => ctrl.enqueue(chunk);
-    },
-  });
-  return {
-    reader: { getReader: () => stream.getReader() },
-    writer: {
-      write(chunk) {
-        const buf = chunk as Uint8Array;
-        const end = buf[buf.length - 1] === 0 ? buf.length - 1 : buf.length;
-        const raw = new TextDecoder().decode(buf.subarray(0, end));
-        let parsed: RecordedFrame["parsed"] = {};
-        try {
-          parsed = JSON.parse(raw) as RecordedFrame["parsed"];
-        } catch {
-          // ignore
-        }
-        written.push({ raw, parsed });
-      },
-      flush() {},
-      end() {},
-    },
-    written,
-    inject(msg) {
-      if (pushChunk === null) throw new Error("pipe not ready");
-      // CDP pipe protocol: frames are NUL-delimited (see cdp/framer.ts).
-      const json = JSON.stringify(msg);
-      const utf8 = new TextEncoder().encode(json);
-      const out = new Uint8Array(utf8.length + 1);
-      out.set(utf8, 0);
-      out[utf8.length] = 0;
-      pushChunk(out);
-    },
-  };
-}
+import { fakeChromiumProcess, makeFakePipe } from "../helpers/cdp-fixture";
 
 function fixtureProfile(): ProfileV1 {
   return {
@@ -112,82 +62,42 @@ function fixtureProfile(): ProfileV1 {
   };
 }
 
-/** Install the canned-response responder used by every test below. */
-function startResponder(written: RecordedFrame[], inject: (msg: object) => void): NodeJS.Timeout {
-  let identifierCounter = 0;
-  let pollCount = 0;
-  const responder = setInterval(() => {
-    pollCount++;
-    for (const frame of written) {
-      const f = frame.parsed;
-      const responded = (frame as unknown as { __responded?: boolean }).__responded;
-      if (responded === true) continue;
-      if (typeof f.id !== "number") continue;
-      const tag = frame as unknown as { __responded: boolean };
-      if (f.method === "Target.setAutoAttach") {
-        inject({ id: f.id, result: {} });
-        tag.__responded = true;
-      } else if (f.method === "Target.createTarget") {
-        inject({ id: f.id, result: { targetId: `tgt-${++identifierCounter}` } });
-        tag.__responded = true;
-      } else if (f.method === "Target.attachToTarget") {
-        inject({ id: f.id, result: { sessionId: `sess-${identifierCounter}` } });
-        tag.__responded = true;
-      } else if (f.method === "Page.enable") {
-        inject({ id: f.id, result: {} });
-        tag.__responded = true;
-      } else if (f.method === "Emulation.setTimezoneOverride") {
-        // Task 0262 — JS-side timezone spoof per page session.
-        inject({ id: f.id, result: {} });
-        tag.__responded = true;
-      } else if (f.method === "Network.setUserAgentOverride") {
-        // Task 0255 — defensive UA override at network layer.
-        inject({ id: f.id, result: {} });
-        tag.__responded = true;
-      } else if (f.method === "Page.addScriptToEvaluateOnNewDocument") {
-        inject({ id: f.id, result: { identifier: `scr-${++identifierCounter}` } });
-        tag.__responded = true;
-      } else if (f.method === "Page.removeScriptToEvaluateOnNewDocument") {
-        inject({ id: f.id, result: {} });
-        tag.__responded = true;
-      } else if (f.method === "Target.closeTarget") {
-        inject({ id: f.id, result: { success: true } });
-        tag.__responded = true;
-      }
-    }
-    if (pollCount > 400) clearInterval(responder);
-  }, 5);
-  return responder;
+/**
+ * Build a responders override that hands out unique target/session/script
+ * identifiers per call. The Turnstile autoClick path issues two
+ * addScriptToEvaluateOnNewDocument calls per page (matrix payload + the
+ * detector); reusing a single identifier confuses the bookkeeping in
+ * Page.close().
+ */
+function uniqueResponders(): Record<string, (params: unknown) => unknown> {
+  let n = 0;
+  return {
+    "Target.createTarget": () => ({ targetId: `tgt-${++n}` }),
+    "Target.attachToTarget": () => ({ sessionId: `sess-${n}` }),
+    "Page.addScriptToEvaluateOnNewDocument": () => ({ identifier: `scr-${++n}` }),
+  };
 }
 
 describe("contract: challenges.turnstile.autoClick wires the inject script", () => {
   it("Session.newPage with autoClick:true installs the Turnstile detector via addScriptToEvaluateOnNewDocument", async () => {
-    const { reader, writer, written, inject } = makeFakePipes();
+    const pipe = makeFakePipe({ responders: uniqueResponders() });
     const matrix = deriveMatrix(fixtureProfile(), "contract");
 
     const session = new Session({
-      proc: {
-        reader,
-        writer,
-        userDataDir: "/tmp/contract-fake",
-        pid: 0,
-        exited: new Promise<number>(() => undefined),
-        close: async () => undefined,
-      },
+      proc: fakeChromiumProcess(pipe, { userDataDir: "/tmp/contract-fake" }),
       matrix,
       seed: "contract",
       defaultTimeoutMs: 2000,
       challenges: { turnstile: { autoClick: true } },
     });
 
-    const responder = startResponder(written, inject);
     try {
       const page = await session.newPage();
       // The detector inject is fire-and-forget after newPage. Give the
       // event loop a few ticks for the second addScript frame to land.
       await new Promise((r) => setTimeout(r, 100));
 
-      const installFrames = written.filter(
+      const installFrames = pipe.written.filter(
         (f) => f.parsed.method === "Page.addScriptToEvaluateOnNewDocument",
       );
       // The matrix payload is the first install; the Turnstile detector
@@ -225,36 +135,27 @@ describe("contract: challenges.turnstile.autoClick wires the inject script", () 
 
       await page.close();
     } finally {
-      clearInterval(responder);
       await session.close();
     }
   }, 10_000);
 
   it("Session.newPage with autoClick:false (default) does NOT install the detector", async () => {
-    const { reader, writer, written, inject } = makeFakePipes();
+    const pipe = makeFakePipe({ responders: uniqueResponders() });
     const matrix = deriveMatrix(fixtureProfile(), "contract");
 
     // No `challenges` — should match v0.1 behavior exactly.
     const session = new Session({
-      proc: {
-        reader,
-        writer,
-        userDataDir: "/tmp/contract-fake-2",
-        pid: 0,
-        exited: new Promise<number>(() => undefined),
-        close: async () => undefined,
-      },
+      proc: fakeChromiumProcess(pipe, { userDataDir: "/tmp/contract-fake-2" }),
       matrix,
       seed: "contract",
       defaultTimeoutMs: 2000,
     });
 
-    const responder = startResponder(written, inject);
     try {
       const page = await session.newPage();
       await new Promise((r) => setTimeout(r, 100));
 
-      const detectorFrame = written.find((f) => {
+      const detectorFrame = pipe.written.find((f) => {
         if (f.parsed.method !== "Page.addScriptToEvaluateOnNewDocument") return false;
         const params = f.parsed.params as { source?: string } | undefined;
         const src = params?.source ?? "";
@@ -264,7 +165,6 @@ describe("contract: challenges.turnstile.autoClick wires the inject script", () 
 
       await page.close();
     } finally {
-      clearInterval(responder);
       await session.close();
     }
   }, 10_000);

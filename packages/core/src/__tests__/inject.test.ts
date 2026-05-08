@@ -5,131 +5,23 @@
  * browser reports its bare, un-spoofed fingerprint.
  *
  * No real Chromium process is spawned; we drive `Session` against a fake
- * `ChromiumProcess` whose pipe reader/writer let us observe every CDP
- * request sent and inject canned responses. The §8.2 forbidden-method
- * assertions still gate every send through `MessageRouter`, so the test
- * implicitly enforces those too.
+ * `ChromiumProcess` via the shared `tests/helpers/cdp-fixture.ts` helper.
+ * The §8.2 forbidden-method assertions still gate every send through
+ * `MessageRouter`, so the test implicitly enforces those too.
  *
  * @see PLAN.md §12.1 — capture must run against bare Chromium.
  * @see tasks/0040-mochi-capture.md — `bypassInject: true` requirement.
+ * @see tests/helpers/cdp-fixture.ts — shared helper consolidating fake-pipe boilerplate.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { deriveMatrix, type ProfileV1 } from "@mochi.js/consistency";
-import type { PipeReader, PipeWriter } from "../cdp/transport";
-import type { ChromiumProcess } from "../proc";
+import {
+  type FakePipe,
+  fakeChromiumProcess,
+  makeFakePipe,
+} from "../../../../tests/helpers/cdp-fixture";
 import { Session } from "../session";
-
-interface FakeBrowser {
-  process: ChromiumProcess;
-  /** All CDP requests written to the pipe, decoded as JSON-RPC objects. */
-  written: Array<{ id?: number; method?: string; params?: unknown; sessionId?: string }>;
-  /** Inject one inbound JSON frame (CDP response or event). */
-  push(obj: unknown): void;
-  /** Auto-respond to any request matching `methodPredicate`. Returns the unsubscribe. */
-  autoRespond(methodPredicate: (m: string) => boolean, result: unknown): void;
-  /** Resolve when the next `n` writes have completed. */
-  waitForWrites(n: number): Promise<void>;
-}
-
-function makeFakeBrowser(): FakeBrowser {
-  const written: FakeBrowser["written"] = [];
-  let pumpController: ReadableStreamDefaultController<Uint8Array> | null = null;
-  const stream = new ReadableStream<Uint8Array>({
-    start(c) {
-      pumpController = c;
-    },
-  });
-  const enc = new TextEncoder();
-  const dec = new TextDecoder();
-  const autoResponders: Array<{ pred: (m: string) => boolean; result: unknown }> = [];
-  const writeListeners: Array<() => void> = [];
-
-  const reader: PipeReader = {
-    getReader: () => stream.getReader(),
-  };
-
-  const push = (obj: unknown): void => {
-    const bytes = enc.encode(JSON.stringify(obj));
-    const out = new Uint8Array(bytes.length + 1);
-    out.set(bytes, 0);
-    out[bytes.length] = 0;
-    pumpController?.enqueue(out);
-  };
-
-  const writer: PipeWriter = {
-    write: (chunk) => {
-      const last = chunk[chunk.length - 1] === 0 ? chunk.length - 1 : chunk.length;
-      const json = dec.decode(chunk.subarray(0, last));
-      try {
-        const parsed = JSON.parse(json) as {
-          id?: number;
-          method?: string;
-          params?: unknown;
-          sessionId?: string;
-        };
-        written.push(parsed);
-        // Notify listeners.
-        const ls = writeListeners.splice(0, writeListeners.length);
-        for (const fn of ls) fn();
-        // Auto-respond if matched.
-        if (typeof parsed.method === "string" && typeof parsed.id === "number") {
-          const r = autoResponders.find((a) => a.pred(parsed.method ?? ""));
-          if (r) {
-            queueMicrotask(() => push({ id: parsed.id, result: r.result }));
-          }
-        }
-      } catch {
-        // ignore malformed
-      }
-    },
-    flush: () => undefined,
-    end: () => undefined,
-  };
-
-  let resolveExit: ((code: number) => void) | undefined;
-  const exited = new Promise<number>((res) => {
-    resolveExit = res;
-  });
-
-  let killed = false;
-  const proc: ChromiumProcess = {
-    userDataDir: "/tmp/fake-mochi-test",
-    pid: 0,
-    exited,
-    reader,
-    writer,
-    close: async () => {
-      if (killed) return;
-      killed = true;
-      try {
-        pumpController?.close();
-      } catch {
-        // ignore
-      }
-      resolveExit?.(0);
-    },
-  };
-
-  return {
-    process: proc,
-    written,
-    push,
-    autoRespond(pred, result) {
-      autoResponders.push({ pred, result });
-    },
-    waitForWrites(n) {
-      if (written.length >= n) return Promise.resolve();
-      return new Promise<void>((resolve) => {
-        const check = (): void => {
-          if (written.length >= n) resolve();
-          else writeListeners.push(check);
-        };
-        writeListeners.push(check);
-      });
-    },
-  };
-}
 
 const TEST_PROFILE: ProfileV1 = {
   id: "bypass-inject-fixture",
@@ -168,11 +60,18 @@ const TEST_PROFILE: ProfileV1 = {
 };
 
 describe("Session.bypassInject (PLAN.md §12.1, task 0040)", () => {
-  let fake: FakeBrowser;
+  let pipe: FakePipe;
   let session: Session | undefined;
 
   beforeEach(() => {
-    fake = makeFakeBrowser();
+    pipe = makeFakePipe({
+      responders: {
+        // Tests below assert on identifier shape — keep these stable.
+        "Target.createTarget": () => ({ targetId: "page-target-1" }),
+        "Target.attachToTarget": () => ({ sessionId: "session-1" }),
+        "Page.addScriptToEvaluateOnNewDocument": () => ({ identifier: "should-never-fire" }),
+      },
+    });
     session = undefined;
   });
 
@@ -189,30 +88,17 @@ describe("Session.bypassInject (PLAN.md §12.1, task 0040)", () => {
   it("with bypassInject:true — newPage() never sends Page.addScriptToEvaluateOnNewDocument", async () => {
     const matrix = deriveMatrix(TEST_PROFILE, "bypass-test");
     session = new Session({
-      proc: fake.process,
+      proc: fakeChromiumProcess(pipe, { userDataDir: "/tmp/fake-mochi-test" }),
       matrix,
       seed: "bypass-test",
       bypassInject: true,
     });
 
-    // Auto-respond to the small set of CDP calls Session/newPage drives:
-    // Target.setAutoAttach (constructor), Target.createTarget, Target.attachToTarget,
-    // and Page.enable. These are the *only* writes we expect.
-    fake.autoRespond((m) => m === "Target.setAutoAttach", {});
-    fake.autoRespond((m) => m === "Target.createTarget", { targetId: "page-target-1" });
-    fake.autoRespond((m) => m === "Target.attachToTarget", { sessionId: "session-1" });
-    fake.autoRespond((m) => m === "Page.enable", {});
-    fake.autoRespond((m) => m === "Target.closeTarget", { success: true });
-    fake.autoRespond((m) => m === "Page.removeScriptToEvaluateOnNewDocument", {});
-    fake.autoRespond((m) => m === "Page.addScriptToEvaluateOnNewDocument", {
-      identifier: "should-never-fire",
-    });
-
     const page = await session.newPage();
     expect(page).toBeDefined();
 
-    const methods = fake.written
-      .map((w) => w.method)
+    const methods = pipe.written
+      .map((w) => w.parsed.method)
       .filter((m): m is string => typeof m === "string");
     expect(methods).toContain("Target.createTarget");
     expect(methods).toContain("Target.attachToTarget");
@@ -226,7 +112,7 @@ describe("Session.bypassInject (PLAN.md §12.1, task 0040)", () => {
   it("with bypassInject:true — _internalPayload() is null", () => {
     const matrix = deriveMatrix(TEST_PROFILE, "null-payload");
     session = new Session({
-      proc: fake.process,
+      proc: fakeChromiumProcess(pipe, { userDataDir: "/tmp/fake-mochi-test" }),
       matrix,
       seed: "null-payload",
       bypassInject: true,
@@ -236,9 +122,19 @@ describe("Session.bypassInject (PLAN.md §12.1, task 0040)", () => {
   });
 
   it("with bypassInject omitted — _internalPayload() is non-null and newPage installs the inject script", async () => {
+    // Override the script identifier for this test — it asserts that the
+    // `addScriptToEvaluateOnNewDocument` call carries the matrix payload's
+    // compiled code.
+    const localPipe = makeFakePipe({
+      responders: {
+        "Target.createTarget": () => ({ targetId: "page-target-2" }),
+        "Target.attachToTarget": () => ({ sessionId: "session-2" }),
+        "Page.addScriptToEvaluateOnNewDocument": () => ({ identifier: "inj-1" }),
+      },
+    });
     const matrix = deriveMatrix(TEST_PROFILE, "default-inject");
     session = new Session({
-      proc: fake.process,
+      proc: fakeChromiumProcess(localPipe, { userDataDir: "/tmp/fake-mochi-test" }),
       matrix,
       seed: "default-inject",
     });
@@ -247,33 +143,21 @@ describe("Session.bypassInject (PLAN.md §12.1, task 0040)", () => {
     expect(payload).not.toBeNull();
     expect(payload?.code.length ?? 0).toBeGreaterThan(0);
 
-    fake.autoRespond((m) => m === "Target.setAutoAttach", {});
-    fake.autoRespond((m) => m === "Target.createTarget", { targetId: "page-target-2" });
-    fake.autoRespond((m) => m === "Target.attachToTarget", { sessionId: "session-2" });
-    fake.autoRespond((m) => m === "Page.enable", {});
-    // Task 0262: Session sends Emulation.setTimezoneOverride per page.
-    fake.autoRespond((m) => m === "Emulation.setTimezoneOverride", {});
-    // Task 0255: Session now sends Network.setUserAgentOverride per page.
-    fake.autoRespond((m) => m === "Network.setUserAgentOverride", {});
-    fake.autoRespond((m) => m === "Target.closeTarget", { success: true });
-    fake.autoRespond((m) => m === "Page.removeScriptToEvaluateOnNewDocument", {});
-    fake.autoRespond((m) => m === "Page.addScriptToEvaluateOnNewDocument", {
-      identifier: "inj-1",
-    });
-
     const page = await session.newPage();
     expect(page).toBeDefined();
 
-    const methods = fake.written
-      .map((w) => w.method)
+    const methods = localPipe.written
+      .map((w) => w.parsed.method)
       .filter((m): m is string => typeof m === "string");
     // Default behavior: the inject script IS installed.
     expect(methods).toContain("Page.addScriptToEvaluateOnNewDocument");
     // And the params carry the compiled payload code.
-    const installCall = fake.written.find(
-      (w) => w.method === "Page.addScriptToEvaluateOnNewDocument",
+    const installCall = localPipe.written.find(
+      (w) => w.parsed.method === "Page.addScriptToEvaluateOnNewDocument",
     );
-    const params = installCall?.params as { source?: string; runImmediately?: boolean } | undefined;
+    const params = installCall?.parsed.params as
+      | { source?: string; runImmediately?: boolean }
+      | undefined;
     expect(params?.source).toBe(payload?.code);
     expect(params?.runImmediately).toBe(true);
   });

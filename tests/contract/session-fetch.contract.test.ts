@@ -16,9 +16,9 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { deriveMatrix, type ProfileV1 } from "../../packages/consistency/src/index";
 import { Session } from "../../packages/core/src/index";
-import type { ChromiumProcess } from "../../packages/core/src/proc";
 import type { NetAdapter } from "../../packages/core/src/session";
 import type { NetCtx } from "../../packages/net/src/index";
+import { fakeChromiumProcess, makeFakePipe } from "../helpers/cdp-fixture";
 
 interface CallLog {
   opened: number;
@@ -108,29 +108,12 @@ function makeStubSession(
   adapter: NetAdapter,
   opts: { netProxy?: string } = {},
 ): Session {
-  // Fake pipe surface that satisfies the transport without performing I/O.
-  const fakeReader = {
-    getReader(): ReadableStreamDefaultReader<Uint8Array> {
-      return new ReadableStream<Uint8Array>({ start() {} }).getReader();
-    },
-  };
-  const fakeWriter = {
-    write(chunk: Uint8Array): number {
-      return chunk.byteLength;
-    },
-    flush(): void {},
-    end(): void {},
-  };
-  const proc = {
-    reader: fakeReader,
-    writer: fakeWriter,
-    userDataDir: "/tmp/contract",
-    exited: new Promise<number>(() => undefined),
-    async close(): Promise<void> {},
-  } as unknown as ChromiumProcess;
-
+  // The session-fetch contract doesn't exercise CDP at all — the helper
+  // gives us a no-op pipe surface that satisfies the transport, with
+  // `manual: true` so the auto-responder does nothing.
+  const pipe = makeFakePipe({ manual: true });
   return new Session({
-    proc,
+    proc: fakeChromiumProcess(pipe, { userDataDir: "/tmp/contract" }),
     matrix,
     seed: "contract-seed",
     netAdapter: adapter,

@@ -32,58 +32,8 @@
 import { describe, expect, it } from "bun:test";
 import type { ProfileV1 } from "../../packages/consistency/src/index";
 import { deriveMatrix } from "../../packages/consistency/src/index";
-import type { PipeReader, PipeWriter } from "../../packages/core/src/cdp/transport";
 import { Session } from "../../packages/core/src/session";
-
-interface RecordedFrame {
-  raw: string;
-  parsed: { id?: number; method?: string; params?: unknown; sessionId?: string };
-}
-
-function makeFakePipes(): {
-  reader: PipeReader;
-  writer: PipeWriter;
-  written: RecordedFrame[];
-  inject: (msg: object) => void;
-} {
-  const written: RecordedFrame[] = [];
-  let pushChunk: ((chunk: Uint8Array) => void) | null = null;
-  const stream = new ReadableStream<Uint8Array>({
-    start(ctrl) {
-      pushChunk = (chunk) => ctrl.enqueue(chunk);
-    },
-  });
-  return {
-    reader: { getReader: () => stream.getReader() },
-    writer: {
-      write(chunk) {
-        const buf = chunk as Uint8Array;
-        const end = buf[buf.length - 1] === 0 ? buf.length - 1 : buf.length;
-        const raw = new TextDecoder().decode(buf.subarray(0, end));
-        let parsed: RecordedFrame["parsed"] = {};
-        try {
-          parsed = JSON.parse(raw) as RecordedFrame["parsed"];
-        } catch {
-          // ignore
-        }
-        written.push({ raw, parsed });
-      },
-      flush() {},
-      end() {},
-    },
-    written,
-    inject(msg) {
-      if (pushChunk === null) throw new Error("pipe not ready");
-      // CDP pipe-mode framing: one JSON record terminated by a single NUL
-      // byte (`0x00`). The framer in `cdp/framer.ts` scans for NUL.
-      const json = new TextEncoder().encode(JSON.stringify(msg));
-      const out = new Uint8Array(json.length + 1);
-      out.set(json, 0);
-      out[json.length] = 0x00;
-      pushChunk(out);
-    },
-  };
-}
+import { fakeChromiumProcess, makeFakePipe, type RecordedFrame } from "../helpers/cdp-fixture";
 
 function fixtureProfile(): ProfileV1 {
   return {
@@ -117,12 +67,11 @@ function fixtureProfile(): ProfileV1 {
 }
 
 /**
- * Drive a Session with the fake pipes through `Target.setAutoAttach` +
- * a worker `Target.attachedToTarget` event. Auto-respond to any framework
- * traffic (createTarget etc.); the contract assertions live on the worker
- * session traffic.
- *
- * Returns the call frames against the worker session id, in send order.
+ * Drive a Session with a fake pipe through `Target.setAutoAttach` +
+ * a worker `Target.attachedToTarget` event. The shared `defaultResponders`
+ * cover all the page-side traffic; we add per-test responders for the
+ * worker-side `Runtime.*` methods that `defaultResponders` deliberately
+ * leaves out (those are tied to the test's chosen objectId).
  */
 async function driveWorkerAttach(opts: { workerObjectId: string }): Promise<{
   workerFrames: RecordedFrame[];
@@ -130,55 +79,24 @@ async function driveWorkerAttach(opts: { workerObjectId: string }): Promise<{
   payloadCode: string;
   cleanup: () => Promise<void>;
 }> {
-  const { reader, writer, written, inject } = makeFakePipes();
+  const pipe = makeFakePipe({
+    responders: {
+      // The test-injected objectId IS the contract input — it's parsed for
+      // the contextId. We hand back the canonical Chromium shape.
+      "Runtime.evaluate": () => ({
+        result: { type: "object", objectId: opts.workerObjectId },
+      }),
+      "Runtime.callFunctionOn": () => ({ result: { type: "undefined" } }),
+      "Runtime.runIfWaitingForDebugger": () => ({}),
+    },
+  });
   const matrix = deriveMatrix(fixtureProfile(), "worker-bootstrap");
   const session = new Session({
-    proc: {
-      reader,
-      writer,
-      userDataDir: "/tmp/worker-bootstrap-fake",
-      pid: 0,
-      exited: new Promise<number>(() => {
-        /* never resolves */
-      }),
-      close: async () => {
-        /* no-op */
-      },
-    },
+    proc: fakeChromiumProcess(pipe, { userDataDir: "/tmp/worker-bootstrap-fake" }),
     matrix,
     seed: "worker-bootstrap",
     defaultTimeoutMs: 500,
   });
-
-  // The auto-responder. We answer Runtime.evaluate against the worker
-  // session id with the test's chosen objectId — that's the input the
-  // bootstrap parses for the contextId.
-  const responder = setInterval(() => {
-    for (const frame of written) {
-      const r = frame as unknown as { __responded?: boolean };
-      if (r.__responded === true) continue;
-      const f = frame.parsed;
-      if (typeof f.id !== "number") continue;
-      if (f.method === "Target.setAutoAttach") {
-        inject({ id: f.id, result: {} });
-        r.__responded = true;
-      } else if (f.method === "Runtime.evaluate" && f.sessionId === "worker-sess-1") {
-        // The contract: the bootstrap requests `globalThis` with idOnly.
-        // We hand back an objectId in the canonical Chromium shape.
-        inject({
-          id: f.id,
-          result: { result: { type: "object", objectId: opts.workerObjectId } },
-        });
-        r.__responded = true;
-      } else if (f.method === "Runtime.callFunctionOn" && f.sessionId === "worker-sess-1") {
-        inject({ id: f.id, result: { result: { type: "undefined" } } });
-        r.__responded = true;
-      } else if (f.method === "Runtime.runIfWaitingForDebugger") {
-        inject({ id: f.id, result: {} });
-        r.__responded = true;
-      }
-    }
-  }, 5);
 
   // Wait briefly so the Session's `start()` and event-handler wiring is in
   // place before we synthesise the worker attach. Without this the
@@ -187,7 +105,7 @@ async function driveWorkerAttach(opts: { workerObjectId: string }): Promise<{
   await new Promise((res) => setTimeout(res, 20));
 
   // Simulate the worker auto-attach.
-  inject({
+  pipe.inject({
     method: "Target.attachedToTarget",
     params: {
       sessionId: "worker-sess-1",
@@ -203,19 +121,17 @@ async function driveWorkerAttach(opts: { workerObjectId: string }): Promise<{
   });
 
   // Give the inject handler enough time to walk through the full
-  // evaluate → callFunctionOn → runIfWaitingForDebugger sequence. The
-  // responder polls at 5ms; three round-trips fits comfortably in 250ms.
+  // evaluate → callFunctionOn → runIfWaitingForDebugger sequence.
   await new Promise((res) => setTimeout(res, 250));
 
-  const workerFrames = written.filter((f) => f.parsed.sessionId === "worker-sess-1");
+  const workerFrames = pipe.written.filter((f) => f.parsed.sessionId === "worker-sess-1");
   const payloadCode = session._internalPayload()?.code ?? "";
 
   return {
     workerFrames,
-    allFrames: written,
+    allFrames: pipe.written,
     payloadCode,
     cleanup: async () => {
-      clearInterval(responder);
       await session.close();
     },
   };
