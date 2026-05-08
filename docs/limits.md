@@ -395,4 +395,50 @@ default synth fails real classifiers; this entry is for awareness.
 
 ---
 
+## v0.10 (cross-platform prebuilds landed)
+
+The `@mochi.js/net-rs` cdylib now ships as a postinstall-downloaded
+prebuilt asset on the 5 supported platforms. Anything outside that set
+falls back to a local `cargo build`.
+
+### Prebuilt cdylib platform coverage
+
+**Status:** partial coverage
+**Supported (postinstall download from GH Releases):**
+- `darwin-arm64` (macOS, Apple Silicon — `mochi_net-darwin-arm64.dylib`)
+- `darwin-x64` (macOS, Intel — `mochi_net-darwin-x64.dylib`)
+- `linux-x64` (Linux x86_64, glibc — `mochi_net-linux-x64.so`)
+- `linux-arm64` (Linux aarch64, glibc — `mochi_net-linux-arm64.so`,
+  cross-compiled with `cargo-zigbuild`)
+- `win32-x64` (Windows, MSVC — `mochi_net-win32-x64.dll`)
+
+**Not covered:**
+- FreeBSD / OpenBSD / Alpine musl / Linux ia32 / Windows arm64 — no
+  prebuilt assets shipped. Consumers can build from source via
+  `cargo build --release --manifest-path packages/net-rs/Cargo.toml`;
+  the loader (packages/net/src/ffi.ts) walks both the postinstall
+  `native/` directory AND `target/release/`, so a local cargo build
+  Just Works.
+
+**Root cause:** PLAN.md §14 phase 0.10 scopes prebuilds to the 5
+tuples that cover ~95% of the npm install base. Adding more (musl,
+Windows arm64) is straightforward in the workflow matrix but requires
+either a `cross` Docker image or alternative zigbuild target — defer
+to v1.x driven by actual demand.
+
+**Mitigation:** the postinstall script (`packages/net-rs/scripts/install-prebuild.ts`)
+emits a friendly message and exits 0 on unsupported platforms; install
+never blocks. The `@mochi.js/net` loader produces a clean
+`cargo build` instruction at first `Session.fetch()` if no binary is
+resolvable. Set `MOCHI_NET_SKIP_POSTINSTALL=1` to bypass the download
+entirely.
+
+**User workaround:** cargo-build the cdylib locally; the loader picks
+it up from `packages/net-rs/target/release/`.
+
+**Tracking:** none — adding a 6th platform is a workflow-matrix entry,
+not a fundamental gap.
+
+---
+
 *This file is owned collectively by every contributor. Add to it the moment you discover a limit; the framework's credibility lives here.*
