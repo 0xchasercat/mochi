@@ -1,5 +1,12 @@
 # @mochi.js/profiles
 
+## 0.0.4
+
+### Patch Changes
+
+- Updated dependencies [1231131]
+  - @mochi.js/consistency@0.1.1
+
 ## 0.0.3
 
 ### Patch Changes
