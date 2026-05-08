@@ -100,10 +100,13 @@ describe("contract: Emulation.setTimezoneOverride pins matrix.timezone per page 
       expect(tzParams?.timezoneId).toBe(matrix.timezone);
       expect(tzParams?.timezoneId).toBe("Europe/Berlin");
 
-      // Ordering: Page.enable BEFORE Emulation.setTimezoneOverride BEFORE
-      // the inject install. The inject relies on the timezone override
-      // being live so any payload-time `Intl.DateTimeFormat` call sees the
-      // spoofed zone.
+      // Ordering: Page.enable BEFORE Emulation.setTimezoneOverride. The
+      // inject install used to anchor a third leg here, but task 0266
+      // retired the per-page `Page.addScriptToEvaluateOnNewDocument` call
+      // in favour of a session-level `Fetch.fulfillRequest` body splice
+      // (PLAN.md §8.4 amended). The timezone override is still wired
+      // before the page can navigate (and therefore before the spliced
+      // payload runs), so the I-5 invariant is preserved end-to-end.
       const idxPageEnable = pipe.written.findIndex(
         (f) => f.parsed.method === "Page.enable" && f.parsed.sessionId === "tz-page-sess",
       );
@@ -112,14 +115,9 @@ describe("contract: Emulation.setTimezoneOverride pins matrix.timezone per page 
           f.parsed.method === "Emulation.setTimezoneOverride" &&
           f.parsed.sessionId === "tz-page-sess",
       );
-      const idxInject = pipe.written.findIndex(
-        (f) => f.parsed.method === "Page.addScriptToEvaluateOnNewDocument",
-      );
       expect(idxPageEnable).toBeGreaterThanOrEqual(0);
       expect(idxTzOverride).toBeGreaterThanOrEqual(0);
-      expect(idxInject).toBeGreaterThanOrEqual(0);
       expect(idxPageEnable).toBeLessThan(idxTzOverride);
-      expect(idxTzOverride).toBeLessThan(idxInject);
 
       await page.close();
     } finally {

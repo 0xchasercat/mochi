@@ -1,5 +1,5 @@
 /**
- * Proxy authentication via CDP `Fetch.authRequired`.
+ * Proxy URL parsing helpers + (legacy) `Fetch.authRequired` installer.
  *
  * Background
  * ----------
@@ -11,16 +11,14 @@
  * weirdness, observable extension ids) and so is forbidden by mochi's
  * stealth invariants.
  *
- * The CDP path is invariant-clean: enable `Fetch` with `handleAuthRequests`
- * AND a wildcard pattern. Chromium rejects `patterns: []` when
- * `handleAuthRequests: true` (`-32602 Can't specify empty patterns with
- * handleAuth set`, verified on CfT linux ~2026-05) — the original 0160
- * design assumed empty patterns would only fire `Fetch.authRequired`
- * events, but modern Chromium requires at least one URL pattern when auth
- * handling is on. We use `[{ urlPattern: "*" }]` and forward every paused
- * request immediately via `Fetch.continueRequest`. The auth challenges
- * separately fire `Fetch.authRequired`; we answer those with
- * `Fetch.continueWithAuth` carrying the parsed credentials.
+ * Task 0266 unifies proxy auth + init-script delivery under a single
+ * `Fetch.enable` call (see {@link installInitInjector} in
+ * `cdp/init-injector.ts`). `Session` now installs ONE Fetch handler that
+ * owns BOTH the document-body splice (for the inject payload) AND
+ * `Fetch.authRequired` answering (when proxy creds are present). The
+ * legacy {@link installProxyAuth} export below is preserved as a thin
+ * delegating wrapper for any out-of-tree caller still wiring it directly,
+ * but the session no longer uses it.
  *
  * PLAN.md §8.2 invariant check
  * ----------------------------
@@ -30,11 +28,7 @@
  * isolated world) are forbidden. `Fetch.enable` operates at the network
  * layer below page script — it does not produce execution-context-creation
  * events, does not surface a `chrome.devtools` global, and is not
- * detectable from page JavaScript. With `patterns: [{urlPattern: "*"}]`
- * every request pauses for one CDP round-trip before continuing — that's
- * a measurable but bounded overhead (sub-ms per request on modern
- * hardware) and only active on sessions with proxy auth credentials
- * (the function early-returns when `auth` is undefined).
+ * detectable from page JavaScript.
  *
  * Protocols
  * ---------
@@ -46,9 +40,11 @@
  *
  * @see PLAN.md §8.2 / §10
  * @see tasks/0160-proxy-auth-and-ci-fix.md
+ * @see tasks/0266-fetch-fulfill-init-script.md
  */
 
-import type { MessageRouter, Unsubscribe } from "./cdp/router";
+import { installInitInjector } from "./cdp/init-injector";
+import type { MessageRouter } from "./cdp/router";
 
 /** Parsed proxy URL — what `parseProxyUrl` returns. */
 export interface ParsedProxy {
@@ -148,105 +144,28 @@ export interface ProxyAuthHandle {
 }
 
 /**
- * Wire proxy-auth handling into a {@link MessageRouter}. No-op when
- * `auth` is undefined — saves the `Fetch.enable` round-trip and avoids
- * any protocol surface for sessions that don't need it.
+ * Wire proxy-auth handling into a {@link MessageRouter}. Thin compatibility
+ * shim — delegates to {@link installInitInjector} with `payloadCode: null`
+ * so the proxy-auth-only call path still works for any out-of-tree caller.
  *
- * Behavior:
+ * The Session no longer uses this directly (task 0266); proxy auth and
+ * init-script delivery share a single `Fetch.enable` owner.
+ *
+ * Behavior (unchanged contract):
  *   - Sends `Fetch.enable { handleAuthRequests: true, patterns: [{
- *     urlPattern: "*" }] }` once.
+ *     urlPattern: "*", resourceType: "Document" }, { urlPattern: "*" }] }`.
  *   - On `Fetch.authRequired`, replies with `Fetch.continueWithAuth` and
  *     the parsed creds.
  *   - On `Fetch.requestPaused`, forwards `Fetch.continueRequest`
- *     immediately so the network model stays unchanged (every request
- *     still flows; we just take one CDP round-trip to wave it through).
+ *     immediately (no body splice when `payloadCode` is null).
  *
- * Why wildcard patterns instead of empty: modern Chromium (CfT linux
- * ~2026-05) rejects `patterns: []` when `handleAuthRequests: true` is set
- * with `-32602 Can't specify empty patterns with handleAuth set`. The
- * wildcard plus an immediate-continue handler is the equivalent of
- * "auth-only interception" with one extra round-trip per request — only
- * active on proxy-authed sessions.
+ * @deprecated Prefer {@link installInitInjector} directly. This wrapper is
+ * preserved only for backward compatibility.
  */
 export async function installProxyAuth(
   router: MessageRouter,
   auth: { username: string; password: string },
 ): Promise<ProxyAuthHandle> {
-  // Subscribe FIRST so we don't miss the very first authRequired event the
-  // browser fires after Fetch.enable.
-  const offAuth: Unsubscribe = router.on("Fetch.authRequired", (params) => {
-    const requestId = (params as { requestId?: string } | null)?.requestId;
-    if (typeof requestId !== "string") return;
-    // Fire-and-forget — failures here are non-fatal (the request will
-    // simply 407 and the page-level fetch will see it). We log on
-    // unexpected errors so users can diagnose creds issues.
-    router
-      .send("Fetch.continueWithAuth", {
-        requestId,
-        authChallengeResponse: {
-          response: "ProvideCredentials",
-          username: auth.username,
-          password: auth.password,
-        },
-      })
-      .catch((err: unknown) => {
-        if (!isClosedError(err)) {
-          console.warn("[mochi] Fetch.continueWithAuth failed:", err);
-        }
-      });
-  });
-
-  // Pattern is REQUIRED with handleAuthRequests: true. Modern Chromium
-  // rejects an empty `patterns` array with `-32602 Can't specify empty
-  // patterns with handleAuth set` (verified on CfT linux ~2026-05). Use
-  // a wildcard pattern so every request paus es, then immediately
-  // forward in the requestPaused handler below — that gets us auth
-  // challenge interception without altering the user-visible network
-  // model. The per-request CDP round-trip is real overhead but only
-  // active when the session has proxy auth credentials (this whole
-  // function early-returns when `auth` is undefined), so non-proxied
-  // sessions pay zero cost.
-  const offPaused: Unsubscribe = router.on("Fetch.requestPaused", (params) => {
-    const requestId = (params as { requestId?: string } | null)?.requestId;
-    if (typeof requestId !== "string") return;
-    router.send("Fetch.continueRequest", { requestId }).catch((err: unknown) => {
-      if (!isClosedError(err)) {
-        console.warn("[mochi] Fetch.continueRequest failed:", err);
-      }
-    });
-  });
-
-  await router.send("Fetch.enable", {
-    handleAuthRequests: true,
-    patterns: [{ urlPattern: "*" }],
-  });
-
-  let disposed = false;
-  return {
-    async dispose(): Promise<void> {
-      if (disposed) return;
-      disposed = true;
-      offAuth();
-      offPaused();
-      try {
-        await router.send("Fetch.disable");
-      } catch (err) {
-        // Closed-pipe failures are expected during session teardown.
-        if (!isClosedError(err)) {
-          console.warn("[mochi] Fetch.disable failed:", err);
-        }
-      }
-    },
-  };
-}
-
-/** True when an error reflects the transport already being closed. */
-function isClosedError(err: unknown): boolean {
-  if (err instanceof Error) {
-    return (
-      err.name === "BrowserCrashedError" ||
-      /transport already closed|pipe closed|browser process exited/i.test(err.message)
-    );
-  }
-  return false;
+  const handle = await installInitInjector(router, { payloadCode: null, auth });
+  return handle;
 }

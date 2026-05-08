@@ -91,12 +91,16 @@ export interface PageInit {
   /** Initial URL (typically "about:blank"). */
   initialUrl: string;
   /**
-   * Identifier returned by `Page.addScriptToEvaluateOnNewDocument` when the
-   * inject payload was installed at session-newPage time. Tracked here so
-   * `Page.close()` can call `Page.removeScriptToEvaluateOnNewDocument` —
-   * required by PLAN.md §8.4 to keep the per-target identifier list bounded.
+   * Legacy field — preserved as optional for any out-of-tree caller that
+   * still constructs a Page with it. Task 0266 retired the per-page
+   * `Page.addScriptToEvaluateOnNewDocument` install in favour of the
+   * session-level `Fetch.fulfillRequest` body splice; the field is no
+   * longer set by `Session.newPage()` and the legacy
+   * `removeScriptToEvaluateOnNewDocument` cleanup in `close()` is a no-op
+   * when this is unset.
    *
-   * Optional: zero-spoofing test setups (or future no-inject paths) may omit.
+   * @deprecated retained only for backward compatibility; remove after a
+   * full deprecation cycle.
    */
   injectScriptIdentifier?: string;
   /**

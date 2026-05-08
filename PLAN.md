@@ -491,6 +491,15 @@ This is a hard list. The CDP wrapper has runtime asserts that refuse these:
 - `Runtime.evaluate` with `includeCommandLineAPI: true` (leaks `$x`, `$_`, etc.).
 - `Network.enable` *globally* on the root target — only attached per-frame when needed for a specific operation, then disabled.
 
+**Note on `Fetch.enable`** (task 0266): `Fetch.enable` is NOT on the
+forbidden list. It operates at the network layer below page script — no
+execution-context-creation events surface, no `chrome.devtools` global is
+exposed, and JS cannot detect its presence directly. mochi sends it once
+per session (gated only on `bypassInject`) so the §8.4 init-script
+delivery pivot can intercept document responses for body splice + CSP
+rewrite. The cost is one CDP RTT per Document request and a no-op
+forward (`Fetch.continueRequest`) on every other request type.
+
 ### 8.3 How we get execution-context info without `Runtime.enable`
 
 - Subscribe to `Page.frameAttached` and `Page.frameNavigated` to learn frame topology.
@@ -499,10 +508,83 @@ This is a hard list. The CDP wrapper has runtime asserts that refuse these:
 
 ### 8.4 Payload injection
 
-- `Page.addScriptToEvaluateOnNewDocument` with `runImmediately: true` and `worldName: ""` (main world).
-- `worldName: ""` is critical — naming a world creates an isolated world (detectable). Empty string means main world.
-- The script ID returned must be tracked per-session and removed via `Page.removeScriptToEvaluateOnNewDocument` on `session.close`.
-- For workers, we set up an `AddScriptToEvaluateOnNewDocument`-equivalent using `Target.setAutoAttach` + on-attach `Runtime.evaluate` (the worker target accepts evaluate; the main page target does not have Runtime.enable issued).
+**Amended by task 0266** — the inject delivery mechanism has been rotated
+from `Page.addScriptToEvaluateOnNewDocument` to a `Fetch.fulfillRequest`
+body splice + CSP rewriter, mirroring patchright's
+`crNetworkManagerPatch.ts:166-453` (`RouteImpl._fixCSP`,
+`_injectIntoHead`, `fulfill`).
+
+#### Mechanism (current)
+
+- One `Fetch.enable` per session (gated only on `bypassInject` — capture
+  flows skip), with patterns
+  `[{ urlPattern: "*", resourceType: "Document" }, { urlPattern: "*" }]`
+  and `handleAuthRequests: true` when proxy creds are configured.
+- On `Fetch.requestPaused` for a `Document`:
+  1. Request stage → `Fetch.continueRequest` with
+     `interceptResponse: true` (so we get the response too).
+  2. Response stage → `Fetch.getResponseBody`, rewrite CSP in BOTH
+     response headers (`Content-Security-Policy`,
+     `Content-Security-Policy-Report-Only`) AND inline
+     `<meta http-equiv="Content-Security-Policy">` tags, splice the
+     payload as `<script class="__mochi_init_script__" id="…">…</script>`
+     at end-of-`<head>` BEFORE the first non-comment `<script>`,
+     `Fetch.fulfillRequest` with the rewritten body.
+- On `Fetch.requestPaused` for non-Document → `Fetch.continueRequest`
+  immediately (zero-cost pass-through; the request hangs if we don't
+  reply).
+- The injected `<script>` carries NO `defer`, `async`, or
+  `type="module"` — those defer execution past first parse and
+  re-introduce the race window the original `runImmediately:true` was
+  designed to close.
+- The payload IIFE's first statement is
+  `document.currentScript?.remove()`; a post-`load` DOM walk strips any
+  leftover `.__mochi_init_script__` nodes (defence in depth).
+- See `packages/core/src/cdp/init-injector.ts` for the implementation.
+
+#### CSP rewriter contract
+
+| Input policy                                         | Action                                                         |
+| ---------------------------------------------------- | -------------------------------------------------------------- |
+| `script-src 'self'`                                  | Append `'unsafe-inline'`                                       |
+| `script-src 'nonce-XYZ'`                             | Reuse `XYZ` as the injected tag's `nonce` attribute            |
+| `script-src 'strict-dynamic' 'nonce-XYZ'`            | Reuse `XYZ`; `'strict-dynamic'` admits transitive scripts      |
+| `script-src 'strict-dynamic'` (no nonce — invalid)   | Fall through to `'unsafe-inline'` (best-effort)                |
+| `default-src 'self'` (no script-src)                 | Append `'unsafe-inline'` to `default-src`                      |
+| `<meta http-equiv="Content-Security-Policy" content="…">` | Same rules; rewrite the `content` attribute in-place      |
+| Multiple CSPs (header + meta)                        | Most-restrictive wins; rewrite EVERY policy independently      |
+
+#### Rationale
+
+`Page.addScriptToEvaluateOnNewDocument` carries a source-attribution
+leak — the "Vanilla CDP" detection probe inspects how the very first
+script entered the page and recognises the
+`addScriptToEvaluateOnNewDocument` channel. The new mechanism is
+byte-indistinguishable from a same-origin developer's own `<script>`
+tag at the top of `<head>`.
+
+#### Trade-offs
+
+- `Fetch.enable` becomes always-on (gated only on `bypassInject`).
+  Cost: one CDP RTT per Document request for the body fetch +
+  fulfillment, one no-op forward per non-Document request. Both are
+  bounded and only active when inject delivery is active.
+- The patchright README admits the new path is detectable by *timing*
+  attacks (the body splice introduces a measurable latency on the
+  document request). No production antibot exploits this today — the
+  trade is favourable. This is documented under `docs/limits.md`.
+- `data:` and `about:blank` URLs are NOT intercepted by the Fetch
+  domain; inject delivery on those URLs is intentionally a no-op (out
+  of scope, behaviour preserved from the §8.4 baseline).
+
+#### Workers (unchanged from previous §8.4)
+
+For workers we set up an `AddScriptToEvaluateOnNewDocument`-equivalent
+using `Target.setAutoAttach` + on-attach `Runtime.evaluate` (the worker
+target accepts evaluate; the main page target does not have
+`Runtime.enable` issued). The idOnly bootstrap (task 0254) refines the
+pattern to `Runtime.evaluate("globalThis", { serialization: "idOnly" })`
++ `Runtime.callFunctionOn` against the parsed contextId.
 
 ### 8.5 Process management
 
