@@ -34,6 +34,7 @@ export {
   type Cookie,
   type GotoOptions,
   type HumanClickOptions,
+  type HumanMoveOptions,
   type HumanScrollOptions,
   type HumanTypeOptions,
   Page,

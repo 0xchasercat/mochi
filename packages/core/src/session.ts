@@ -212,6 +212,13 @@ export class Session {
       // MatrixV1). Per-call opts may override individual fields.
       behavior: this.profile.behavior,
       seed: this.seed,
+      // Initial cursor at the display center — a real human's pointer is
+      // never at (0, 0). The matrix's display dimensions are the canonical
+      // source (PLAN.md I-5).
+      initialCursor: {
+        x: Math.floor(this.profile.display.width / 2),
+        y: Math.floor(this.profile.display.height / 2),
+      },
     });
     this._pages.push(page);
     return page;

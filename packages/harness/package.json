@@ -39,6 +39,7 @@
     "build": "echo 'no build step yet'"
   },
   "dependencies": {
+    "@mochi.js/behavioral": "workspace:*",
     "@mochi.js/consistency": "workspace:*",
     "@mochi.js/core": "workspace:*",
     "@mochi.js/profiles": "workspace:*"

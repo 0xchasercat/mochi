@@ -54,6 +54,26 @@ jobs:
           else
             echo "Harness smoke OK — Zero-Diff against committed baselines."
           fi
+      # Humanize conformance gate — phase 0.5.x (task 0150).
+      # Mochi-native port of CloakHQ/CloakBrowser tests/test_humanize_unit.mjs +
+      # test_human_visual.mjs. Asserts the behavioral synth produces
+      # event distributions that survive ML-style behavioral classifiers
+      # (Bezier shape, smoothness, keystroke timing distribution, fill
+      # clearing, trajectory composition, native-API integrity).
+      #
+      # Hard-fail at v0.5.x+ — the conformance suite is the authoritative
+      # gate for v1.0 release alongside conformance:stealth (0140) and
+      # the existing harness Zero-Diff gate.
+      #
+      # Online subset (bot-detection form against deviceandbrowserinfo.com)
+      # is gated by MOCHI_ONLINE=1 and runs nightly + at release time, not
+      # in the PR-fast lane.
+      - name: Humanize conformance (offline)
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          MOCHI_E2E: "1"
+        run: bun run conformance:humanize
       # Soft-fail at v0.0 — most early infra PRs don't ship user-visible surface,
       # so a missing changeset is a warning, not a build failure. Flip to hard-fail
       # when phase 0.1 (CDP transport) lands per tasks/0004-changesets.md.

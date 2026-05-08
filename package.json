@@ -27,6 +27,8 @@
     "harness:smoke": "bun packages/cli/src/bin.ts harness all",
     "harness:full": "bun packages/cli/src/bin.ts harness all --include-online",
     "harness:diff": "bun packages/cli/src/bin.ts harness",
+    "conformance:humanize": "bun test packages/harness/src/conformance/humanize/__tests__/",
+    "conformance:humanize:online": "MOCHI_ONLINE=1 bun test packages/harness/src/conformance/humanize/__tests__/",
     "codegen": "bun scripts/codegen.ts",
     "build": "bun run --filter '*' build",
     "rust:build": "cargo build --release --manifest-path packages/net-rs/Cargo.toml",

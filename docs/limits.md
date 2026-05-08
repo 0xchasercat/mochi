@@ -199,6 +199,57 @@ a saliency model and is well beyond the JS layer.
 **Affected probes:** none in commercial deployment as of 2026-05.
 **Tracking:** v2+ research item.
 
+### Inter-action idle pauses (CloakBrowser `idle_between_actions`)
+
+**Status:** known limit (intentional design choice)
+**Root cause:** CloakBrowser's `idle_between_actions` config inserts a
+randomized pause between successive `humanX` calls (e.g. between a click
+and the next type). mochi does NOT insert such pauses by default — every
+`humanClick`/`humanType`/`humanMove`/`humanScroll` includes its own
+realistic intra-action timing (Bezier pacing, keystroke digraph delays,
+inertial-scroll friction), but the inter-action interval is the user's
+responsibility. This is a deliberate choice: we don't want to hide
+realized timing from the caller, who often needs to coordinate with
+page-side state changes (waitFor, etc.).
+**Affected probes:** anti-bot heuristics that score "actions back-to-back
+with zero idle" — typically not commercially deployed; the action-shape
+classifiers we've measured care about intra-action distributions.
+**User workaround:** `await new Promise(r => setTimeout(r, 200 + Math.random()*400))`
+between actions if a target site rates the macro pacing.
+**Tracking:** v1.x — opt-in `session.behavior = { idleBetweenActions: true }`.
+
+### `humanClick` always re-clicks even on already-focused element
+
+**Status:** known limit (intentional simplicity)
+**Root cause:** CloakBrowser's `press(key)` short-circuits the trajectory
+when the element is already focused (saves ~700ms on repeat input). mochi's
+`humanClick(selector)` always synthesizes the trajectory + dispatches the
+click, even when the target already has focus. The cost is one redundant
+trajectory; the simplicity is worth more than the saved milliseconds at v1.
+**Affected probes:** none — the behavior produces a *more* human-like
+trace, not less.
+**Mitigation:** call `page.humanType(selector, text)` directly when the
+element already has focus from a prior interaction; the `DOM.focus`
+happens internally and is idempotent.
+**Tracking:** v1.x — focus-aware skip.
+
+### Behavioral-conformance pushback (recorded-trace replay)
+
+**Status:** acknowledged forward gap (deferred to v1.x)
+**Root cause:** mochi's behavioral synth is paper-spec-driven — Bezier with
+overshoot+correction, Fitts MT, lognormal digraph timing. The conformance
+suite (task 0150) validates the SHAPE of the synthesized events against the
+CloakBrowser test bar; the deviceandbrowserinfo.com online check returns
+`superHumanSpeed=false` and `suspiciousClientSideBehavior=false`. If a
+future ML-style classifier learns that the *distributional fingerprint* of
+synthetic events is detectable (e.g., the 60Hz cadence is too uniform vs
+a real OS's variable input pump rate), the answer is recorded-trace replay,
+which is on the v1.x roadmap (`mochi record` + `humanClick(sel, { trace })`
+already in the API contract). No quantitative evidence today that the
+default synth fails real classifiers; this entry is for awareness.
+**Affected probes:** hypothetical future ML classifiers.
+**Tracking:** v1.x — `mochi record` recorder + replay surface.
+
 ---
 
 ## v0.1 (CDP transport landed) — known limits

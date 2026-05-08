@@ -109,6 +109,13 @@ export interface PageInit {
    * same session still produce divergent (but deterministic) trajectories.
    */
   seed?: string;
+  /**
+   * Initial cursor position. Real humans never start at viewport origin
+   * (0, 0); a sensible default is the viewport center. The session-level
+   * resolver picks this from the matrix's display dimensions; tests can
+   * override directly.
+   */
+  initialCursor?: { x: number; y: number };
 }
 
 /** Options for `Page.humanClick`. */
@@ -121,6 +128,12 @@ export interface HumanClickOptions {
    * the page a moment to settle (a real human doesn't snap instantly).
    */
   preMoveSettle?: boolean;
+}
+
+/** Options for `Page.humanMove`. */
+export interface HumanMoveOptions {
+  /** Override movement duration (ms). Default = Fitts. */
+  duration?: number;
 }
 
 /** Options for `Page.humanType`. */
@@ -170,12 +183,13 @@ export class Page {
    */
   private callCounter = 0;
   /**
-   * Last cursor position. The `humanClick` synth chains from this point so a
-   * sequence of clicks produces a continuous movement (which is also what a
-   * real user does). Initial value is the viewport origin; the first click
-   * always fires from (0,0) absent a prior call.
+   * Last cursor position. The `humanClick`/`humanMove` synth chains from this
+   * point so a sequence of moves and clicks produces a continuous trajectory
+   * (which is also what a real user does). Initialized from
+   * `PageInit.initialCursor` (the matrix-derived viewport center by default
+   * — see PLAN.md I-5: behavioral parameters come from MatrixV1.profile.behavior).
    */
-  private cursor: { x: number; y: number } = { x: 0, y: 0 };
+  private cursor: { x: number; y: number };
 
   constructor(init: PageInit) {
     this.router = init.router;
@@ -185,6 +199,7 @@ export class Page {
     this.injectScriptIdentifier = init.injectScriptIdentifier ?? null;
     this.behavior = init.behavior ?? DEFAULT_BEHAVIOR_PROFILE;
     this.seed = init.seed ?? "default";
+    this.cursor = init.initialCursor ?? { x: 0, y: 0 };
     this.subscribeFrameTopology();
   }
 
@@ -367,6 +382,72 @@ export class Page {
   // ---- Phase 0.8 — behavioral surface ----------------------------------------
 
   /**
+   * The current cursor position (viewport-relative pixels). Tracked across
+   * `humanClick`/`humanMove` so consecutive movements compose realistically
+   * (a real user doesn't teleport between every action).
+   */
+  cursorPosition(): { x: number; y: number } {
+    return { x: this.cursor.x, y: this.cursor.y };
+  }
+
+  /**
+   * Animate the cursor to `(x, y)` along a human-shaped Bezier trajectory,
+   * WITHOUT pressing any button. Same dispatch path as `humanClick` minus
+   * the final `mousePressed` + `mouseReleased`. The cursor's last position
+   * updates so a subsequent `humanClick` chains realistically from this
+   * arrival point.
+   *
+   * Pipeline (PLAN.md §11.1):
+   *   1. Synthesize the `TrajectoryEvent[]` via `@mochi.js/behavioral` from
+   *      the page's current cursor to `(x, y)`, using the resolved `behavior`
+   *      profile + a deterministic per-call seed.
+   *   2. Dispatch each event as `Input.dispatchMouseEvent` of type
+   *      `mouseMoved`, paced via `setTimeout` to match the synthesized `tMs`
+   *      cadence.
+   *   3. Update `cursor` to the final synthesized point.
+   *
+   * Use cases:
+   *   - Hover over an element without clicking (pre-click positioning).
+   *   - Plausible idle cursor activity between explicit interactions.
+   *   - Composing fine-grained drag/drop sequences (v1.x).
+   */
+  async humanMove(x: number, y: number, opts: HumanMoveOptions = {}): Promise<void> {
+    this.assertOpen();
+    const callSeed = this.nextCallSeed();
+    const traj = synthesizeMouseTrajectory({
+      from: { x: this.cursor.x, y: this.cursor.y },
+      to: { x, y },
+      profile: this.behavior,
+      seed: callSeed,
+      ...(opts.duration !== undefined ? { durationMs: opts.duration } : {}),
+    });
+    if (traj.length === 0) {
+      // Degenerate: from === to. Still register the position.
+      this.cursor = { x, y };
+      return;
+    }
+
+    let prevT = 0;
+    for (let i = 0; i < traj.length; i++) {
+      const ev = traj[i];
+      if (ev === undefined) continue;
+      const dt = ev.tMs - prevT;
+      if (i > 0 && dt > 0) await sleep(dt);
+      prevT = ev.tMs;
+      await this.dispatchMouse({
+        type: "mouseMoved",
+        x: ev.x,
+        y: ev.y,
+        button: "none",
+      });
+    }
+    const last = traj[traj.length - 1];
+    if (last !== undefined) {
+      this.cursor = { x: last.x, y: last.y };
+    }
+  }
+
+  /**
    * Move the mouse to the matched element with a human-shaped Bezier
    * trajectory, then dispatch a single `mousePressed` + `mouseReleased`.
    *
@@ -460,9 +541,16 @@ export class Page {
    * Type `text` into the matched input with human-shaped per-key timing,
    * digraph-aware delays, and configurable mistake injection.
    *
+   * Special case — `text === ""`: clears the field by sending Backspace ×
+   * `value.length` with realistic key timings. The keystroke synth is reused
+   * with a string of N space placeholders to derive realistic press
+   * durations + inter-key delays; only the `key` is rewritten to "Backspace"
+   * and `text` is emptied so the dispatch produces deletion events.
+   *
    * Pipeline (PLAN.md §11.2):
    *   1. Focus the matched node via `DOM.focus({nodeId})`.
-   *   2. Synthesize a `KeystrokeEvent[]` via `@mochi.js/behavioral`.
+   *   2. If `text === ""`, read `element.value.length` and synthesize N
+   *      Backspace keystrokes; otherwise synthesize the literal text.
    *   3. Dispatch each event as `keyDown` (with `text` for printable keys)
    *      then `keyUp`, paced by the synthesized `tDownMs` cadence.
    */
@@ -483,32 +571,68 @@ export class Page {
       ...(opts.wpm !== undefined ? { wpm: opts.wpm } : {}),
     };
     const callSeed = this.nextCallSeed();
-    const events = synthesizeKeystrokes({
-      text,
-      profile,
-      seed: callSeed,
-      ...(opts.mistakeRate !== undefined ? { mistakeRate: opts.mistakeRate } : {}),
-    });
+
+    let events: ReturnType<typeof synthesizeKeystrokes>;
+    if (text === "") {
+      // Clear flow: figure out current value length via the focused element,
+      // then synthesize that many Backspace events.
+      const valueLength = await this.focusedElementValueLength(result.nodeId);
+      if (valueLength === 0) return;
+      const placeholder = " ".repeat(valueLength);
+      const synth = synthesizeKeystrokes({
+        text: placeholder,
+        profile,
+        seed: callSeed,
+        // Mistakes don't make sense for a clear; force-disable.
+        mistakeRate: 0,
+      });
+      events = synth.map((ev) => ({
+        ...ev,
+        key: "Backspace",
+        text: "",
+      }));
+    } else {
+      events = synthesizeKeystrokes({
+        text,
+        profile,
+        seed: callSeed,
+        ...(opts.mistakeRate !== undefined ? { mistakeRate: opts.mistakeRate } : {}),
+      });
+    }
 
     let prevT = 0;
     for (const ev of events) {
       const dt = ev.tDownMs - prevT;
       if (dt > 0) await sleep(dt);
-      const downParams: DispatchKeyEventParams = {
-        type: "keyDown",
-        key: ev.key,
-      };
-      if (ev.text !== "") downParams.text = ev.text;
+      const downParams = buildKeyEventParams("keyDown", ev.key, ev.text);
       await this.dispatchKey(downParams);
       const downDur = ev.tUpMs - ev.tDownMs;
       if (downDur > 0) await sleep(downDur);
-      const upParams: DispatchKeyEventParams = {
-        type: "keyUp",
-        key: ev.key,
-      };
+      const upParams = buildKeyEventParams("keyUp", ev.key, ev.text);
       await this.dispatchKey(upParams);
       prevT = ev.tUpMs;
     }
+  }
+
+  /**
+   * Read `element.value.length` for the matched element via
+   * `Runtime.callFunctionOn` (PLAN.md §8.3 — no `Runtime.evaluate`). Used by
+   * the `humanType("", selector)` clear path. Falls back to `0` for elements
+   * without a `value` (non-input).
+   */
+  private async focusedElementValueLength(nodeId: number): Promise<number> {
+    const resolved = await this.send<{ object: RemoteObject }>("DOM.resolveNode", {
+      nodeId,
+    });
+    if (resolved.object.objectId === undefined) return 0;
+    const r = await this.send<{ result: RemoteObject }>("Runtime.callFunctionOn", {
+      objectId: resolved.object.objectId,
+      functionDeclaration:
+        "function() { return typeof this.value === 'string' ? this.value.length : 0; }",
+      returnByValue: true,
+    });
+    const v = r.result.value;
+    return typeof v === "number" ? v : 0;
   }
 
   /**
@@ -732,6 +856,64 @@ function buttonsMaskFor(button: "left" | "right" | "middle"): number {
       return 4;
   }
 }
+
+/**
+ * Build CDP `Input.dispatchKeyEvent` params from a `KeystrokeEvent`. Control
+ * keys (Backspace, Enter, Tab) NEED `windowsVirtualKeyCode` + `code` for
+ * Chromium to fire the corresponding edit-action handler in the focused
+ * input; without those Chromium just delivers a `keydown` to JS listeners
+ * but doesn't mutate the field. The mapping table below covers the small
+ * set of control keys mochi's behavioral synth produces.
+ *
+ * @see https://chromedevtools.github.io/devtools-protocol/tot/Input/#method-dispatchKeyEvent
+ */
+function buildKeyEventParams(
+  type: "keyDown" | "keyUp",
+  key: string,
+  text: string,
+): DispatchKeyEventParams {
+  const params: DispatchKeyEventParams = { type, key };
+  // Printable keys carry their literal as `text` on keydown so the page sees
+  // both the keyboard event AND the input event. (CDP requires `text`
+  // present, and an empty string is *not* the same as omitting.)
+  if (type === "keyDown" && text !== "") params.text = text;
+  const meta = CONTROL_KEY_META[key];
+  if (meta !== undefined) {
+    params.code = meta.code;
+    params.windowsVirtualKeyCode = meta.vk;
+  } else if (text !== "" && text.length === 1) {
+    // Printable single-character key: derive a plausible KeyboardEvent.code
+    // and the ASCII virtual key code so layout-aware page code can read
+    // event.code and event.keyCode. Chromium accepts either upper-case
+    // letter codes or `KeyA`-style; we use the latter for letters.
+    const ch = text;
+    const upper = ch.toUpperCase();
+    if (upper >= "A" && upper <= "Z") {
+      params.code = `Key${upper}`;
+      params.windowsVirtualKeyCode = upper.charCodeAt(0);
+    } else if (ch >= "0" && ch <= "9") {
+      params.code = `Digit${ch}`;
+      params.windowsVirtualKeyCode = ch.charCodeAt(0);
+    } else if (ch === " ") {
+      params.code = "Space";
+      params.windowsVirtualKeyCode = 32;
+    }
+  }
+  return params;
+}
+
+/**
+ * Mapping from CDP `key` (DOM `KeyboardEvent.key`) to its `KeyboardEvent.code`
+ * and Windows virtual-key code. Only the control keys the behavioral synth
+ * currently produces — extend as new control keys land.
+ */
+const CONTROL_KEY_META: Record<string, { code: string; vk: number }> = {
+  Backspace: { code: "Backspace", vk: 8 },
+  Tab: { code: "Tab", vk: 9 },
+  Enter: { code: "Enter", vk: 13 },
+  Escape: { code: "Escape", vk: 27 },
+  Delete: { code: "Delete", vk: 46 },
+};
 
 /**
  * Cheap deterministic 32-bit hash → [0, 1) of a string. Used for the small
