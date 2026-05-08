@@ -93,17 +93,23 @@ jobs:
       - name: Conformance gate — humanize (offline)
         env:
           MOCHI_E2E: "1"
+          # See pr-fast.yml: --no-sandbox is the GH-runner workaround,
+          # acceptable in conformance because we test "does mochi work",
+          # not "does this look real to a fingerprinter".
+          MOCHI_EXTRA_ARGS: "--no-sandbox"
         run: bun run conformance:humanize
 
       - name: Conformance gate — stealth Layer 1 (offline)
         env:
           MOCHI_E2E: "1"
+          MOCHI_EXTRA_ARGS: "--no-sandbox"
         run: bun run conformance:stealth
 
       - name: Conformance gate — stealth Layer 2 (online)
         env:
           MOCHI_E2E: "1"
           MOCHI_ONLINE: "1"
+          MOCHI_EXTRA_ARGS: "--no-sandbox"
         run: bun run conformance:stealth:online
 
       - name: Create release PR or publish

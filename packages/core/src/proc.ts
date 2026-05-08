@@ -100,6 +100,17 @@ export async function spawnChromium(cfg: SpawnConfig): Promise<ChromiumProcess> 
   if (cfg.extraArgs !== undefined && cfg.extraArgs.length > 0) {
     args.push(...cfg.extraArgs);
   }
+  // Whitespace-separated extra args from the environment. Same effect as
+  // `LaunchOptions.args` but settable from outside the calling code — load-
+  // bearing for CI environments that need `--no-sandbox` (Linux user-namespace
+  // sandbox doesn't work in unprivileged containers / GH Actions runners) and
+  // for ad-hoc local debugging without touching test fixtures. Production code
+  // SHOULD NOT set this — `--no-sandbox` is a fingerprint leak in real-user
+  // contexts. PLAN.md §8.6 explicitly omits it from DEFAULT_CHROMIUM_FLAGS.
+  const envExtra = process.env.MOCHI_EXTRA_ARGS;
+  if (typeof envExtra === "string" && envExtra.trim().length > 0) {
+    args.push(...envExtra.trim().split(/\s+/));
+  }
 
   const proc = Bun.spawn([cfg.binary, ...args], {
     // stdin, stdout, stderr, then two extra pipes for CDP framing.
