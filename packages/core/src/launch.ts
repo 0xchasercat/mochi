@@ -129,6 +129,20 @@ export interface LaunchOptions {
 export async function launch(opts: LaunchOptions): Promise<Session> {
   const binary = await resolveBinary(opts.binary);
   const normalized = normalizeProxy(opts.proxy);
+
+  // Resolve the `MatrixV1` BEFORE spawning so the matrix-derived primary
+  // locale flows into the `--lang` flag. The matrix is otherwise read
+  // post-spawn for inject; deriving early is cheap (~µs, pure function) and
+  // lets us close the I-5 leak between Chromium's native `Accept-Language`
+  // header and the JS-layer `navigator.language(s)` spoof.
+  //
+  // Inline `ProfileV1` objects flow straight through; string profile ids
+  // are resolved against a placeholder profile until `@mochi.js/profiles`
+  // ships its first capture (phase 0.4). The matrix is bit-stable per
+  // `(profile, seed)` excluding the `derivedAt` timestamp.
+  const profile = resolveProfile(opts.profile);
+  const matrix = deriveMatrix(profile, opts.seed);
+
   const proc = await spawnChromium({
     binary,
     extraArgs: opts.args,
@@ -136,15 +150,14 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
     // Chromium rejects inline auth on `--proxy-server`; pass the
     // auth-stripped server URL.
     ...(normalized !== undefined ? { proxy: normalized.server } : {}),
+    // Primary BCP-47 locale → `--lang=<value>`. Locks the network-layer
+    // `Accept-Language` header to the JS spoof (PLAN.md I-5). The full
+    // multi-locale list still flows through `matrix.languages` to the
+    // inject layer's `navigator.languages` spoof; Chromium derives the
+    // q-weighted `Accept-Language` value from the single `--lang` primary
+    // automatically.
+    locale: matrix.locale,
   });
-
-  // Resolve the `MatrixV1` for this session via the consistency engine.
-  // Inline `ProfileV1` objects flow straight through; string profile ids
-  // are resolved against a placeholder profile until `@mochi.js/profiles`
-  // ships its first capture (phase 0.4). The matrix is bit-stable per
-  // `(profile, seed)` excluding the `derivedAt` timestamp.
-  const profile = resolveProfile(opts.profile);
-  const matrix = deriveMatrix(profile, opts.seed);
 
   const session = new Session({
     proc,
