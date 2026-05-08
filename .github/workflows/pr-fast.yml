@@ -41,6 +41,23 @@ jobs:
         with:
           path: ~/.mochi/browsers
           key: chromium-for-testing-linux-${{ runner.os }}-v1
+      # System deps Chromium needs to actually launch on Linux. CfT ships
+      # only the binary, not the .deb dep tree, so the bare Ubuntu runner
+      # is missing libs (libnss3, libgbm1, libcups2, libgtk-3, libpango,
+      # libasound2, ...). Without these `chrome --headless=new` starts then
+      # immediately crashes (no descriptive error — the parent process just
+      # sees the pipe close → mochi reports BrowserCrashedError). List below
+      # mirrors Playwright's `install-deps` for chromium on Ubuntu.
+      - name: Install Chromium runtime dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates fonts-liberation libasound2t64 libatk-bridge2.0-0 \
+            libatk1.0-0 libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 \
+            libgbm1 libglib2.0-0 libgtk-3-0 libnspr4 libnss3 libpango-1.0-0 \
+            libpangocairo-1.0-0 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 \
+            libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 \
+            libxrender1 libxss1 libxtst6 xdg-utils
       # Always run install — idempotent (no-op if already installed; ~1s on
       # cache hit, real download on miss). Robust against cache-corruption.
       - name: Install Chromium-for-Testing (mochi browsers install — idempotent)
@@ -65,6 +82,12 @@ jobs:
           fi
           echo "Found Chromium at: $BINARY"
           echo "MOCHI_CHROMIUM_PATH=$BINARY" >> "$GITHUB_ENV"
+          # Smoke: can the binary even start? If --version fails, the apt-install
+          # above is missing a library and conformance will silently
+          # BrowserCrashedError. This step gives us a clear, isolated error.
+          echo "::group::Chromium --version smoke"
+          "$BINARY" --version
+          echo "::endgroup::"
       # Harness smoke gate — Phase 0.5 deliverable. Drives a Mochi-spoofed
       # session through tests/fixtures/probe-page.html, normalizes both sides,
       # and structurally diffs against each profile's committed baseline.

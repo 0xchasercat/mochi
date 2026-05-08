@@ -55,6 +55,17 @@ jobs:
         with:
           path: ~/.mochi/browsers
           key: chromium-for-testing-linux-${{ runner.os }}-v1
+      # System deps Chromium needs to launch on Linux — same list as pr-fast.yml.
+      - name: Install Chromium runtime dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates fonts-liberation libasound2t64 libatk-bridge2.0-0 \
+            libatk1.0-0 libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 \
+            libgbm1 libglib2.0-0 libgtk-3-0 libnspr4 libnss3 libpango-1.0-0 \
+            libpangocairo-1.0-0 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 \
+            libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 \
+            libxrender1 libxss1 libxtst6 xdg-utils
       # Same install + path-resolution pattern as pr-fast.yml.
       - name: Install Chromium-for-Testing (mochi browsers install — idempotent)
         run: bun packages/cli/src/bin.ts browsers install
@@ -70,6 +81,9 @@ jobs:
           fi
           echo "Found Chromium at: $BINARY"
           echo "MOCHI_CHROMIUM_PATH=$BINARY" >> "$GITHUB_ENV"
+          echo "::group::Chromium --version smoke"
+          "$BINARY" --version
+          echo "::endgroup::"
 
       # Pre-publish conformance gates — v1.0 release blocks on these.
       # PLAN.md I-7 ("the harness is the gate"). Publish is blocked unless
