@@ -18,7 +18,10 @@
       "!packages/profiles/data",
       "!schemas/probe-manifest.schema.json",
       "!tests/fixtures/probe-page.html",
-      "!tests/fixtures/cloakbrowser"
+      "!tests/fixtures/cloakbrowser",
+      "!docs/.design-reference",
+      "!docs/site/dist",
+      "!docs/site/.astro"
     ]
   },
   "formatter": {
