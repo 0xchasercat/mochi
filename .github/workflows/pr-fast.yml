@@ -31,6 +31,19 @@ jobs:
         run: bun run test
       - name: Contract tests
         run: bun run test:contract
+      # Cache + install Chromium-for-Testing so the MOCHI_E2E-gated steps
+      # below (harness:smoke, conformance:stealth, conformance:humanize)
+      # have a real binary to drive. Dogfoods `mochi browsers install` —
+      # if it breaks on Linux CI, we want to know in PR-fast, not nightly.
+      - name: Cache Chromium-for-Testing
+        id: cache-chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.mochi/browsers
+          key: chromium-for-testing-linux-${{ runner.os }}-v1
+      - name: Install Chromium-for-Testing (mochi browsers install)
+        if: steps.cache-chromium.outputs.cache-hit != 'true'
+        run: bun packages/cli/src/bin.ts browsers install
       # Harness smoke gate — Phase 0.5 deliverable. Drives a Mochi-spoofed
       # session through tests/fixtures/probe-page.html, normalizes both sides,
       # and structurally diffs against each profile's committed baseline.

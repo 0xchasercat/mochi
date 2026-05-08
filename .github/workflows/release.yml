@@ -46,6 +46,19 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile
 
+      # Cache + install Chromium-for-Testing so the MOCHI_E2E-gated
+      # conformance steps below have a real binary to drive. Same pattern
+      # as pr-fast.yml.
+      - name: Cache Chromium-for-Testing
+        id: cache-chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.mochi/browsers
+          key: chromium-for-testing-linux-${{ runner.os }}-v1
+      - name: Install Chromium-for-Testing (mochi browsers install)
+        if: steps.cache-chromium.outputs.cache-hit != 'true'
+        run: bun packages/cli/src/bin.ts browsers install
+
       # Pre-publish conformance gates — v1.0 release blocks on these.
       # PLAN.md I-7 ("the harness is the gate"). Publish is blocked unless
       # all three pass — with documented expected-failures from
