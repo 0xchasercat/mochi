@@ -6,7 +6,7 @@
  * handler:
  *
  *   1. `Session({ proxyAuth: { ... } })` calls `Fetch.enable`
- *      with `handleAuthRequests: true, patterns: []` and answers
+ *      with `handleAuthRequests: true, patterns: [{ urlPattern: "*" }]` and answers
  *      `Fetch.authRequired` events with `Fetch.continueWithAuth`.
  *   2. `Session()` without `proxyAuth` does NOT call `Fetch.enable`
  *      (no protocol surface, no perf cost).
@@ -139,7 +139,7 @@ describe("proxy-auth contract (PLAN.md §8.2 / §10, task 0160)", () => {
     await new Promise((r) => setTimeout(r, SETUP_DELAY_MS));
     const enable = f.written.find((c) => c.method === "Fetch.enable");
     expect(enable).toBeDefined();
-    expect(enable?.params).toEqual({ handleAuthRequests: true, patterns: [] });
+    expect(enable?.params).toEqual({ handleAuthRequests: true, patterns: [{ urlPattern: "*" }] });
     await session.close();
   });
 

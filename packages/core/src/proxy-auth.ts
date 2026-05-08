@@ -12,9 +12,14 @@
  * stealth invariants.
  *
  * The CDP path is invariant-clean: enable `Fetch` with `handleAuthRequests`
- * and *empty* request patterns. Chromium fires `Fetch.authRequired` ONLY for
- * proxy auth challenges; regular request flow is unaffected (no
- * `Fetch.requestPaused` events when patterns is `[]`). We answer with
+ * AND a wildcard pattern. Chromium rejects `patterns: []` when
+ * `handleAuthRequests: true` (`-32602 Can't specify empty patterns with
+ * handleAuth set`, verified on CfT linux ~2026-05) — the original 0160
+ * design assumed empty patterns would only fire `Fetch.authRequired`
+ * events, but modern Chromium requires at least one URL pattern when auth
+ * handling is on. We use `[{ urlPattern: "*" }]` and forward every paused
+ * request immediately via `Fetch.continueRequest`. The auth challenges
+ * separately fire `Fetch.authRequired`; we answer those with
  * `Fetch.continueWithAuth` carrying the parsed credentials.
  *
  * PLAN.md §8.2 invariant check
@@ -25,9 +30,11 @@
  * isolated world) are forbidden. `Fetch.enable` operates at the network
  * layer below page script — it does not produce execution-context-creation
  * events, does not surface a `chrome.devtools` global, and is not
- * detectable from page JavaScript. The defensive `Fetch.requestPaused`
- * handler below is unreachable when `patterns: []` is set, but registered
- * as belt-and-braces in case a Chromium quirk triggers a pause.
+ * detectable from page JavaScript. With `patterns: [{urlPattern: "*"}]`
+ * every request pauses for one CDP round-trip before continuing — that's
+ * a measurable but bounded overhead (sub-ms per request on modern
+ * hardware) and only active on sessions with proxy auth credentials
+ * (the function early-returns when `auth` is undefined).
  *
  * Protocols
  * ---------
@@ -146,17 +153,20 @@ export interface ProxyAuthHandle {
  * any protocol surface for sessions that don't need it.
  *
  * Behavior:
- *   - Sends `Fetch.enable { handleAuthRequests: true, patterns: [] }` once.
+ *   - Sends `Fetch.enable { handleAuthRequests: true, patterns: [{
+ *     urlPattern: "*" }] }` once.
  *   - On `Fetch.authRequired`, replies with `Fetch.continueWithAuth` and
  *     the parsed creds.
- *   - On `Fetch.requestPaused` (defensive — should never fire with empty
- *     patterns), forwards `Fetch.continueRequest` so we don't hang.
+ *   - On `Fetch.requestPaused`, forwards `Fetch.continueRequest`
+ *     immediately so the network model stays unchanged (every request
+ *     still flows; we just take one CDP round-trip to wave it through).
  *
- * The empty `patterns` array is critical: any non-empty patterns turn
- * Chromium into an interception proxy for matching requests, which tanks
- * page perf and changes the network model. Empty patterns +
- * `handleAuthRequests: true` is the documented contract for "auth-only
- * interception".
+ * Why wildcard patterns instead of empty: modern Chromium (CfT linux
+ * ~2026-05) rejects `patterns: []` when `handleAuthRequests: true` is set
+ * with `-32602 Can't specify empty patterns with handleAuth set`. The
+ * wildcard plus an immediate-continue handler is the equivalent of
+ * "auth-only interception" with one extra round-trip per request — only
+ * active on proxy-authed sessions.
  */
 export async function installProxyAuth(
   router: MessageRouter,
@@ -186,22 +196,29 @@ export async function installProxyAuth(
       });
   });
 
-  // Defensive — `patterns: []` means this event should never fire, but
-  // some Chromium builds may pause requests adjacent to auth challenges.
-  // If it ever fires, immediately continue so we don't hang the request.
+  // Pattern is REQUIRED with handleAuthRequests: true. Modern Chromium
+  // rejects an empty `patterns` array with `-32602 Can't specify empty
+  // patterns with handleAuth set` (verified on CfT linux ~2026-05). Use
+  // a wildcard pattern so every request paus es, then immediately
+  // forward in the requestPaused handler below — that gets us auth
+  // challenge interception without altering the user-visible network
+  // model. The per-request CDP round-trip is real overhead but only
+  // active when the session has proxy auth credentials (this whole
+  // function early-returns when `auth` is undefined), so non-proxied
+  // sessions pay zero cost.
   const offPaused: Unsubscribe = router.on("Fetch.requestPaused", (params) => {
     const requestId = (params as { requestId?: string } | null)?.requestId;
     if (typeof requestId !== "string") return;
     router.send("Fetch.continueRequest", { requestId }).catch((err: unknown) => {
       if (!isClosedError(err)) {
-        console.warn("[mochi] Fetch.continueRequest (defensive) failed:", err);
+        console.warn("[mochi] Fetch.continueRequest failed:", err);
       }
     });
   });
 
   await router.send("Fetch.enable", {
     handleAuthRequests: true,
-    patterns: [],
+    patterns: [{ urlPattern: "*" }],
   });
 
   let disposed = false;
