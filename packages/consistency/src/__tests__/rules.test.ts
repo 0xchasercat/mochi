@@ -323,4 +323,39 @@ describe("rules — v0.2 ruleset (golden lock)", () => {
     // (which would emit "8.0.0.0" — explicitly NOT what we want).
     expect(macMatrix.uaCh["ua-full-version"]).toBe("131.0.6778.110");
   });
+
+  // ---- task 0267 rules (R-047 / R-048) — audio + canvas fingerprint ------
+
+  it("R-047: audio-fingerprint slot carries sampleRate + audioHash + 10-sample window", () => {
+    const audio = JSON.parse(macMatrix.uaCh["audio-fingerprint"] ?? "{}") as {
+      sampleRate: number;
+      audioHash: string;
+      sampleValues: number[];
+    };
+    // Off-list fixture id falls back to the macOS baseline. The shape must
+    // be present regardless.
+    expect(typeof audio.sampleRate).toBe("number");
+    expect(typeof audio.audioHash).toBe("string");
+    expect(Array.isArray(audio.sampleValues)).toBe(true);
+    expect(audio.sampleValues.length).toBe(10);
+  });
+
+  it("R-048: canvas-fingerprint slot carries hash + dataUrlPrefix + dataUrlLength", () => {
+    const canvas = JSON.parse(macMatrix.uaCh["canvas-fingerprint"] ?? "{}") as {
+      consistent: boolean;
+      hash: string;
+      dataUrlLength: number;
+      dataUrlPrefix: string;
+      webpSupport: boolean;
+      jpegHighLength: number;
+      jpegLowLength: number;
+    };
+    expect(canvas.consistent).toBe(true);
+    expect(canvas.hash).toMatch(/^[0-9A-F]{8}$/);
+    expect(canvas.dataUrlPrefix.startsWith("data:image/png;base64,")).toBe(true);
+    expect(canvas.dataUrlLength).toBeGreaterThan(canvas.dataUrlPrefix.length);
+    expect(typeof canvas.webpSupport).toBe("boolean");
+    expect(canvas.jpegHighLength).toBeGreaterThan(0);
+    expect(canvas.jpegLowLength).toBeGreaterThan(0);
+  });
 });

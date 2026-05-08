@@ -3,14 +3,6 @@
   "profile": "linux-chrome-stable",
   "paths": [
     {
-      "path": "audio.**",
-      "comment": "Audio fingerprint bytes (sampleValues, audioHash) require precomputed per-(profile, sample-rate) byte tables — task 0071. docs/limits.md \"Audio fingerprinting (OfflineAudioContext) is NOT spoofed at v0.3\" carried over to v0.7 phase split."
-    },
-    {
-      "path": "canvas.**",
-      "comment": "Canvas hash + dataUrl spoofing requires precomputed hash maps for the standard probe payloads + per-pixel noise injection — task 0071. docs/limits.md \"Canvas fingerprinting (HTMLCanvasElement.toDataURL) is NOT spoofed at v0.3\" carried over to v0.7 phase split."
-    },
-    {
       "path": "speech.**",
       "comment": "speechSynthesis.getVoices() returns the host's installed system voices on real Chrome (typically 200+ entries on macOS, 20+ on Linux/Win). Chromium-for-Testing ships with no voice tables, so mochi spoofs voices=[]. Restoring real-device voice lists is a phase 0.7 deliverable (precomputed voice tables per-OS) tracked alongside audio/canvas. PLAN.md §13.6."
     },
