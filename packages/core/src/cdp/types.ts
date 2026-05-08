@@ -99,3 +99,54 @@ export interface AttachedToTargetEvent {
   };
   waitingForDebugger: boolean;
 }
+
+/**
+ * Subset of `DOM.BoxModel` we consume in `Page.humanClick`. CDP returns the
+ * border-box (and content-box, padding-box, etc.) as flat 8-number quads:
+ * `[x0, y0, x1, y1, x2, y2, x3, y3]` walking the corners CCW.
+ *
+ * @see https://chromedevtools.github.io/devtools-protocol/tot/DOM/#type-BoxModel
+ */
+export interface BoxModel {
+  content: readonly number[];
+  border: readonly number[];
+  padding: readonly number[];
+  margin: readonly number[];
+  width: number;
+  height: number;
+}
+
+/**
+ * Subset of `Input.dispatchMouseEvent` parameters we send. The full CDP type
+ * has many optional fields; we only construct the ones the behavioral path
+ * actually needs.
+ *
+ * @see https://chromedevtools.github.io/devtools-protocol/tot/Input/#method-dispatchMouseEvent
+ */
+export interface DispatchMouseEventParams {
+  type: "mousePressed" | "mouseReleased" | "mouseMoved" | "mouseWheel";
+  x: number;
+  y: number;
+  button?: "none" | "left" | "middle" | "right";
+  buttons?: number;
+  clickCount?: number;
+  modifiers?: number;
+  deltaX?: number;
+  deltaY?: number;
+}
+
+/**
+ * Subset of `Input.dispatchKeyEvent` parameters we send.
+ *
+ * @see https://chromedevtools.github.io/devtools-protocol/tot/Input/#method-dispatchKeyEvent
+ */
+export interface DispatchKeyEventParams {
+  type: "keyDown" | "keyUp" | "rawKeyDown" | "char";
+  key?: string;
+  code?: string;
+  text?: string;
+  unmodifiedText?: string;
+  modifiers?: number;
+  windowsVirtualKeyCode?: number;
+  nativeVirtualKeyCode?: number;
+}

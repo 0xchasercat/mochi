@@ -119,6 +119,72 @@ The following are **expected** limits we'll formalize as the framework is built.
 
 ---
 
+## v0.8 (behavioral engine landed) — known limits
+
+### Real-trace recording / replay (`mochi record`)
+
+**Status:** known limit (deferred to v1.x)
+**Root cause:** v0.8 ships *synthesis-only*. A future `mochi record` API will
+capture a real session's mouse / keyboard event stream and let the user replay
+it through `humanClick(selector, { trace })`. The contract leaves room for it
+(the `humanClick` opts surface is forward-compatible) but the recorder is out
+of scope for v0.8 — synthesis covers the visible-trajectory bot-detection
+heuristics on its own.
+**Affected probes:** none today. Mentioned here for completeness.
+**User workaround:** none needed; synthesis is the v0.8 answer.
+**Tracking:** v1.x.
+
+### Per-profile mouse acceleration curves
+
+**Status:** known limit (deferred to v1.x)
+**Root cause:** v0.8 uses a single Fitts-derived velocity profile (constant `a`
+and `b` per profile). Real human motion is reported in some literature to
+exhibit profile-specific acceleration / deceleration curves. PLAN.md §11
+defers this nuance to v1.x because the synthesizer's overshoot+correction
+already covers the dominant detectable signal.
+**Affected probes:** academic mouse-velocity classifiers (no commercial probe
+known to consume this).
+**Mitigation:** none at v0.8.
+**Tracking:** v1.x.
+
+### Touch-gesture synthesis (mobile profiles)
+
+**Status:** known limit (deferred to v2)
+**Root cause:** v1 profiles are desktop Chromium-family only. Touch gestures
+(tap / swipe / pinch / rotate) require a different model: pressure curves,
+multi-touch coordination, OS-specific touch-event sequencing. Out of scope
+until mobile profiles ship in v2.
+**Affected probes:** any TouchEvent / PointerEvent (`pointerType: "touch"`)
+fingerprinting.
+**Mitigation:** none today. mochi sessions never claim to be mobile in v1.
+**User workaround:** wait for v2 mobile profiles.
+**Tracking:** v2 — mobile profiles.
+
+### Realistic typing-error correction beyond "type wrong, backspace, retype"
+
+**Status:** known limit (deferred to v1.x)
+**Root cause:** Real typists sometimes notice an error several keystrokes
+later and correct it with a series of backspaces. v0.8's mistake model
+corrects immediately ("type adjacent key → backspace → type correct key").
+The literature reports this is the dominant pattern at sub-3% error rates
+(typical for `mistakeRate=0.02`); higher rates would benefit from the
+deferred-correction model.
+**Affected probes:** anti-bot heuristics that score "perfectness" of typing
+patterns over long-form input.
+**Mitigation:** keep `mistakeRate` close to the default 0.02.
+**Tracking:** v1.x.
+
+### Eye-tracking-coupled mouse models
+
+**Status:** known limit (deferred to v2+)
+**Root cause:** Some research-grade bot detectors look for the slight gaze /
+mouse coupling characteristic of human attention. Synthesizing this requires
+a saliency model and is well beyond the JS layer.
+**Affected probes:** none in commercial deployment as of 2026-05.
+**Tracking:** v2+ research item.
+
+---
+
 ## v0.1 (CDP transport landed) — known limits
 
 ### `page.evaluate(fn)` is `Runtime.callFunctionOn`-based, not full `Runtime.evaluate`
@@ -138,11 +204,15 @@ The following are **expected** limits we'll formalize as the framework is built.
 **Mitigation:** v0.1 silently uses `"load"` semantics when `"networkidle"` is requested. `"load"` and `"domcontentloaded"` work as expected.
 **Tracking:** to be addressed in a follow-up task once Network domain enablement is properly scoped per-frame.
 
-### `Session.fetch`, `Page.humanClick`, `Page.humanType`, `Page.humanScroll`, `Page.screenshot`
+### `Session.fetch`, `Page.screenshot`
 
 **Status:** placeholder — `NotImplementedError`
-**Root cause:** out of scope for phase 0.1 per `tasks/0011-cdp-pipe-transport.md`. Phase 0.6 wires `Session.fetch`; phase 0.8 wires the human-input surface; `screenshot` lands in a follow-up.
+**Root cause:** out of scope for phase 0.1 per `tasks/0011-cdp-pipe-transport.md`. Phase 0.6 wires `Session.fetch`; `screenshot` lands in a follow-up.
 **Mitigation:** none needed; the error message names the API and the phase.
+
+> Phase 0.8 graduated `Page.humanClick` / `Page.humanType` / `Page.humanScroll`
+> from placeholder to real implementations. See the "v0.8" section above for
+> the known limits of the behavioral engine.
 
 ### `Session.cookies()` URL filter is host-only
 

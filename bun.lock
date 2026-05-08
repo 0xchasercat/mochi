@@ -17,6 +17,9 @@
     "packages/behavioral": {
       "name": "@mochi.js/behavioral",
       "version": "0.0.1",
+      "dependencies": {
+        "@mochi.js/consistency": "workspace:*",
+      },
     },
     "packages/cli": {
       "name": "@mochi.js/cli",
@@ -37,6 +40,7 @@
       "name": "@mochi.js/core",
       "version": "0.0.1",
       "dependencies": {
+        "@mochi.js/behavioral": "workspace:*",
         "@mochi.js/consistency": "workspace:*",
         "@mochi.js/inject": "workspace:*",
       },

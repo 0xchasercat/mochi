@@ -25,7 +25,7 @@
  * @see PLAN.md §5.2 and §9
  */
 
-export const VERSION = "0.2.0" as const;
+export const VERSION = "0.2.1" as const;
 
 export { deriveMatrix } from "./derive";
 export { CONSISTENCY_ENGINE_VERSION } from "./engine-version";
@@ -34,6 +34,16 @@ export type { MatrixV1 } from "./generated/matrix";
 // Canonical types are generated from schemas/*.schema.json by `bun run codegen`.
 // @mochi.js/consistency *owns* both ProfileV1 and MatrixV1 — see AGENTS.md §5.
 export type { ProfileV1 } from "./generated/profile";
-export type { SeededPrng } from "./prng/xoshiro256ss";
+// Public PRNG surface — promoted from internal at v0.2.1 so downstream packages
+// (e.g. `@mochi.js/behavioral`, phase 0.8) can reuse the seeded xoshiro256**
+// without re-implementing it. See PLAN.md §5.5 ("pure-data principle"): the
+// behavioral engine is deterministic, and its determinism MUST share the same
+// PRNG primitive as the consistency engine to avoid divergence.
+//
+// Sub-export `@mochi.js/consistency/prng` is also exposed via package.exports
+// so consumers may import it without pulling the rule DAG. The barrel here
+// is the canonical re-export.
+export { deriveSeedState, seedToPrng } from "./prng/seed";
+export { makeXoshiro256ss, type SeededPrng } from "./prng/xoshiro256ss";
 export type { Rule } from "./rule";
 export { RULES } from "./rules";

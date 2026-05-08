@@ -149,6 +149,11 @@ export class Session {
       sessionId: attached.sessionId,
       initialUrl: "about:blank",
       ...(injectScriptIdentifier !== undefined ? { injectScriptIdentifier } : {}),
+      // PLAN.md I-5: behavior comes from MatrixV1.behavior (the matrix is
+      // the single source of truth — `Session.profile` is the resolved
+      // MatrixV1). Per-call opts may override individual fields.
+      behavior: this.profile.behavior,
+      seed: this.seed,
     });
     this._pages.push(page);
     return page;

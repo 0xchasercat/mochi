@@ -11,6 +11,11 @@
       "bun": "./src/index.ts",
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./prng": {
+      "bun": "./src/prng/index.ts",
+      "types": "./src/prng/index.ts",
+      "default": "./src/prng/index.ts"
     }
   },
   "files": [
