@@ -1,5 +1,83 @@
 # @mochi.js/core
 
+## 0.2.1
+
+### Patch Changes
+
+- 59d7b91: Auto-add `--no-sandbox` when `mochi.launch()` detects Linux + root UID and no `--no-sandbox` is already set. Chromium refuses to start as root with the user-namespace sandbox enabled; previously this surfaced as an opaque `EPIPE: broken pipe` from the first CDP write. Now mochi logs a one-line warning naming the fingerprint trade-off and injects the flag so the launch succeeds.
+
+  Stealth-critical workloads can opt out with `allowRootWithSandbox: true` on `LaunchOptions`. PLAN.md §8.6 still excludes `--no-sandbox` from `DEFAULT_CHROMIUM_FLAGS` — this is a runtime fallback, not a default. The flag is logged so it's never silent.
+
+- 2855668: `spawnChromium` now diagnoses Chromium dying within 750ms of spawn and surfaces a clear error naming the most likely cause — sandbox refusal under root, missing libs, malformed flags — instead of letting the eventual EPIPE on the first CDP write bubble up with no context. When the stderr tail matches Chromium's "Running as root without --no-sandbox" pattern, the error includes the canonical fixes (run as non-root, `chmod 4755 chrome-sandbox`, or `args: ['--no-sandbox']`).
+
+  Plus a "Linux gotcha — Chromium and root" note in `docs/quickstart.md` so server / dev-rig setups don't hit the EPIPE first.
+
+- a7d8ca9: Defensive UA override at the network layer (task 0255).
+
+  `Session.newPage` now sends `Network.setUserAgentOverride` on every page
+  session immediately after `Target.attachToTarget` and before
+  `Page.addScriptToEvaluateOnNewDocument`. Closes a real defensive gap: under
+  `--headless=new` (task 0220) Chromium's bare User-Agent header still contains
+  `"HeadlessChrome"`. The inject module patches `navigator.userAgent` in JS,
+  but early subresource / preload / navigation `Network.requestWillBeSent`
+  events fire BEFORE any document script can run — only a CDP-level UA
+  override on the page session catches those bytes.
+
+  `Network.setUserAgentOverride` is a stateless setter that does NOT require
+  `Network.enable`, so the §8.2 invariant (no global `Network.enable`) is
+  unaffected. Skipped under `bypassInject:true` because capture flows must
+  record the bare browser fingerprint.
+
+  Pinned by a new two-layer contract test
+  (`tests/contract/headless-ua-no-leak.contract.test.ts`):
+
+  1. The built inject payload bundle contains no `"Headless"` substring.
+  2. `Session.newPage` sends `Network.setUserAgentOverride(matrix.userAgent)`
+     on the page session before the inject install, and the simulated
+     `Network.requestWillBeSent` UA is the matrix UA — never `"HeadlessChrome"`.
+
+  Sources: udc `__init__.py:519-527`, nodriver `tab.py:203-222` (both flag
+  the same defensive gap as LOW).
+
+- ddcc49e: Pin Chromium's outer-window geometry from `matrix.display.{width,height}` per
+  task 0252.
+
+  Under `--headless=new` Chromium's outer window defaults to 800×600 regardless
+  of the JS-spoofed `screen.*` surface — `fingerprint-scan.com` flags the
+  mismatch because `window.outerWidth/outerHeight` reads from the OS-level
+  window, not the spoof. `launch.ts` now derives `--window-size=<W>,<H>` from
+  the matrix's `display` slot and passes it to `spawnChromium`, so the OS
+  window matches the spoof. When `display.{width,height}` is missing or
+  malformed the flag is omitted (the matrix is canonical — no hardcoded
+  fallback).
+
+  Defensive scrub: `--start-maximized` is stripped from `LaunchOptions.args`
+  and `MOCHI_EXTRA_ARGS`. UDC adds it; mochi must not — it produces
+  host-OS-dependent geometry that drifts from the matrix's display spoof.
+
+  Source: UDC `__init__.py:410-411`, UDC issue #2242.
+
+- ef00f63: Tighten the worker payload-inject race window via patchright's
+  `Runtime.evaluate("globalThis", { serialization: "idOnly" })` trick
+  (task 0254). On `Target.attachedToTarget` for a worker-style target,
+  mochi now extracts the worker's executionContextId by parsing
+  `objectId.split(".")[1]` of an idOnly-serialised `globalThis`, then
+  delivers the inject via `Runtime.callFunctionOn({ functionDeclaration,
+executionContextId, returnByValue: true })` before
+  `Runtime.runIfWaitingForDebugger`. The bound-context call replaces
+  v0.1.x's bare `Runtime.evaluate({ expression: payload.code })`, which
+  worked but was coarser.
+
+  The §8.2 forbidden-method invariant is preserved: `Runtime.enable` is
+  never sent. The whole point of the idOnly bootstrap is to extract the
+  contextId without it. A new contract test
+  (`tests/contract/worker-idonly-bootstrap.contract.test.ts`) pins the
+  call sequence and the negative invariant, and asserts the parser fails
+  loudly if Chromium ever shifts the objectId wire format.
+
+  Source-cited reference: patchright `crServiceWorkerPatch.ts:32-43`,
+  `crPagePatch.ts:404-417`.
+
 ## 0.2.0
 
 ### Minor Changes
