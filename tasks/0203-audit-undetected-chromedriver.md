@@ -47,3 +47,18 @@ bun work submit 0203 --draft
 
 - WebDriver-protocol concerns. We don't use it. Note + move on.
 - Implementing fixes.
+
+## Success criteria
+
+Per the "Method" + "Report format" sections above. This is a research-only brief: success = a non-empty, source-citing audit report at `docs/audits/undetected-chromedriver.md` matching the template (Summary / They-have / We-have / Bench / Adoption / Out-of-scope / Convenience). The report becomes Phase B (synthesis) input.
+
+## Implementation notes
+
+This task does NOT modify any source files. It produces one markdown audit report. Follow the "Method" section verbatim — no code, no test harnesses, no PR-touching first-party packages. If you find yourself editing `packages/*/src/*`, you're outside scope; stop and surface.
+
+## Validation
+
+```sh
+test -f docs/audits/undetected-chromedriver.md && wc -w docs/audits/undetected-chromedriver.md  # word count <= 1500
+grep -E '^## (Summary|They have|We have|Bench|Recommended|Out of scope)' docs/audits/undetected-chromedriver.md | wc -l  # all sections present
+```

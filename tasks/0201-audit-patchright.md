@@ -52,3 +52,18 @@ bun work submit 0201 --draft
 - Implementing any fixes — Phase B/C work.
 - Speculation without source citation.
 - Comparing patchright's Playwright-fork code paths to mochi's CDP-direct code paths in detail — too low-level. Compare semantics not implementations.
+
+## Success criteria
+
+Per the "Method" + "Report format" sections above. This is a research-only brief: success = a non-empty, source-citing audit report at `docs/audits/patchright.md` matching the template (Summary / They-have / We-have / Bench / Adoption / Out-of-scope / Convenience). The report becomes Phase B (synthesis) input.
+
+## Implementation notes
+
+This task does NOT modify any source files. It produces one markdown audit report. Follow the "Method" section verbatim — no code, no test harnesses, no PR-touching first-party packages. If you find yourself editing `packages/*/src/*`, you're outside scope; stop and surface.
+
+## Validation
+
+```sh
+test -f docs/audits/patchright.md && wc -w docs/audits/patchright.md  # word count <= 1500
+grep -E '^## (Summary|They have|We have|Bench|Recommended|Out of scope)' docs/audits/patchright.md | wc -l  # all sections present
+```

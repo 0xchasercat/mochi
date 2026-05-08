@@ -68,3 +68,15 @@ git add README.md docs/quickstart.md CONTRIBUTING.md
 git commit -m "docs(repo): world-class README + banner + 5-min quickstart"
 bun work submit 0230 --draft
 ```
+
+## Validation
+
+```sh
+# README + quickstart exist
+test -f README.md && test -f docs/quickstart.md
+# README references the banner and at least one of the published packages
+grep -q "assets/mochi-banner.png" README.md
+grep -q "@mochi.js/" README.md
+# Markdown lints clean (no broken internal links to nonexistent files)
+test -f LICENSE && test -f docs/limits.md && test -f CHANGELOG.md
+```
