@@ -59,7 +59,7 @@ The full 5-minute walkthrough — profile selection, first `humanClick`, expecte
 - **Zero-jitter spoofing.** A single ~50KB inject payload runs at top-of-frame via `Page.addScriptToEvaluateOnNewDocument({ runImmediately: true })`. JIT-friendly Proxy traps, no async round-trips when a WAF micro-times `performance.now()`.
 - **Behavioral synthesis.** `humanClick` / `humanType` / `humanScroll` derive from biomechanical models — Bezier paths with overshoot+correction, Fitts-law movement times, lognormal digraph delays, Gaussian jitter — all parameterized per profile (`hand`, `tremor`, `wpm`, `scrollStyle`).
 - **JA4-coherent out-of-band HTTP.** `session.fetch(url)` ships through Bun:FFI → Rust crate → [`wreq`](https://github.com/0x676e67/wreq), so fetched bytes carry the same TLS/H2 fingerprint as the spoofed Chrome profile.
-- **Probe-Manifest harness.** `bun run harness:smoke` captures a [Probe Manifest](https://github.com/CloakHQ/peekaboo) from the live session and diffs it against per-profile baselines. Zero-Diff is a CI gate; intentional divergences live in `expected-divergences.json` next to a rationale.
+- **Probe-Manifest harness.** `bun run harness:smoke` captures a [Probe Manifest](https://github.com/0xchasercat/mochi/blob/main/schemas/probe-manifest.schema.json) from the live session and diffs it against per-profile baselines. Zero-Diff is a CI gate; intentional divergences live in `expected-divergences.json` next to a rationale.
 - **Stock Chromium.** No forks, no patches, no proprietary infrastructure. Pinned Chromium-for-Testing, auto-downloaded by `mochi browsers install`. BYO via `binary: <path>`.
 
 ## What works / what doesn't
