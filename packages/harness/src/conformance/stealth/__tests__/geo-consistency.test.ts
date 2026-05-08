@@ -101,7 +101,10 @@ describeOrSkip(
             // 0; without this rewrite the test fails on the negation
             // even though the runtime value is numerically correct.
             // Brief 0263 documented this as the canonical workaround.
-            const pageOffsetMin = await evalExpr<number>(page, "0 - new Date().getTimezoneOffset()");
+            const pageOffsetMin = await evalExpr<number>(
+              page,
+              "0 - new Date().getTimezoneOffset()",
+            );
 
             // Step 4 — passes if the matrix is UTC (privacy-fallback
             // already kicked in). The session's reconciled matrix is
