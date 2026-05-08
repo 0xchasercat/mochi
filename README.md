@@ -82,6 +82,9 @@ Direct port from [`docs/limits.md`](docs/limits.md) — the architectural-honest
 | `session.fetch` on FreeBSD / Alpine musl / Windows arm64 | partial | No prebuilt; falls back to local `cargo build`. |
 | `Page.screenshot` | works | PNG/JPEG/WebP via CDP `Page.captureScreenshot`; `fullPage`, `clip`, `omitBackground`, `quality`, `encoding` opts. Element-bounded capture (`{ element: handle }`) is a separate brief. |
 | Proxy auth (HTTP/HTTPS/SOCKS5) | works | Inline URL or `ProxyConfig` shape; CDP `Fetch.authRequired`, no extension. |
+| Cookie persistence (`Session.cookies.{save,load}`) | works | JSON file with version header + regex domain filter. Round-trips losslessly. |
+| `Page.localStorage.{get,set}` / `Page.sessionStorage` | works | DOMStorage CDP, frame-scoped (defaults to current main-frame origin). |
+| `Page.grantAllPermissions()` | works | Wraps `Browser.grantPermissions` with the full descriptor list. Pairs with R-036. |
 | Proxy-PAC scripts | not yet | Use system network policy until the flag lands. |
 | Turnstile auto-click | not yet | Tracked in task 0220. |
 | `bot.incolumitas.com` anti-debugger trap | known limit | C++-only fix path. Every CDP-driven tool trips it identically. |

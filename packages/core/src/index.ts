@@ -42,8 +42,13 @@ export {
   type ProxyConfig,
 } from "./launch";
 export {
+  ALL_BROWSER_PERMISSIONS,
+  type BrowserPermission,
   type Cookie,
+  type DomStorage,
+  type DomStorageOptions,
   type GotoOptions,
+  type GrantAllPermissionsOptions,
   type HumanClickOptions,
   type HumanMoveOptions,
   type HumanScrollOptions,
@@ -59,5 +64,13 @@ export { ElementHandle, type ElementHandleInit } from "./page/element-handle";
 // Proxy URL parsing — exported so tests + downstream tools can normalize
 // proxy strings without going through `launch()`.
 export { type ParsedProxy, parseProxyUrl } from "./proxy-auth";
-export { Session, type SessionInit, type StorageSnapshot } from "./session";
+export {
+  COOKIE_JAR_FORMAT_VERSION,
+  type CookieJar,
+  type CookieJarFile,
+  type CookieJarOptions,
+  Session,
+  type SessionInit,
+  type StorageSnapshot,
+} from "./session";
 export { VERSION } from "./version";
