@@ -44,22 +44,7 @@ import {
 const TEST_TIMEOUT_MS = 30_000;
 const SUITE_TIMEOUT_MS = 60_000;
 
-// FIXME(0263): TEMPORARILY SKIPPED. The negation-of-getTimezoneOffset
-// expression `evalExpr(page, "-(new Date().getTimezoneOffset())")` returns
-// undefined through the page.evaluate round-trip — likely the same
-// underlying issue as the UA-CH parity test (page.evaluate / evalExpr
-// quirk that loses certain return shapes). The matrix→CDP timezone
-// override IS being applied correctly (the `pageTz === "UTC"` line
-// passes), but the offset readback fails.
-//
-// The reconciler logic is still pinned by `geo-consistency.test.ts`
-// unit tests (24 tests) and `tests/contract/geo-consistency.contract.
-// test.ts` (mocked CDP — verifies Emulation.setTimezoneOverride params).
-//
-// Proper fix tracked in task 0263. Re-enable once 0263 lands.
-const describeOrSkip = describe.skip; // was: E2E_ENABLED && ONLINE_ENABLED ? describe : describe.skip;
-void E2E_ENABLED;
-void ONLINE_ENABLED;
+const describeOrSkip = E2E_ENABLED && ONLINE_ENABLED ? describe : describe.skip;
 
 describeOrSkip(
   `stealth conformance / geo-consistency (profile=${CONFORMANCE_PROFILE}, MOCHI_E2E=1+ONLINE=1)`,

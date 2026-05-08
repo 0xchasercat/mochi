@@ -45,23 +45,7 @@ import {
 const TEST_TIMEOUT_MS = 30_000;
 const SUITE_TIMEOUT_MS = 90_000;
 
-// FIXME(0263): TEMPORARILY SKIPPED. The test calls
-// `evalExpr(page, "navigator.userAgentData.getHighEntropyValues([...])")`,
-// which returns a Promise. mochi's `page.evaluate` invokes
-// `Runtime.callFunctionOn` WITHOUT `awaitPromise: true`, so the Promise
-// round-trips as undefined and `jsHints.platform` is undefined →
-// `expect(unquote(headers["sec-ch-ua-platform"])).toBe(jsHints.platform)`
-// asserts undefined === "macOS" → fail.
-//
-// The underlying contract is still pinned by `tests/contract/uach-network-
-// parity.contract.test.ts` (assertions byte-equal between matrix → CDP
-// userAgentMetadata send AND inject's SPOOF_* constants — the same
-// invariant this live test was redundantly validating).
-//
-// Proper fix tracked in task 0263 (page.evaluate awaitPromise + evalExpr
-// async support). Re-enable once 0263 lands.
-const describeOrSkip = describe.skip; // was: E2E_ENABLED ? describe : describe.skip;
-void E2E_ENABLED;
+const describeOrSkip = E2E_ENABLED ? describe : describe.skip;
 
 interface CapturedHeaders {
   "sec-ch-ua": string | null;

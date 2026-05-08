@@ -311,6 +311,14 @@ export class Page {
    * document (so `this` === document). Result is JSON-serialized via
    * `returnByValue: true`.
    *
+   * The function may return a value or a `Promise`. Promise-returning
+   * functions are awaited page-side via `awaitPromise: true` (CDP's canonical
+   * mechanism for async eval) — without that flag, an `async () => ...`
+   * function round-trips its returned Promise as `undefined` because CDP
+   * serializes the Promise object itself, not its resolution. `awaitPromise`
+   * is NOT on PLAN.md §8.2's forbidden list — only `Runtime.enable` and
+   * `Page.createIsolatedWorld` are. Available since Chromium 67.
+   *
    * Limitations (documented in docs/limits.md):
    *   - Non-JSON return values (functions, DOM nodes, undefined) are
    *     coerced/dropped per CDP semantics.
@@ -319,13 +327,14 @@ export class Page {
    *     standard for any cross-process evaluator).
    *   - Arguments cannot be passed in v0.1; the function takes no args.
    */
-  async evaluate<T>(fn: () => T): Promise<T> {
+  async evaluate<T>(fn: () => T | Promise<T>): Promise<T> {
     this.assertOpen();
     const docId = await this.documentObjectId();
     const result = await this.send<{ result: RemoteObject }>("Runtime.callFunctionOn", {
       objectId: docId,
       functionDeclaration: fn.toString(),
       returnByValue: true,
+      awaitPromise: true,
     });
     return result.result.value as T;
   }
