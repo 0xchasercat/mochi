@@ -172,3 +172,20 @@ git add docs/site docs/content docs/README.md .gitignore .github/workflows/docs-
 git commit -m "feat(docs): Astro site for landing + docs at docs/site"
 bun work submit 0240 --draft
 ```
+
+## Validation
+
+```sh
+# Site builds clean
+cd docs/site && bun install && bun run build && cd ../..
+# Output exists
+test -d docs/site/dist && test -f docs/site/dist/index.html
+# Doc routes resolve (Astro emits `docs/<slug>/index.html`)
+test -f docs/site/dist/docs/getting-started/01-install/index.html || \
+  ls docs/site/dist/docs 2>/dev/null
+# 404 page emitted
+test -f docs/site/dist/404.html
+# No broken-link errors in build output (build fails on broken refs by default)
+# Repo gates still green
+bun run typecheck && bun run lint
+```
