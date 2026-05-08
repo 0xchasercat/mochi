@@ -272,4 +272,16 @@ describe("rules — v0.2 ruleset (golden lock)", () => {
     expect(e.usage).toBe(0);
     expect(e.quota).toBeGreaterThan(0);
   });
+
+  it("R-041: mouseEvent-screen-formula encodes the clientXY + window.screenXY identity", () => {
+    const raw = macMatrix.uaCh["mouseEvent-screen-formula"];
+    const f = JSON.parse(raw ?? "{}") as { screenX: string; screenY: string; rule: string };
+    expect(f.screenX).toBe("clientX + window.screenX");
+    expect(f.screenY).toBe("clientY + window.screenY");
+    expect(f.rule).toBe("R-041");
+    // Profile-invariant — Win and Mac both lock to the same identity.
+    expect(macMatrix.uaCh["mouseEvent-screen-formula"]).toBe(
+      winMatrix.uaCh["mouseEvent-screen-formula"],
+    );
+  });
 });

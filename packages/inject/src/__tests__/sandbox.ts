@@ -28,6 +28,16 @@ export interface SandboxGlobals {
   document: { fonts: Record<string, unknown> };
   WebGLRenderingContext: { prototype: Record<string, unknown> };
   WebGL2RenderingContext: { prototype: Record<string, unknown> };
+  // Minimal MouseEvent fake — constructor that copies clientX/clientY from
+  // init dict onto `this` and walks the prototype for screenX/screenY. The
+  // mouse-event-screen module installs its prototype getters here.
+  MouseEvent: {
+    new (
+      type: string,
+      init?: { clientX?: number; clientY?: number; screenX?: number; screenY?: number },
+    ): Record<string, unknown>;
+    prototype: Record<string, unknown>;
+  };
   Intl: typeof Intl;
   FontFace: typeof FontFace | undefined;
   Symbol: typeof Symbol;
@@ -190,6 +200,44 @@ export function makeSandbox(): SandboxGlobals {
   };
   WebGL2RenderingContext.prototype = gl2Proto;
 
+  // MouseEvent stub. Real Chrome's MouseEvent.prototype.screenX is a native
+  // accessor (configurable:true, enumerable:true). Mirror that shape so the
+  // patched module's defineProperty doesn't trip on a non-configurable slot.
+  type MEProto = Record<string, unknown>;
+  const meProto: MEProto = Object.create(Object.prototype);
+  Object.defineProperty(meProto, "screenX", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      return 0;
+    },
+  });
+  Object.defineProperty(meProto, "screenY", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      return 0;
+    },
+  });
+  const MouseEvent = function MouseEvent(
+    this: Record<string, unknown>,
+    _type: string,
+    init?: { clientX?: number; clientY?: number; screenX?: number; screenY?: number },
+  ) {
+    this.clientX = init?.clientX ?? 0;
+    this.clientY = init?.clientY ?? 0;
+    // Note: native screenX/Y come from the prototype getter, not instance
+    // slots — but unpatched MouseEvent in our sandbox lets us construct
+    // with a screenX init for completeness.
+    if (init !== undefined && init.screenX !== undefined) {
+      this.__nativeScreenX = init.screenX;
+    }
+    if (init !== undefined && init.screenY !== undefined) {
+      this.__nativeScreenY = init.screenY;
+    }
+  } as unknown as SandboxGlobals["MouseEvent"];
+  MouseEvent.prototype = meProto;
+
   // FontFaceSet stub.
   const fonts: Record<string, unknown> = {
     size: 0,
@@ -208,6 +256,7 @@ export function makeSandbox(): SandboxGlobals {
     document: { fonts },
     WebGLRenderingContext,
     WebGL2RenderingContext,
+    MouseEvent,
     Intl,
     FontFace: typeof FontFace !== "undefined" ? FontFace : undefined,
     // The payload reaches for these globals; share them from the host.
@@ -223,9 +272,12 @@ export function makeSandbox(): SandboxGlobals {
     WeakMap,
   } as unknown as SandboxGlobals;
 
-  // window === globalThis === sandbox itself
+  // window === globalThis === sandbox itself. The mouse-event-screen module
+  // reads `window.screenX/Y` — pin defaults so the formula is exercised.
   (sandbox as unknown as { window: unknown }).window = sandbox;
   (sandbox as unknown as { globalThis: unknown }).globalThis = sandbox;
+  (sandbox as unknown as { screenX: number }).screenX = 50;
+  (sandbox as unknown as { screenY: number }).screenY = 75;
   return sandbox;
 }
 
@@ -249,6 +301,7 @@ export function runPayloadInSandbox(code: string): SandboxGlobals {
     "document",
     "WebGLRenderingContext",
     "WebGL2RenderingContext",
+    "MouseEvent",
     "Intl",
     "FontFace",
     "Symbol",
@@ -274,6 +327,7 @@ export function runPayloadInSandbox(code: string): SandboxGlobals {
     sandbox.document,
     sandbox.WebGLRenderingContext,
     sandbox.WebGL2RenderingContext,
+    sandbox.MouseEvent,
     sandbox.Intl,
     sandbox.FontFace,
     sandbox.Symbol,

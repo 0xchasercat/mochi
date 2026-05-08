@@ -30,6 +30,7 @@ import { emitBotGlobalsModule } from "./modules/bot-globals";
 import { emitClientHintsModule } from "./modules/client-hints";
 import { emitFontsModule } from "./modules/fonts";
 import { emitMediaDevicesModule } from "./modules/media-devices";
+import { emitMouseEventScreenModule } from "./modules/mouse-event-screen";
 import { emitNavigatorModule } from "./modules/navigator";
 import { emitNetworkInfoModule } from "./modules/network-info";
 import { emitPermissionsModule } from "./modules/permissions";
@@ -115,6 +116,10 @@ export function buildPayload(matrix: MatrixV1): PayloadResult {
   // See tasks/0140-stealth-conformance.md.
   parts.push(wrapTry("window-chrome", emitWindowChromeModule(matrix)));
   parts.push(wrapTry("plugins", emitPluginsModule(matrix)));
+  // R-041: MouseEvent.screenX/screenY prototype patch — closes the I-5
+  // relational leak on CDP-dispatched mouse events. See task 0250 +
+  // packages/consistency/src/rules/mouseEvent.ts. No matrix input.
+  parts.push(wrapTry("mouse-event-screen", emitMouseEventScreenModule()));
 
   // Self-deletion of any stray __mochi__* properties on window/globalThis
   // — none of our helpers leak there in v0.3 (they're all IIFE-locals),
