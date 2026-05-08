@@ -628,7 +628,24 @@ The 13 probe families from `chaser-recon/src/lib/fingerprint/*`:
 - ⚠️ timing (timezone, locale, performance-now precision — we *match* Chrome's natural behavior; we don't spoof against Chrome's true clock for same-engine v1)
 - ✅ FPJS Pro (the public visitor-id outputs match the device baseline because the underlying probes match)
 
-### 9.6 What we don't cover (documented in `docs/limits.md`)
+### 9.6 Cross-layer consistency: exit IP ↔ timezone ↔ locale (task 0262)
+
+The `(matrix.timezone, matrix.locale)` axis is special: it's the only matrix-derived value whose canonical "consistent" value depends on a state OUTSIDE the matrix itself — namely, the **apparent exit IP** as seen by any server the session contacts. A US-West profile (matrix.timezone = `America/Los_Angeles`, matrix.locale = `en-US`) routed through an EU-egressing residential proxy puts every page call to `Date.getTimezoneOffset()` at -480min while the IP geolocates to UTC+1 — a direct mismatch fingerprint.
+
+Mochi closes this leak at launch via a 7-endpoint geo-probe (`packages/core/src/geo-probe.ts`) routed through wreq with the matrix's TLS preset (so the probe is itself indistinguishable from real session traffic). The probe is shuffled-sequential with a 4-attempt cap and 2s per-endpoint timeout; on all-fail it returns `null`. A reconciler (`packages/core/src/geo-consistency.ts`) cross-references the matrix tz/locale against the probed IP geolocation, applying one of four `LaunchOptions.geoConsistency` modes:
+
+- `"privacy-fallback"` *(default)* — override the matrix to UTC + en-US on mismatch (or probe failure). Fingerprints as a privacy-conscious user (Tor / Brave / hardened-FF), which is benign in most threat models. Mismatched-tz-vs-IP is the canonical bot signature; UTC + en-US looks like every Tor user.
+- `"auto-correct"` — override the matrix's timezone with the IP's timezone and locale with a primary-locale guess for the IP's country. Trusts mochi's IP-derived defaults over the user's declared profile.
+- `"strict"` — throw `GeoMismatchError` on mismatch. Probe failure does NOT throw (network blip, not a mismatch).
+- `"off"` — skip the probe entirely. Used in offline tests / when the probe service is rate-limited.
+
+Mismatch criteria use **timezone offset minutes** (computed via `Intl.DateTimeFormat({timeZoneName: "longOffset"}).formatToParts`), not zone names — `America/New_York` and `America/Detroit` share an offset and fingerprint identically. Locale region comes from `Intl.Locale(matrix.locale).region`.
+
+The JS-side timezone spoof is delivered per-target via CDP `Emulation.setTimezoneOverride`, which drives both `Intl.DateTimeFormat().resolvedOptions().timeZone` AND `Date.getTimezoneOffset()` because Chromium's V8 reads from the same internal source. The override does NOT require `Emulation.enable`, so §8.2's bans are unaffected. Mochi NEVER manually rewrites `Date.prototype.getTimezoneOffset` — that's detectable via prototype-shape checks.
+
+Probe results are NOT cached across sessions — proxy IPs rotate; stale cache is worse than no cache.
+
+### 9.7 What we don't cover (documented in `docs/limits.md`)
 
 - WebRTC IP leak (depends on system network config; v1 tells users to use a proxy that handles this themselves)
 - Battery API removed in modern Chrome (no spoofing needed)

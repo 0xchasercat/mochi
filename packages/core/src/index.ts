@@ -21,6 +21,16 @@ export {
 } from "./cdp/router";
 // Error surface.
 export { NotImplementedError } from "./errors";
+// Exit-IP / TZ / locale reconciliation (task 0262, PLAN.md §9).
+export {
+  type GeoConsistencyMode,
+  GeoMismatchError,
+  type GeoReconcileResult,
+  localeRegion,
+  reconcileGeoConsistency,
+  tzOffsetMinutes,
+} from "./geo-consistency";
+export { type ExitGeo, type ProbeOptions, probeExitGeo } from "./geo-probe";
 // Public surface — exported here so users only need `@mochi.js/core`.
 export {
   type ChallengeLaunchOptions,

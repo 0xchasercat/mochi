@@ -136,6 +136,10 @@ function startResponder(written: RecordedFrame[], inject: (msg: object) => void)
       } else if (f.method === "Page.enable") {
         inject({ id: f.id, result: {} });
         tag.__responded = true;
+      } else if (f.method === "Emulation.setTimezoneOverride") {
+        // Task 0262 — JS-side timezone spoof per page session.
+        inject({ id: f.id, result: {} });
+        tag.__responded = true;
       } else if (f.method === "Network.setUserAgentOverride") {
         // Task 0255 — defensive UA override at network layer.
         inject({ id: f.id, result: {} });
