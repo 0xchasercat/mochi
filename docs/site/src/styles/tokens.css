@@ -145,38 +145,13 @@
   --dur-slow: 420ms;
 }
 
-/* ==========================================================================
-   Dark / stealth mode — used in code blocks, terminal demos, and any
-   "inside the engine" surface. Mochi.js dark feels like a CDP pipe at 3am.
-   ========================================================================== */
-[data-theme="stealth"], .stealth {
-  --bg:           var(--stealth-900);
-  --bg-elevated:  var(--stealth-800);
-  --bg-subtle:    var(--stealth-800);
-  --bg-sunken:    var(--stealth-950);
-
-  --fg:           #ece6d6;
-  --fg-muted:     #9aa0b3;
-  --fg-subtle:    #5b6178;
-  --fg-on-dark:   #ece6d6;
-
-  --accent:       var(--mochi-honey-400);
-  --accent-hover: var(--mochi-honey-500);
-  --accent-soft:  rgba(245, 182, 90, 0.12);
-  --accent-fg:    var(--stealth-950);
-
-  --border:       var(--stealth-700);
-  --border-strong:var(--stealth-500);
-
-  --code-bg:      var(--stealth-950);
-  --code-fg:      #ece6d6;
-  --code-keyword: var(--mochi-honey-400);
-  --code-string:  #7dcb9a;
-  --code-number:  #f5b65a;
-  --code-comment: #5b6178;
-  --code-fn:      #8db1ea;
-  --code-punct:   #9aa0b3;
-}
+/* The site is cream-only. The original design system included a
+   `[data-theme="stealth"]` global theme that re-bound all semantic
+   tokens (--bg, --fg, --accent, ...) to dark equivalents; that's been
+   removed. Raw `--stealth-*` color tokens (declared above) are still
+   used directly by intentional "dark surface" components — the
+   landing CodeShowcase block, shiki code-block backgrounds — but
+   they're not a theme, they're brand colors. */
 
 /* ==========================================================================
    Semantic element styles — drop these into any page for instant brand.

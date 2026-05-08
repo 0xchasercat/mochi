@@ -30,26 +30,15 @@ const fullTitle = title === siteName ? title : `${title} — ${siteName}`;
     {ogImage && <meta property="og:image" content={ogImage} />}
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="canonical" href={Astro.url.href} />
-    <script is:inline>
-      // Theme bootstrap — runs before paint to avoid a flash. The site
-      // is cream-by-default per the design system (the mockup only ever
-      // had a light variant). Stealth is opt-in via the docs theme
-      // toggle, which writes localStorage.mochi.theme = "stealth".
-      // We deliberately do NOT honor `prefers-color-scheme: dark` —
-      // doing so puts the landing page in stealth on dark-mode OSes,
-      // where the brand-navy headlines are illegible against the
-      // stealth-900 surface.
-      (function () {
-        try {
-          const stored = localStorage.getItem("mochi.theme");
-          if (stored === "stealth") {
-            document.documentElement.setAttribute("data-theme", "stealth");
-          }
-        } catch (_e) {
-          /* localStorage may be disabled — fall through to cream. */
-        }
-      })();
-    </script>
+    {/*
+      No theme bootstrap — the site is cream-only. Dark mode was
+      removed wholesale after design review (the original mockup is
+      light-only; auto-flipping on prefers-color-scheme produced an
+      illegible site on dark-mode OSes). Raw `--stealth-*` color
+      tokens are preserved for local design accents (landing
+      CodeShowcase, shiki code blocks), but there is no global
+      light/dark toggle.
+    */}
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
