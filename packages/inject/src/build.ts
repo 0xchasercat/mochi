@@ -26,7 +26,9 @@
  */
 
 import type { MatrixV1 } from "@mochi.js/consistency";
+import { emitAudioFingerprintModule } from "./modules/audio-fingerprint";
 import { emitBotGlobalsModule } from "./modules/bot-globals";
+import { emitCanvasFingerprintModule } from "./modules/canvas-fingerprint";
 import { emitClientHintsModule } from "./modules/client-hints";
 import { emitFontsModule } from "./modules/fonts";
 import { emitMediaDevicesModule } from "./modules/media-devices";
@@ -120,6 +122,12 @@ export function buildPayload(matrix: MatrixV1): PayloadResult {
   // relational leak on CDP-dispatched mouse events. See task 0250 +
   // packages/consistency/src/rules/mouseEvent.ts. No matrix input.
   parts.push(wrapTry("mouse-event-screen", emitMouseEventScreenModule()));
+  // R-047 + R-048: audio + canvas fingerprint blobs — the two largest
+  // JS-layer stealth gaps per the README "what works/doesn't" matrix.
+  // Closes against creepjs / fingerprintjs / bot.incolumitas. See task 0267 +
+  // packages/consistency/src/rules/audioCanvas.ts.
+  parts.push(wrapTry("audio-fingerprint", emitAudioFingerprintModule(matrix)));
+  parts.push(wrapTry("canvas-fingerprint", emitCanvasFingerprintModule(matrix)));
 
   // Self-deletion of any stray __mochi__* properties on window/globalThis
   // — none of our helpers leak there in v0.3 (they're all IIFE-locals),

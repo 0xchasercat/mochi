@@ -72,7 +72,25 @@ const CANONICAL_SEED = "contract-pin-seed";
  * fail the test. Update this hash AND the harness baselines together when
  * the payload's bytes intentionally change.
  *
- * Last updated 2026-05-09 alongside tasks/0261-uach-network-metadata.md
+ * Last updated 2026-05-09 alongside tasks/0267-audio-canvas-fingerprint-blobs.md
+ * follow-up (audio overlay() residual distribution — fixes Linux x86_64 CI
+ * f32-quantization mismatch in the audio fingerprint spoof; the emitted
+ * overlay() body changed from a single-cell residual at index 4999 to a
+ * 489-slot forward-sweep distribution across [4510..4999), shifting the
+ * payload bytes. See packages/inject/src/modules/audio-fingerprint.ts.
+ *
+ * Previously last updated 2026-05-09 alongside tasks/0267-audio-canvas-fingerprint-blobs.md
+ * (R-047 + R-048: audio + canvas fingerprint blobs — closes the two largest
+ * JS-layer stealth gaps per the README "what works/doesn't" matrix. New
+ * inject modules `audio-fingerprint` and `canvas-fingerprint` patch
+ * OfflineAudioContext.startRendering, HTMLCanvasElement.toDataURL,
+ * OffscreenCanvas.convertToBlob, and the 2D context's draw methods. The
+ * canvas module embeds a per-(profile) synthesised data URL whose
+ * probe-side `hashString(url)` + length match the captured baseline
+ * byte-exactly via meet-in-the-middle search over the trailing 8 base64
+ * chars. Module count: 17 (was 15). Payload size budget unchanged at 80KB.
+ *
+ * Previously last updated 2026-05-09 alongside tasks/0261-uach-network-metadata.md
  * (R-042..R-046: UA-CH metadata struct fields — `sec-ch-ua-arch`,
  * `sec-ch-ua-bitness`, `sec-ch-ua-mobile`, `sec-ch-ua-model`, and
  * single-string `ua-full-version`. These rules now write into
@@ -97,7 +115,7 @@ const CANONICAL_SEED = "contract-pin-seed";
  * absent) and plugins (curated 5-plugin PluginArray only when underlying
  * browser reports an empty list).
  */
-const PINNED_SHA256 = "2b116bdcd47c863f9b7089fd04e65479c7d1590d17264e7f93703aeabb091787";
+const PINNED_SHA256 = "630cd02eaf71d386907dde77c0cc852ef01c9d2f3779d4b2ea94ebef6dc8d0d8";
 
 describe("contract: @mochi.js/inject buildPayload sha256 is byte-stable per (profile, seed)", () => {
   it("buildPayload(deriveMatrix(profile, seed)) is deterministic", () => {

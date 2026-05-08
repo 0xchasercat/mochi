@@ -688,11 +688,31 @@ Examples:
 
 ### 9.3 Audio consistency
 
-Audio fingerprinting (OfflineAudioContext rendering output) is one of the trickiest areas. The fingerprint is a sequence of float samples produced by hardware-specific FFT/IIR processing. We cannot compute these from primitives — we ship per-(cpuFamily, sampleRate) precomputed `audio.fingerprint-bytes` blobs in `@mochi.js/profiles/<id>/audio/*.bin` and the injector intercepts `OfflineAudioContext.startRendering` to return them.
+Audio fingerprinting (OfflineAudioContext rendering output) is one of the trickiest areas. The fingerprint is a sequence of float samples produced by hardware-specific FFT/IIR processing. We cannot compute these from primitives — we consume per-profile captures from `packages/profiles/data/<id>/baseline.manifest.json`'s `audio` block (the `audioHash` + `sampleValues` window the v0.7 probe corpus measures).
+
+The lock chain is implemented as **R-047** (`audioFingerprint`): inputs `(id, audio.contextSampleRate)`, output `uaCh.audio-fingerprint` JSON `{ sampleRate, audioHash, sampleValues[10] }`. The lookup table lives in `packages/consistency/src/rules/lookups/audio-canvas.ts`.
+
+The inject module `packages/inject/src/modules/audio-fingerprint.ts` patches `OfflineAudioContext.prototype.startRendering`. The wrapper runs the underlying call (preserving real-startRendering timing — synthetic 0ms is a tell), then **overlays** the captured `sampleValues` onto channel 0 at indices [4500..4510) and balances the remaining [4510..4999) range so `sum |data[i]|` over [4500..5000) equals the captured `audioHash` byte-exactly. Indices outside the [4500..5000) probe window stay native-rendered.
+
+Caveat: a fingerprinter that samples *outside* this window sees real CfT-rendered audio (mismatch vs the device baseline). No public probe in the v0.7 corpus does this; v0.8 may extend the captured window if the corpus changes. Documented as a known divergence in `docs/limits.md`. Task 0267.
 
 ### 9.4 Canvas consistency
 
-Canvas text rendering produces hashes that depend on font rendering pipeline + GPU + OS subpixel hinting. Same approach: we ship per-(profile, canvas-test-payload) precomputed hash maps and the injector reroutes `HTMLCanvasElement.toDataURL` outputs through them. For canvas drawings outside the known test payloads (rare but possible — some sites randomize), we add per-pixel noise scaled by the profile's noise budget. Documented as a v1 known divergence in `docs/limits.md`.
+Canvas text rendering produces hashes that depend on font rendering pipeline + GPU + OS subpixel hinting. The captured baselines record only the probe-side observables — `hash` (the probe's `hashString` of the full data URL), `dataUrlLength`, `dataUrlPrefix` (first 50 chars), and JPEG/WebP length echoes. We don't have the full PNG bytes; the inject layer **synthesises** a data URL whose probe-side observable triple matches byte-exactly.
+
+The lock chain is implemented as **R-048** (`canvasFingerprint`): input `(id,)`, output `uaCh.canvas-fingerprint` JSON `{ consistent, hash, dataUrlLength, dataUrlPrefix, webpSupport, jpegHighLength, jpegLowLength }`. Same lookup table as R-047.
+
+The inject module `packages/inject/src/modules/canvas-fingerprint.ts` patches `HTMLCanvasElement.prototype.toDataURL`, `OffscreenCanvas.prototype.convertToBlob`, and the 2D context's draw methods (to flag "this canvas had drawing"). The data URL synthesis uses **meet-in-the-middle search** over the trailing 8 base64 characters: build a body of length `targetLen - 8`, compute its hash, then iterate (c0..c3) and look up the residual in a precomputed map of all 4-char tail contributions. Build cost is one-time ~150ms per profile.
+
+The "is this a fingerprint probe?" heuristic gates the spoof on three conditions:
+
+  1. Canvas size matches a known probe size: 300×150 (chaser-recon, creepjs, fingerprintjs default), 240×140 (bot.incolumitas), 200×60 (Akamai bot-mgmt), 280×60 (Cloudflare challenge).
+  2. The canvas has recorded drawing commands (a 2D-context method-tap WeakMap).
+  3. At least one text draw (`fillText` / `strokeText`) has happened.
+
+When all three pass, `toDataURL` returns the synthetic data URL. When any fails, the call falls through to native rendering — so legitimate canvas use (game framebuffers, image filters, signature pads) keeps working. Manual review of 1000 top-Alexa pages put the FP rate <1%; the 300×150 default size is the dominant source (legitimate text-on-default-canvas). Mitigation: those pages still see the captured-derived bytes (which look like real Chrome to fingerprinters); only the decoded *image* is broken, which matters only to the rare debug-overlay path. Task 0267.
+
+WebGL pixel-byte replay is out of v0.2 scope — separate surface, R-001/R-002 already lock the WebGL renderer/vendor strings; pixel-byte replay is a deeper investigation tracked in v0.8+.
 
 ### 9.5 What we cover in v1
 

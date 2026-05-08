@@ -16,6 +16,7 @@
  */
 
 import type { Rule } from "../rule";
+import { AUDIO_CANVAS_RULES } from "./audioCanvas";
 import { EXTRAS_RULES } from "./extras";
 import { GPU_RULES } from "./gpu";
 import { LOCALE_RULES } from "./locale";
@@ -45,6 +46,8 @@ import { WEBGPU_RULES } from "./webgpu";
  *                       screen.orientation / matchMedia / storage)
  *   - MOUSE_EVENT_RULES R-041 (MouseEvent.screenX/screenY relational lock —
  *                       PLAN.md I-5 / CDP-dispatch leak; task 0250)
+ *   - AUDIO_CANVAS_RULES R-047 + R-048 (audio + canvas fingerprint blobs;
+ *                        PLAN.md §9.3 / §9.4; task 0267)
  */
 export const RULES: readonly Rule[] = [
   ...GPU_RULES,
@@ -55,4 +58,5 @@ export const RULES: readonly Rule[] = [
   ...WEBGPU_RULES,
   ...EXTRAS_RULES,
   ...MOUSE_EVENT_RULES,
+  ...AUDIO_CANVAS_RULES,
 ];

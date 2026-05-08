@@ -73,8 +73,8 @@ Direct port from [`docs/limits.md`](docs/limits.md) — the architectural-honest
 | `Page.goto({ waitUntil: "networkidle" })` | partial | Mapped to `"load"` until per-frame `Network.enable` lands. |
 | Relational fingerprint Matrix (40 rules) | works | `(profile, seed)` → `MatrixV1`, deterministic, JSON round-trippable. |
 | JS-layer spoofing (UA / UA-CH, navigator, WebGL, WebGPU, MediaDevices, Permissions, screen, fonts, timezone, locale) | works | Inject payload, JIT-proxy traps, top-of-frame. |
-| Audio (`OfflineAudioContext`) byte-accurate fingerprint | deferred | Per-(profile, sample-rate) byte tables land in v0.7 capture (task 0071). |
-| Canvas (`toDataURL`) byte-accurate fingerprint | deferred | Same — precomputed hash maps + per-pixel noise in v0.7. |
+| Audio (`OfflineAudioContext`) byte-accurate fingerprint | works | Per-(profile, sample-rate) captures consumed via R-047 → `audio-fingerprint` inject module. Byte-stable on the [4500..5000) sample window the v0.7 probe corpus reads. Task 0267. |
+| Canvas (`toDataURL`) byte-accurate fingerprint | works | Per-profile data URL synthesis via R-048 → `canvas-fingerprint` inject module. Probe-side `hashString(url)` + length + first-50-char prefix match the captured baseline byte-exactly; size-and-text heuristic falls back to native rendering for non-probe canvases. Task 0267. |
 | Behavioral synthesis (`humanClick` / `humanType` / `humanScroll`) | works | Bezier+Fitts+jitter; profile-parameterized (`hand`, `tremor`, `wpm`, `scrollStyle`). |
 | Profile catalog (`mac-m4-chrome-stable`, `mac-chrome-stable`, `mac-chrome-beta`, `windows-chrome-stable`, `linux-chrome-stable`, `mac-brave-stable`) | works | Six real-device baselines imported from the wrkx harvester corpus, each filtered by FingerprintJS Pro `suspectScore <= 20` and validated by the harness round-trip. Other catalog ids (`mac-m2-…`, `mac-intel-…`, `win11-edge-…`) still resolve to the generic placeholder. |
 | Trace recording / replay (`mochi record` → `humanClick(sel, { trace })`) | deferred | API surface forward-compatible; recorder lands in v1.x. |
