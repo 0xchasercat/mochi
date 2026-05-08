@@ -18,7 +18,7 @@
 #   deploy:          cd docs/site && npx wrangler deploy
 #   non-prod deploy: cd docs/site && npx wrangler versions upload
 
-name = "mochi-js-site"
+name = "mochi"
 compatibility_date = "2026-05-09"
 
 # Static-asset configuration. Astro emits multi-page output (one
