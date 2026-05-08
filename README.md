@@ -76,7 +76,7 @@ Direct port from [`docs/limits.md`](docs/limits.md) — the architectural-honest
 | Audio (`OfflineAudioContext`) byte-accurate fingerprint | deferred | Per-(profile, sample-rate) byte tables land in v0.7 capture (task 0071). |
 | Canvas (`toDataURL`) byte-accurate fingerprint | deferred | Same — precomputed hash maps + per-pixel noise in v0.7. |
 | Behavioral synthesis (`humanClick` / `humanType` / `humanScroll`) | works | Bezier+Fitts+jitter; profile-parameterized (`hand`, `tremor`, `wpm`, `scrollStyle`). |
-| Profile catalog (`mac-m4-chrome-stable`, `win11-chrome-stable`, …) | partial | IDs validated; per-device baseline data lands phase 0.4. v0.1.x falls back to a Linux placeholder profile — Matrix is real, surface values are placeholder. |
+| Profile catalog (`mac-m4-chrome-stable`, `mac-chrome-stable`, `mac-chrome-beta`, `windows-chrome-stable`, `linux-chrome-stable`, `mac-brave-stable`) | works | Six real-device baselines imported from the wrkx harvester corpus, each filtered by FingerprintJS Pro `suspectScore <= 20` and validated by the harness round-trip. Other catalog ids (`mac-m2-…`, `mac-intel-…`, `win11-edge-…`) still resolve to the generic placeholder. |
 | Trace recording / replay (`mochi record` → `humanClick(sel, { trace })`) | deferred | API surface forward-compatible; recorder lands in v1.x. |
 | JA4/JA3/H2-coherent `session.fetch` via `wreq` | works | Prebuilt cdylibs for darwin-{arm64,x64}, linux-{x64,arm64}, win32-x64. |
 | `session.fetch` on FreeBSD / Alpine musl / Windows arm64 | partial | No prebuilt; falls back to local `cargo build`. |
