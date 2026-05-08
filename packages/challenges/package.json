@@ -1,6 +1,6 @@
 {
   "name": "@mochi.js/challenges",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Convenience layer for Cloudflare Turnstile auto-click — opt-in, behavioral-synth-backed, no new fingerprint surface.",
   "license": "MIT",
   "type": "module",
