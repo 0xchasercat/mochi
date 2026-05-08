@@ -8,6 +8,12 @@ Five minutes from zero to a spoofed Chrome session driving a page.
 - ~400 MB free for the bundled Chromium-for-Testing download (cached after the first install).
 - macOS, Linux, or Windows on x64 / arm64. Stock Chrome is not used; mochi pins its own CfT build.
 
+> **Linux gotcha — Chromium and root.** Chromium refuses to start as root unless its user-namespace sandbox is disabled or replaced. If `mochi.launch()` dies with `EPIPE: broken pipe` immediately after spawn, you're hitting this. Fixes, in order of preference:
+>
+> 1. **Run as a non-root user** — what every production setup should do anyway.
+> 2. **`chmod 4755 chrome-sandbox`** on the SUID helper next to the CfT binary. Lets root-launched Chromium use the sandbox properly. Distro-dependent.
+> 3. **Pass `args: ["--no-sandbox"]` to `mochi.launch()`** — fastest dev workaround, but `--no-sandbox` is a fingerprint leak (PLAN §8.6 explicitly omits it from defaults). Acceptable for testing, not for stealth-critical production. Set via env: `MOCHI_EXTRA_ARGS=--no-sandbox`.
+
 ## 1. Install
 
 ```sh

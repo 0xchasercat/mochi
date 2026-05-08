@@ -149,10 +149,43 @@ export async function spawnChromium(cfg: SpawnConfig): Promise<ChromiumProcess> 
     );
   }
 
-  // Drain stderr so Chromium doesn't block writing diagnostics. We don't read
-  // it (yet); piping to /dev/null keeps the buffer empty.
-  void drainToVoid(proc.stderr);
+  // Drain stderr so Chromium doesn't block writing diagnostics. We capture
+  // the tail (last ~4KB) so the early-exit diagnostic below has something
+  // human-readable to surface — e.g. Chromium's own
+  // "Running as root without --no-sandbox is not supported" message.
+  const stderrTail: string[] = [];
+  void drainToText(proc.stderr, stderrTail);
   void drainToVoid(proc.stdout);
+
+  // Diagnose early process death: Chromium that dies within ~750ms of spawn
+  // is almost always failing on a startup precondition (sandbox refusal under
+  // root, missing libs, malformed flags). We watch `proc.exited` race with
+  // a short timer and surface a clearer error than the eventual EPIPE on the
+  // first CDP write. See docs/quickstart.md "Linux gotcha — Chromium and root".
+  const earlyExitCode = await Promise.race([
+    proc.exited.then((c) => ({ kind: "exited" as const, code: c })),
+    new Promise<{ kind: "alive" }>((resolve) => setTimeout(() => resolve({ kind: "alive" }), 750)),
+  ]);
+  if (earlyExitCode.kind === "exited") {
+    await rm(userDataDir, { recursive: true, force: true }).catch(() => {});
+    const tail = stderrTail.join("").trim().split("\n").slice(-12).join("\n");
+    const isRootSandbox = /running.*root.*without.*--no-sandbox|--no-sandbox.*required/i.test(tail);
+    const hint = isRootSandbox
+      ? "\n\nChromium refuses to start as root with the user-namespace sandbox enabled.\n" +
+        "Fixes (preferred → workaround):\n" +
+        "  1. Run as a non-root user.\n" +
+        "  2. `chmod 4755 chrome-sandbox` on the SUID helper next to the CfT binary.\n" +
+        "  3. Pass args: ['--no-sandbox'] to mochi.launch() — fingerprint leak (PLAN §8.6),\n" +
+        "     OK for testing, not for stealth-critical production."
+      : "";
+    throw new Error(
+      `[mochi] Chromium exited (code ${earlyExitCode.code}) within 750ms of spawn — ` +
+        "the CDP pipe never opened. Most likely a startup precondition failure " +
+        "(sandbox refusal, missing libs, malformed flags).\n\n" +
+        `Stderr tail:\n${tail || "(empty)"}` +
+        hint,
+    );
+  }
 
   // Build PipeReader/PipeWriter wrappers around the raw FDs.
   const writer: PipeWriter = (() => {
@@ -308,6 +341,43 @@ async function drainToVoid(stream: ReadableStream<Uint8Array> | null): Promise<v
     while (true) {
       const { done } = await reader.read();
       if (done) return;
+    }
+  } catch {
+    // ignore — stream errored or was cancelled
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+/**
+ * Read a ReadableStream and append decoded chunks to `tail`, capping the
+ * accumulated buffer to ~4KB so a chatty Chromium can't blow memory. Used
+ * by `spawnChromium`'s early-exit diagnostic to recover the last few lines
+ * of stderr from a process that died within 750ms of spawn.
+ */
+async function drainToText(
+  stream: ReadableStream<Uint8Array> | null,
+  tail: string[],
+): Promise<void> {
+  if (stream === null) return;
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let bufferedLen = 0;
+  const cap = 4096;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) return;
+      if (value !== undefined) {
+        const text = decoder.decode(value, { stream: true });
+        tail.push(text);
+        bufferedLen += text.length;
+        // Trim from the front when over cap so we always keep the *tail*.
+        while (bufferedLen > cap && tail.length > 1) {
+          const dropped = tail.shift();
+          bufferedLen -= dropped !== undefined ? dropped.length : 0;
+        }
+      }
     }
   } catch {
     // ignore — stream errored or was cancelled
