@@ -55,21 +55,21 @@ jobs:
         with:
           path: ~/.mochi/browsers
           key: chromium-for-testing-linux-${{ runner.os }}-v1
-      # Always run install — idempotent + diagnostic on cache hit. Same
-      # rationale as pr-fast.yml.
+      # Same install + path-resolution pattern as pr-fast.yml.
       - name: Install Chromium-for-Testing (mochi browsers install — idempotent)
         run: bun packages/cli/src/bin.ts browsers install
-      - name: Diagnose Chromium install state
+      - name: Resolve Chromium binary path
         run: |
-          set -u
-          echo "::group::~/.mochi/browsers tree"
-          ls -la ~/.mochi/browsers/ 2>/dev/null || echo "(empty or missing)"
-          find ~/.mochi/browsers/ -maxdepth 4 -type f 2>/dev/null | head -20
-          echo "::endgroup::"
-          echo "::group::mochi browsers list + path"
-          bun packages/cli/src/bin.ts browsers list || true
-          bun packages/cli/src/bin.ts browsers path || true
-          echo "::endgroup::"
+          set -euo pipefail
+          BINARY=$(find ~/.mochi/browsers -type f -name chrome -perm -u+x 2>/dev/null | head -1 || true)
+          if [ -z "$BINARY" ]; then
+            echo "::error::No Chromium binary found under ~/.mochi/browsers/. Tree:"
+            find ~/.mochi/browsers -maxdepth 4 -type f 2>/dev/null | head -20 || echo "(missing)"
+            ls -la ~/.mochi/browsers/ 2>/dev/null || true
+            exit 1
+          fi
+          echo "Found Chromium at: $BINARY"
+          echo "MOCHI_CHROMIUM_PATH=$BINARY" >> "$GITHUB_ENV"
 
       # Pre-publish conformance gates — v1.0 release blocks on these.
       # PLAN.md I-7 ("the harness is the gate"). Publish is blocked unless

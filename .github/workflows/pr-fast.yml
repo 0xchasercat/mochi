@@ -41,28 +41,30 @@ jobs:
         with:
           path: ~/.mochi/browsers
           key: chromium-for-testing-linux-${{ runner.os }}-v1
-      # Always run install — it's idempotent (no-op if already installed) and
-      # cheap on cache hit (~1s "already installed at <path>" log). On cache
-      # miss, this is the actual download. This makes the gate robust against
-      # cache-corruption scenarios where the cache was saved partial-state.
+      # Always run install — idempotent (no-op if already installed; ~1s on
+      # cache hit, real download on miss). Robust against cache-corruption.
       - name: Install Chromium-for-Testing (mochi browsers install — idempotent)
         run: bun packages/cli/src/bin.ts browsers install
-      # Diagnostic: show what's actually on disk + what the cli sees. Helps
-      # debug cache vs install vs cli-scan mismatches without an interactive
-      # session. Cheap (<1s) and only logs.
-      - name: Diagnose Chromium install state
+      # Resolve the Chromium binary path via plain `find` and export to
+      # MOCHI_CHROMIUM_PATH. We tried having @mochi.js/core lazy-import
+      # @mochi.js/cli's resolveChromiumBinary but that path silently returns
+      # null in CI for reasons that aren't yet diagnosed (cache-restore
+      # layout vs cli scan mismatch). Setting MOCHI_CHROMIUM_PATH directly
+      # short-circuits the cli resolver entirely — robust and explicit.
+      # Anyone debugging future cache issues just needs to look at the
+      # `find` output below.
+      - name: Resolve Chromium binary path
         run: |
-          set -u
-          echo "::group::~/.mochi/browsers tree"
-          ls -la ~/.mochi/browsers/ 2>/dev/null || echo "(empty or missing)"
-          find ~/.mochi/browsers/ -maxdepth 4 -type f 2>/dev/null | head -20
-          echo "::endgroup::"
-          echo "::group::mochi browsers list"
-          bun packages/cli/src/bin.ts browsers list || true
-          echo "::endgroup::"
-          echo "::group::mochi browsers path"
-          bun packages/cli/src/bin.ts browsers path || true
-          echo "::endgroup::"
+          set -euo pipefail
+          BINARY=$(find ~/.mochi/browsers -type f -name chrome -perm -u+x 2>/dev/null | head -1 || true)
+          if [ -z "$BINARY" ]; then
+            echo "::error::No Chromium binary found under ~/.mochi/browsers/. Tree:"
+            find ~/.mochi/browsers -maxdepth 4 -type f 2>/dev/null | head -20 || echo "(missing)"
+            ls -la ~/.mochi/browsers/ 2>/dev/null || true
+            exit 1
+          fi
+          echo "Found Chromium at: $BINARY"
+          echo "MOCHI_CHROMIUM_PATH=$BINARY" >> "$GITHUB_ENV"
       # Harness smoke gate — Phase 0.5 deliverable. Drives a Mochi-spoofed
       # session through tests/fixtures/probe-page.html, normalizes both sides,
       # and structurally diffs against each profile's committed baseline.
