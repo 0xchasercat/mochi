@@ -14,12 +14,12 @@ export default defineConfig({
   integrations: [mdx(), sitemap()],
   markdown: {
     shikiConfig: {
-      // Dual-theme: cream-blush light + stealth dark. Shiki picks the variant
-      // via CSS `[data-theme="stealth"]` — see styles/global.css.
-      themes: {
-        light: "github-light",
-        dark: "github-dark-dimmed",
-      },
+      // Single light theme — site is cream-only, no global dark/light
+      // toggle. Code blocks that intentionally look terminal-dark
+      // (landing CodeShowcase, etc.) are styled in landing.css with
+      // raw --stealth-* tokens; that's a brand-design choice for a
+      // specific component, not a theme.
+      theme: "github-light",
       wrap: false,
     },
   },

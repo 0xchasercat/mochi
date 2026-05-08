@@ -1,6 +1,6 @@
 /* ==========================================================================
-   mochi.js docs — three-column docs UI
-   Cream by default, stealth on toggle. Honey is the only accent.
+   mochi.js docs — three-column docs UI.
+   Cream-only. Honey is the only accent.
    ========================================================================== */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { background: var(--bg); color: var(--fg); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
@@ -144,9 +144,6 @@ button { font: inherit; }
 .d-side-link-tag.t-post { background: rgba(245,182,90,0.20); color: #b06a14; }
 .d-side-link-tag.t-new  { background: var(--mochi-honey-500); color: var(--mochi-navy-900); }
 
-[data-theme="stealth"] .d-side-link-tag.t-get  { background: rgba(125,203,154,0.14); color: #7dcb9a; }
-[data-theme="stealth"] .d-side-link-tag.t-post { background: rgba(245,182,90,0.14); color: var(--mochi-honey-400); }
-
 /* ---------- Main content area ---------- */
 .d-main {
   min-width: 0;
@@ -234,7 +231,6 @@ button { font: inherit; }
   color: var(--mochi-honey-600); font-weight: 600;
   border-left-color: var(--mochi-honey-500);
 }
-[data-theme="stealth"] .d-toc-link.is-active { color: var(--mochi-honey-400); border-left-color: var(--mochi-honey-400); }
 .d-toc-edit {
   margin-top: 28px;
   display: flex; flex-direction: column; gap: 8px;
@@ -428,9 +424,6 @@ button { font: inherit; }
 .d-method.m-get    { background: rgba(63,157,107,0.14); color: #2a7a52; }
 .d-method.m-post   { background: rgba(245,182,90,0.20); color: #b06a14; }
 .d-method.m-delete { background: rgba(210,74,82,0.14); color: var(--danger); }
-[data-theme="stealth"] .d-method.m-get { background: rgba(125,203,154,0.14); color: #7dcb9a; }
-[data-theme="stealth"] .d-method.m-post { background: rgba(245,182,90,0.14); color: var(--mochi-honey-400); }
-
 .d-param-group {
   border: 1px solid var(--border);
   border-radius: var(--r-md);
@@ -575,6 +568,11 @@ button { font: inherit; }
   padding-top: 12vh;
   animation: d-fade-in .12s var(--ease-out);
 }
+/* The `display: flex` above unconditionally overrides the user-agent
+   `[hidden] { display: none }` rule, which means `hidden` toggling from
+   JS would never actually hide the overlay. This rule restores the
+   normal hidden-attribute semantics. */
+.d-search-overlay[hidden] { display: none; }
 @keyframes d-fade-in { from { opacity: 0; } to { opacity: 1; } }
 .d-search-modal {
   width: min(640px, 92vw);
@@ -670,5 +668,3 @@ button { font: inherit; }
 /* ==========================================================================
    Theme toggle small detail — show stealth surfaces correctly
    ========================================================================== */
-[data-theme="stealth"] .d-shell-cmd, [data-theme="stealth"] .d-code { box-shadow: none; }
-[data-theme="stealth"] .d-card-icon { background: rgba(245,182,90,0.10); color: var(--mochi-honey-400); }
