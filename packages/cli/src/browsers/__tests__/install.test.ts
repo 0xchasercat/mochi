@@ -8,10 +8,18 @@
  * non-network branch of the resolution logic with deterministic inputs.
  */
 import { describe, expect, it } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DownloadError, resolveDownload, Sha256MismatchError, UnzipError } from "../install";
+import {
+  assertBinaryLaunches,
+  BinarySmokeError,
+  DownloadError,
+  resolveDownload,
+  Sha256MismatchError,
+  smokeBinary,
+  UnzipError,
+} from "../install";
 import { PINNED_FALLBACK_VERSION } from "../manifest";
 
 const SAMPLE_CHANNEL_RAW = {
@@ -222,5 +230,87 @@ describe("error class shapes", () => {
   it("DownloadError carries a discriminated cause", () => {
     const e = new DownloadError("network", "no dns");
     expect(e.cause).toBe("network");
+  });
+  it("BinarySmokeError carries cause + missingLib + stderrTail", () => {
+    const e = new BinarySmokeError("missing-libs", "boom", "libnss3.so", "tail");
+    expect(e.name).toBe("BinarySmokeError");
+    expect(e.cause).toBe("missing-libs");
+    expect(e.missingLib).toBe("libnss3.so");
+    expect(e.stderrTail).toBe("tail");
+  });
+});
+
+/**
+ * Post-extract `--version` smoke — the deliverable for task 0259's first
+ * goal. We stage tiny shell-script "binaries" that simulate Chromium's exit
+ * shapes (success, missing-libs stderr, generic exec failure) and assert
+ * the smoke classifies them correctly.
+ *
+ * We skip on Windows because the shell-script trick doesn't translate; the
+ * smoke itself runs on Windows but the install command intentionally only
+ * runs it on `linux64` (macOS / Windows ship the deps via the OS).
+ */
+describe.skipIf(process.platform === "win32")("post-install binary smoke", () => {
+  async function withFakeBinary<T>(body: string, fn: (path: string) => Promise<T> | T): Promise<T> {
+    const dir = await mkdtemp(join(tmpdir(), "mochi-smoke-"));
+    try {
+      const path = join(dir, "fake-chrome");
+      await writeFile(path, `#!/bin/sh\n${body}\n`);
+      await chmod(path, 0o755);
+      return await fn(path);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+
+  it("returns ok=true when the fake binary prints a version line and exits 0", async () => {
+    await withFakeBinary("echo 'Google Chrome for Testing 131.0.6778.85'\nexit 0", (p) => {
+      const r = smokeBinary(p);
+      expect(r.ok).toBe(true);
+      expect(r.versionLine).toContain("131.0.6778.85");
+      expect(r.exitCode).toBe(0);
+      expect(r.missingLib).toBeNull();
+    });
+  });
+
+  it("classifies a missing-shared-library stderr as cause='missing-libs' with the .so name", async () => {
+    await withFakeBinary(
+      "echo 'fake-chrome: error while loading shared libraries: libnss3.so: cannot open shared object file' >&2\nexit 127",
+      (p) => {
+        try {
+          assertBinaryLaunches(p);
+          throw new Error("expected throw");
+        } catch (err) {
+          expect(err).toBeInstanceOf(BinarySmokeError);
+          expect((err as BinarySmokeError).cause).toBe("missing-libs");
+          expect((err as BinarySmokeError).missingLib).toBe("libnss3.so");
+          // Hint must include the apt install line so the user can paste it.
+          expect((err as BinarySmokeError).message).toContain("sudo apt-get install");
+          expect((err as BinarySmokeError).message).toContain("libnss3");
+        }
+      },
+    );
+  });
+
+  it("classifies a generic non-zero exit (no shared-libs hit) as cause='exec'", async () => {
+    await withFakeBinary("echo 'fake-chrome: garbled startup' >&2\nexit 1", (p) => {
+      try {
+        assertBinaryLaunches(p);
+        throw new Error("expected throw");
+      } catch (err) {
+        expect(err).toBeInstanceOf(BinarySmokeError);
+        expect((err as BinarySmokeError).cause).toBe("exec");
+        expect((err as BinarySmokeError).missingLib).toBeNull();
+        expect((err as BinarySmokeError).message).toContain("--force");
+      }
+    });
+  });
+
+  it("smokeBinary returns ok=false on a missing binary path (no throw)", () => {
+    // ENOENT path — Bun.spawnSync surfaces this as exitCode != 0 with no
+    // stderr. We don't throw; we let `assertBinaryLaunches` handle the
+    // throwing semantics, and `smokeBinary` is the testable seam.
+    const r = smokeBinary("/no/such/binary/anywhere");
+    expect(r.ok).toBe(false);
   });
 });

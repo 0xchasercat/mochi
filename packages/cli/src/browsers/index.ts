@@ -29,12 +29,16 @@ import {
 } from "./paths";
 
 export {
+  assertBinaryLaunches,
+  BinarySmokeError,
+  type BinarySmokeResult,
   DownloadError,
   type InstallMeta,
   type InstallResult,
   install,
   resolveDownload,
   Sha256MismatchError,
+  smokeBinary,
   UnzipError,
 } from "./install";
 export {

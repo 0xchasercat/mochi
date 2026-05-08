@@ -291,21 +291,12 @@ export async function spawnChromium(cfg: SpawnConfig): Promise<ChromiumProcess> 
   if (earlyExitCode.kind === "exited") {
     await rm(userDataDir, { recursive: true, force: true }).catch(() => {});
     const tail = stderrTail.join("").trim().split("\n").slice(-12).join("\n");
-    const isRootSandbox = /running.*root.*without.*--no-sandbox|--no-sandbox.*required/i.test(tail);
-    const hint = isRootSandbox
-      ? "\n\nChromium refuses to start as root with the user-namespace sandbox enabled.\n" +
-        "Fixes (preferred → workaround):\n" +
-        "  1. Run as a non-root user.\n" +
-        "  2. `chmod 4755 chrome-sandbox` on the SUID helper next to the CfT binary.\n" +
-        "  3. Pass args: ['--no-sandbox'] to mochi.launch() — fingerprint leak (PLAN §8.6),\n" +
-        "     OK for testing, not for stealth-critical production."
-      : "";
     throw new Error(
       `[mochi] Chromium exited (code ${earlyExitCode.code}) within 750ms of spawn — ` +
         "the CDP pipe never opened. Most likely a startup precondition failure " +
         "(sandbox refusal, missing libs, malformed flags).\n\n" +
         `Stderr tail:\n${tail || "(empty)"}` +
-        hint,
+        diagnoseEarlyExitTail(tail),
     );
   }
 
@@ -448,6 +439,53 @@ export function buildChromiumArgs(
     args.push(...stripForbiddenFlags(envExtra.trim().split(/\s+/)));
   }
   return args;
+}
+
+/**
+ * Heuristic-classify a stderr tail from a Chromium that died within 750ms of
+ * spawn and emit a remediation hint. Two patterns matter today:
+ *
+ *   1. "Running as root without --no-sandbox is not supported" — the user-
+ *      namespace sandbox refusal under root. Fixes: non-root, SUID helper,
+ *      or `--no-sandbox` (with the documented fingerprint cost).
+ *   2. "error while loading shared libraries: <name>.so" — fresh Linux server
+ *      without the Chromium runtime deps. Fix: apt-install the canonical dep
+ *      list (full bytes live in `@mochi.js/cli/src/lib/linux-deps.ts` — we
+ *      keep just a short pointer here because @mochi.js/core cannot depend on
+ *      @mochi.js/cli without inverting the package graph).
+ *
+ * Returns the empty string when no pattern matches, in which case the caller
+ * surfaces only the raw stderr tail. Exported for unit tests so we can lock
+ * the regexes against regressions without spawning Chromium.
+ *
+ * @see tasks/0259-linux-first-run-experience.md
+ */
+export function diagnoseEarlyExitTail(tail: string): string {
+  if (/running.*root.*without.*--no-sandbox|--no-sandbox.*required/i.test(tail)) {
+    return (
+      "\n\nChromium refuses to start as root with the user-namespace sandbox enabled.\n" +
+      "Fixes (preferred → workaround):\n" +
+      "  1. Run as a non-root user.\n" +
+      "  2. `chmod 4755 chrome-sandbox` on the SUID helper next to the CfT binary.\n" +
+      "  3. Pass args: ['--no-sandbox'] to mochi.launch() — fingerprint leak (PLAN §8.6),\n" +
+      "     OK for testing, not for stealth-critical production."
+    );
+  }
+  const libMatch = /error while loading shared libraries:\s+([^\s:]+)/i.exec(tail);
+  if (libMatch !== null) {
+    const lib = libMatch[1] ?? "(unknown .so)";
+    return (
+      `\n\nChromium failed to load a system library: '${lib}'.\n` +
+      "Chromium-for-Testing ships only the binary; on a fresh Linux server the\n" +
+      "system libs Chromium links against are not preinstalled. Install the\n" +
+      "canonical dep list with apt:\n\n" +
+      "  bunx mochi browsers install   # re-run; the install command prints the\n" +
+      "                                # exact apt line for your system.\n\n" +
+      "Or install directly — full list at\n" +
+      "  https://mochijs.com/docs/getting-started/install#linux-runtime-dependencies"
+    );
+  }
+  return "";
 }
 
 /**
