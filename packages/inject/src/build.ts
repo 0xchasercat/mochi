@@ -29,10 +29,15 @@ import type { MatrixV1 } from "@mochi.js/consistency";
 import { emitBotGlobalsModule } from "./modules/bot-globals";
 import { emitClientHintsModule } from "./modules/client-hints";
 import { emitFontsModule } from "./modules/fonts";
+import { emitMediaDevicesModule } from "./modules/media-devices";
 import { emitNavigatorModule } from "./modules/navigator";
+import { emitNetworkInfoModule } from "./modules/network-info";
+import { emitPermissionsModule } from "./modules/permissions";
 import { emitScreenModule } from "./modules/screen";
+import { emitScreenOrientationModule } from "./modules/screen-orientation";
 import { emitTimingModule } from "./modules/timing";
 import { emitWebglModule } from "./modules/webgl";
+import { emitWebgpuModule } from "./modules/webgpu";
 import { emitDefinePropertyHelper } from "./runtime/defineproperty";
 import { emitToStringCloak } from "./runtime/tostring-cloak";
 
@@ -94,6 +99,14 @@ export function buildPayload(matrix: MatrixV1): PayloadResult {
   parts.push(wrapTry("timing", emitTimingModule(matrix)));
   parts.push(wrapTry("bot-globals", emitBotGlobalsModule()));
   parts.push(wrapTry("fonts", emitFontsModule(matrix)));
+  // Phase 0.7 surface coverage. Order doesn't matter for correctness — each
+  // module is wrapped in its own try/catch and reads only matrix.uaCh.* — but
+  // we keep an alphabetical-ish grouping for human readability of the dump.
+  parts.push(wrapTry("media-devices", emitMediaDevicesModule(matrix)));
+  parts.push(wrapTry("network-info", emitNetworkInfoModule(matrix)));
+  parts.push(wrapTry("permissions", emitPermissionsModule(matrix)));
+  parts.push(wrapTry("screen-orientation", emitScreenOrientationModule(matrix)));
+  parts.push(wrapTry("webgpu", emitWebgpuModule(matrix)));
 
   // Self-deletion of any stray __mochi__* properties on window/globalThis
   // — none of our helpers leak there in v0.3 (they're all IIFE-locals),

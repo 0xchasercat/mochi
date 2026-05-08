@@ -16,16 +16,29 @@
  */
 
 import type { Rule } from "../rule";
+import { EXTRAS_RULES } from "./extras";
 import { GPU_RULES } from "./gpu";
 import { LOCALE_RULES } from "./locale";
 import { NAVIGATOR_RULES } from "./navigator";
 import { SCREEN_RULES } from "./screen";
 import { USER_AGENT_RULES } from "./userAgent";
+import { WEBGPU_RULES } from "./webgpu";
 
 /**
  * The full rule list. Don't reorder casually — the topo sort uses
  * declaration order as the tie-breaker, so reorderings can change the
  * output of seed-driven rules that share a PRNG cursor.
+ *
+ * Rule families:
+ *   - GPU_RULES         R-001..R-003, R-024, R-025
+ *   - USER_AGENT_RULES  R-004..R-007, R-023, R-026, R-031
+ *   - NAVIGATOR_RULES   R-008..R-009, R-015..R-018, R-020, R-022, R-027,
+ *                       R-028, R-030
+ *   - SCREEN_RULES      R-010..R-012, R-021, R-029
+ *   - LOCALE_RULES      R-013, R-014, R-019
+ *   - WEBGPU_RULES      R-032, R-033
+ *   - EXTRAS_RULES      R-034..R-040 (mediaDevices / permissions / network /
+ *                       screen.orientation / matchMedia / storage)
  */
 export const RULES: readonly Rule[] = [
   ...GPU_RULES,
@@ -33,4 +46,6 @@ export const RULES: readonly Rule[] = [
   ...NAVIGATOR_RULES,
   ...SCREEN_RULES,
   ...LOCALE_RULES,
+  ...WEBGPU_RULES,
+  ...EXTRAS_RULES,
 ];

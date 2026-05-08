@@ -70,9 +70,14 @@ describe("@mochi.js/harness — run.loadProfile / loadBaseline / loadExpectedDiv
     const expected = await loadExpectedDivergences(dir);
     expect(expected).not.toBeNull();
     expect(Array.isArray(expected?.paths)).toBe(true);
-    // The userAgent intentional-divergence entry MUST exist.
+    // Phase 0.7 trims the expected-divergences list to just `audio.**` +
+    // `canvas.**` (deferred to task 0071 with precomputed blob fixtures).
+    // Every other surface previously listed here is now spoofed by the
+    // expanded consistency engine + inject pipeline; the harness should
+    // see them as matches, not intentional. tasks/0070.
     const paths = (expected?.paths ?? []).map((p) => p.path);
-    expect(paths).toContain("navigator.userAgent");
+    expect(paths).toContain("audio.**");
+    expect(paths).toContain("canvas.**");
   });
 
   it("returns null when expected-divergences.json is absent", async () => {

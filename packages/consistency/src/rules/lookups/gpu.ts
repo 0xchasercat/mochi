@@ -45,16 +45,31 @@ export function deriveWebglUnmaskedVendor(vendor: string, _renderer: string): st
  * Compose the WEBGL_debug_renderer_info `UNMASKED_RENDERER_WEBGL` string.
  * Chrome wraps the renderer with the ANGLE backend name on macOS/Windows.
  *
- * For v0.2 we trust the renderer that the profile already supplies. If the
- * renderer string looks "raw" (e.g. just "Apple M2"), we wrap it with the
- * platform-typical ANGLE prefix.
+ * The profile may supply the renderer in either of three shapes:
+ *   1. fully wrapped — `"ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)"`
+ *   2. half-wrapped — `"ANGLE Metal Renderer: Apple M4 Max"` (Chromium-internal form)
+ *   3. raw — `"Apple M2"` / `"Intel Iris Xe Graphics"` (vendor doc form)
+ *
+ * Chrome's WebGL `getParameter(UNMASKED_RENDERER_WEBGL)` always emits form 1.
+ * v0.7: detect form 1 via the literal `"ANGLE ("` prefix (with paren) and
+ * pass through; otherwise wrap. Form 2 ("ANGLE Metal Renderer: ...") is
+ * pulled into the Apple wrapper since the inner string IS the renderer
+ * Chrome reports inside the wrap.
  */
 export function deriveWebglUnmaskedRenderer(vendor: string, renderer: string): string {
-  if (renderer.toLowerCase().startsWith("angle")) return renderer;
+  // Already wrapped form (`"ANGLE ("`) — pass through verbatim. Note we
+  // require the open paren so half-wrapped `"ANGLE Metal Renderer: …"`
+  // strings still hit the wrap branch below. v0.5 used a substring check
+  // that conflated the two forms; the harness gate flipped it.
+  if (renderer.startsWith("ANGLE (")) return renderer;
   const vendorKey = classifyGpuVendor(vendor);
   switch (vendorKey) {
-    case "apple":
-      return `ANGLE (Apple, ANGLE Metal Renderer: ${renderer}, Unspecified Version)`;
+    case "apple": {
+      // Strip a leading `"ANGLE Metal Renderer: "` (form 2) so we don't
+      // double-prefix the wrapped output.
+      const inner = renderer.replace(/^ANGLE Metal Renderer: */i, "");
+      return `ANGLE (Apple, ANGLE Metal Renderer: ${inner}, Unspecified Version)`;
+    }
     case "intel":
       return `ANGLE (Intel, ${renderer}, OpenGL 4.1)`;
     case "amd":

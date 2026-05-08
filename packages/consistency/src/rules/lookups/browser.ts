@@ -143,3 +143,60 @@ export function deriveBuildVersion(major: string, seedDerivedU32: number): strin
   const patch = 1 + (Math.floor(seedDerivedU32 / 1000) % 199);
   return `${major}.0.${build}.${patch}`;
 }
+
+/**
+ * Tip-of-stable patch versions, keyed by `(browser, major)`. Chrome's
+ * `userAgentData.getHighEntropyValues({hints:["fullVersionList"]})` returns
+ * the EXACT stable patch (e.g. `"147.0.7727.138"`); the marketing major and
+ * the seed-derived build above are both fine for the legacy `userAgent`
+ * string, but the high-entropy fullVersionList probe expects byte-stable
+ * tip values. Capturing devices observe the published tip; we mirror it.
+ *
+ * Maintenance: refresh this table each Chrome major. Missing keys fall
+ * through to the synthesized `<major>.0.<build>.<patch>` (R-004 chain).
+ *
+ * @see PLAN.md §9.2 R-031, §13.6
+ */
+export const BROWSER_TIP_FULL_VERSION: Readonly<
+  Record<BrowserKey, Readonly<Record<string, string>>>
+> = {
+  chrome: {
+    "147": "147.0.7727.138",
+    "146": "146.0.7390.122",
+    "145": "145.0.7242.79",
+    "144": "144.0.7180.65",
+    "143": "143.0.7106.65",
+    "142": "142.0.6993.119",
+    "141": "141.0.6938.122",
+    "140": "140.0.6810.143",
+    "133": "133.0.6943.142",
+    "132": "132.0.6834.111",
+    "131": "131.0.6778.110",
+  },
+  edge: {
+    "147": "147.0.3477.94",
+    "133": "133.0.3065.92",
+    "131": "131.0.2903.99",
+  },
+  brave: {
+    "147": "147.0.7727.138",
+    "131": "131.0.6778.110",
+  },
+  arc: {
+    "131": "131.0.6778.110",
+  },
+  opera: {
+    "131": "131.0.0.0",
+  },
+};
+
+/**
+ * Resolve a browser's tip full-version. Falls back to `<major>.0.0.0` when
+ * the table doesn't carry the key, which matches Chrome's no-data shape.
+ */
+export function lookupTipFullVersion(browser: BrowserKey, major: string): string | null {
+  const family = BROWSER_TIP_FULL_VERSION[browser];
+  const tip = family[major];
+  if (tip !== undefined) return tip;
+  return null;
+}

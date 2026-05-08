@@ -1,13 +1,13 @@
 {
   "navigator": {
     "secureContext": true,
-    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/147.0.0.0 Safari/537.36",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.7727.138 Safari/537.36",
     "platform": "MacIntel",
     "vendor": "Google Inc.",
     "vendorSub": "",
     "product": "Gecko",
     "productSub": "20030107",
-    "appVersion": "5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/147.0.0.0 Safari/537.36",
+    "appVersion": "5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.7727.138 Safari/537.36",
     "appName": "Netscape",
     "appCodeName": "Mozilla",
     "language": "en-US",
@@ -19,9 +19,9 @@
     "doNotTrack": null,
     "maxTouchPoints": 0,
     "hardwareConcurrency": 14,
-    "deviceMemory": 32,
+    "deviceMemory": 8,
     "pdfViewerEnabled": true,
-    "webdriver": true,
+    "webdriver": false,
     "connection": {
       "effectiveType": "4g",
       "downlink": 1.65,
@@ -703,9 +703,9 @@
     }
   },
   "bot": {
-    "webdriver": true,
-    "webdriverType": "headless",
-    "headlessChrome": true,
+    "webdriver": false,
+    "webdriverType": "normal",
+    "headlessChrome": false,
     "automationKeys": [],
     "automationDetected": false,
     "chromeRuntime": false,

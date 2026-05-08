@@ -72,12 +72,14 @@ const CANONICAL_SEED = "contract-pin-seed";
  * fail the test. Update this hash AND the harness baselines together when
  * the payload's bytes intentionally change.
  *
- * Last updated 2026-05-08 alongside tasks/0051-consistency-stack-fixes.md
- * (Group C — formFactor omitted on desktop, [] only when SPOOF_MOBILE).
- * The conditional shape of the `getHighEntropyValues` template literal
- * changes, so the payload bytes flip again on top of the Group B re-pin.
+ * Last updated 2026-05-08 alongside tasks/0070-consistency-rules-full.md
+ * (phase 0.7 JS-rules — adds webgpu, media-devices, permissions, network-info,
+ * screen-orientation modules; client-hints learns ua-full-version-list;
+ * R-031 + R-032..R-040 land in the consistency engine). The payload now
+ * carries 12 spoof modules (was 7) and the matrix derivation produces
+ * tip-locked Chrome 131 → 131.0.6778.110, which flows into the UA template.
  */
-const PINNED_SHA256 = "4fd7a00d182d07793f3c69bcb8adf92e9d023ffb4224341899b782bbfa035a33";
+const PINNED_SHA256 = "ca9ac971d9e1bae4992baebe23ab2d1ff96fa984ff3b14e865deb133d8b91b59";
 
 describe("contract: @mochi.js/inject buildPayload sha256 is byte-stable per (profile, seed)", () => {
   it("buildPayload(deriveMatrix(profile, seed)) is deterministic", () => {

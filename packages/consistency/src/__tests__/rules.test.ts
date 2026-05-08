@@ -189,4 +189,87 @@ describe("rules — v0.2 ruleset (golden lock)", () => {
   it("R-030: navigator.cookieEnabled = true", () => {
     expect(macMatrix.uaCh["navigator-cookieEnabled"]).toBe("true");
   });
+
+  // ---- phase-0.7 rules (R-031..R-040) ------------------------------------
+
+  it("R-031: ua-full-version-list is JSON of {brand,version} with tip-locked Chrome 131", () => {
+    const raw = macMatrix.uaCh["ua-full-version-list"];
+    expect(typeof raw).toBe("string");
+    const parsed = JSON.parse(raw ?? "[]") as { brand: string; version: string }[];
+    expect(parsed).toEqual([
+      { brand: "Google Chrome", version: "131.0.6778.110" },
+      { brand: "Not.A/Brand", version: "8.0.0.0" },
+      { brand: "Chromium", version: "131.0.6778.110" },
+    ]);
+  });
+
+  it("R-032: webgpu-features carries the Apple-class catalog", () => {
+    const raw = macMatrix.uaCh["webgpu-features"];
+    const features = JSON.parse(raw ?? "[]") as string[];
+    expect(features).toContain("shader-f16");
+    expect(features).toContain("texture-compression-astc");
+    expect(features).toContain("subgroups");
+    expect(features.length).toBeGreaterThanOrEqual(20);
+  });
+
+  it("R-033: webgpu-info has architecture metal-3 for Apple GPUs", () => {
+    const raw = macMatrix.uaCh["webgpu-info"];
+    const info = JSON.parse(raw ?? "{}") as { architecture: string; vendor: string };
+    expect(info.vendor).toBe("apple");
+    expect(info.architecture).toBe("metal-3");
+  });
+
+  it("R-034: media-devices shape declares audioinput / videoinput / audiooutput", () => {
+    const raw = macMatrix.uaCh["media-devices"];
+    const devices = JSON.parse(raw ?? "[]") as { kind: string }[];
+    const kinds = devices.map((d) => d.kind);
+    expect(kinds).toContain("audioinput");
+    expect(kinds).toContain("videoinput");
+    expect(kinds).toContain("audiooutput");
+  });
+
+  it("R-035: media-supported-constraints map includes deviceId + groupId", () => {
+    const raw = macMatrix.uaCh["media-supported-constraints"];
+    const map = JSON.parse(raw ?? "{}") as Record<string, true>;
+    expect(map.deviceId).toBe(true);
+    expect(map.groupId).toBe(true);
+    expect(map.echoCancellation).toBe(true);
+  });
+
+  it("R-036: permissions defaults map sensors to granted, prompts to prompt", () => {
+    const raw = macMatrix.uaCh["permissions-defaults"];
+    const map = JSON.parse(raw ?? "{}") as Record<string, string>;
+    expect(map.geolocation).toBe("prompt");
+    expect(map.accelerometer).toBe("granted");
+    expect(map["clipboard-write"]).toBe("granted");
+  });
+
+  it("R-037: connection defaults to 4g effective type", () => {
+    const raw = macMatrix.uaCh.connection;
+    const conn = JSON.parse(raw ?? "{}") as { effectiveType: string; saveData: boolean };
+    expect(conn.effectiveType).toBe("4g");
+    expect(conn.saveData).toBe(false);
+  });
+
+  it("R-038: screen-orientation is landscape-primary on desktop", () => {
+    const raw = macMatrix.uaCh["screen-orientation"];
+    const o = JSON.parse(raw ?? "{}") as { type: string; angle: number };
+    expect(o.type).toBe("landscape-primary");
+    expect(o.angle).toBe(0);
+  });
+
+  it("R-039: media-queries map carries prefers-color-scheme + color-gamut", () => {
+    const raw = macMatrix.uaCh["media-queries"];
+    const map = JSON.parse(raw ?? "{}") as Record<string, string | boolean>;
+    expect(map["prefers-color-scheme"]).toBe("light");
+    expect(map["color-gamut"]).toBe("srgb");
+    expect(map.monochrome).toBe(false);
+  });
+
+  it("R-040: storage-estimate quota scales with cores; usage is 0", () => {
+    const raw = macMatrix.uaCh["storage-estimate"];
+    const e = JSON.parse(raw ?? "{}") as { quota: number; usage: number };
+    expect(e.usage).toBe(0);
+    expect(e.quota).toBeGreaterThan(0);
+  });
 });

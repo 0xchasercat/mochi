@@ -9,7 +9,12 @@
 
 import type { ProfileV1 } from "../generated/profile";
 import { defineRule, type Rule } from "../rule";
-import { deriveBuildVersion, deriveSecChUa, deriveUserAgent } from "./lookups/browser";
+import {
+  deriveBuildVersion,
+  deriveSecChUa,
+  deriveUserAgent,
+  lookupTipFullVersion,
+} from "./lookups/browser";
 import { SEC_CH_UA_PLATFORM_BY_OS } from "./lookups/os";
 
 type OsName = ProfileV1["os"]["name"];
@@ -38,16 +43,29 @@ export const R023: Rule = defineRule<readonly [string], string>({
 
 /**
  * R-004 — `[os.name, browser.name, browser.minVersion, uaCh.ua-build-hash]`
- * → `userAgent`. The build hash from R-023 fans out to a stable
- * `<major>.0.<build>.<patch>` triple, which gets substituted into the
- * platform's UA template.
+ * → `userAgent`. Tip-stable when the lookup table has a published patch for
+ * `(browser, major)`; otherwise the build hash from R-023 fans out to a
+ * stable `<major>.0.<build>.<patch>` triple. Tip-locking matches what real
+ * Chromium reports in `userAgent` + `userAgentDataHighEntropy.fullVersionList`,
+ * which the harness compares structurally.
+ *
+ * v0.7 ranks the tip lookup ahead of seed-derived because real-device
+ * captures observe the published tip; the seed-derived path is reserved
+ * for ad-hoc majors (canary, beta) that aren't yet in the tip table.
  */
 export const R004: Rule = defineRule<readonly [OsName, BrowserName, string, string], string>({
   id: "R-004",
-  description: "User-Agent template + seed-driven build-number variance",
+  description: "User-Agent template + tip-locked patch (fallback: seed-driven build variance)",
   inputs: ["os.name", "browser.name", "browser.minVersion", "uaCh.ua-build-hash"],
   output: "userAgent",
   derive([osName, browser, minVersion, buildHash]) {
+    // Tip lookup first — closes the harness divergence on
+    // navigator.userAgent + userAgentDataHighEntropy.fullVersionList[*].version
+    // for the captured Mac M4 baseline. PLAN.md §9.2 R-031.
+    const tip = lookupTipFullVersion(browser, minVersion);
+    if (tip !== null) {
+      return deriveUserAgent(osName, browser, tip);
+    }
     // Convert the hex build-hash to a 32-bit number — the lower 31 bits are
     // enough; the build/patch derivation uses small modular bands.
     const u32 = parseInt(buildHash.slice(0, 8), 16) >>> 0;
@@ -110,4 +128,58 @@ export const R026: Rule = defineRule<readonly [string], string>({
   },
 });
 
-export const USER_AGENT_RULES: readonly Rule[] = [R023, R004, R005, R006, R007, R026];
+/**
+ * R-031 — `[browser.name, browser.minVersion]` → `uaCh.ua-full-version-list`.
+ *
+ * Emits a JSON-encoded brand list with FULL `<major>.0.<build>.<patch>`
+ * versions, mirroring what `navigator.userAgentData.getHighEntropyValues({
+ * hints:["fullVersionList"]})` returns on real Chromium. The brand list
+ * itself reuses R-005's ordering — Branded → GREASE → Chromium — but the
+ * `version` field is the tip-locked patch (or `<major>.0.0.0` for GREASE,
+ * which is canonical Chromium behaviour).
+ *
+ * Inject (`client-hints.ts`) parses this JSON and serves it from
+ * `getHighEntropyValues`. Without this rule the inject layer falls back to
+ * the brand-list majors (`"147"`), which mismatches the captured baseline.
+ *
+ * @see PLAN.md §9.2 / §13.6
+ * @see tasks/0070-consistency-rules-full.md (full-version-list)
+ */
+export const R031: Rule = defineRule<readonly [BrowserName, string], string>({
+  id: "R-031",
+  description: "uaCh.ua-full-version-list — tip-locked Sec-CH-UA-Full-Version-List",
+  inputs: ["browser.name", "browser.minVersion"],
+  output: "uaCh.ua-full-version-list",
+  derive([browser, minVersion]) {
+    const tip = lookupTipFullVersion(browser, minVersion);
+    const fullVersion = tip ?? `${minVersion}.0.0.0`;
+    // Brand-list shape mirrors R-005. GREASE pinned to `8.0.0.0` (Chromium-
+    // spec): the GREASE entry's full version is its own canonical placeholder,
+    // not the browser tip. Chromium-canonical brands use the same tip as the
+    // branded entry.
+    const brands = [
+      { brand: brandLabel(browser), version: fullVersion },
+      { brand: "Not.A/Brand", version: "8.0.0.0" },
+      { brand: "Chromium", version: fullVersion },
+    ];
+    return JSON.stringify(brands);
+  },
+});
+
+/** Brand label parallel to SEC_CH_UA_BRANDS_BY_BROWSER. */
+function brandLabel(browser: BrowserName): string {
+  switch (browser) {
+    case "chrome":
+      return "Google Chrome";
+    case "edge":
+      return "Microsoft Edge";
+    case "brave":
+      return "Brave";
+    case "arc":
+      return "Arc";
+    case "opera":
+      return "Opera";
+  }
+}
+
+export const USER_AGENT_RULES: readonly Rule[] = [R023, R004, R005, R006, R007, R026, R031];

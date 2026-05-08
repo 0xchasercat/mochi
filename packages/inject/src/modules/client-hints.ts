@@ -110,10 +110,34 @@ export function emitClientHintsModule(matrix: MatrixV1): string {
   // sec-ch-ua-mobile is "?0" or "?1" on the wire.
   const mobile = mobileRaw === "?1";
 
-  // The "fullVersionList" is the same as `brands` here at v0.3 — we don't
-  // distinguish marketing version from full version. Phase 0.7 may.
+  // R-031 emits a tip-locked full brand list (e.g. `"147.0.7727.138"`) under
+  // `uaCh.ua-full-version-list` — match what
+  // `userAgentData.getHighEntropyValues(["fullVersionList"])` returns on
+  // captured-device baselines. Fall back to `brands` (brand-list majors)
+  // when the tip table doesn't carry the major.
+  const fullVersionListRaw = ua["ua-full-version-list"];
+  let fullVersionList: BrandEntry[] = brands;
+  if (typeof fullVersionListRaw === "string" && fullVersionListRaw.length > 0) {
+    try {
+      const parsed = JSON.parse(fullVersionListRaw) as unknown;
+      if (Array.isArray(parsed)) {
+        fullVersionList = parsed
+          .filter(
+            (e): e is BrandEntry =>
+              typeof e === "object" &&
+              e !== null &&
+              typeof (e as { brand?: unknown }).brand === "string" &&
+              typeof (e as { version?: unknown }).version === "string",
+          )
+          .map((e) => ({ brand: e.brand, version: e.version }));
+      }
+    } catch {
+      // Fall through to brands.
+    }
+  }
+
   const brandsLiteral = JSON.stringify(brands);
-  const fullVersionListLiteral = JSON.stringify(brands);
+  const fullVersionListLiteral = JSON.stringify(fullVersionList);
 
   return `
 // ---- client-hints spoof ----------------------------------------------------

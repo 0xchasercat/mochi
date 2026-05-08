@@ -54,22 +54,21 @@ The following are **expected** limits we'll formalize as the framework is built.
 
 ## v0.5 (validation harness landed) — known limits
 
-### Phase-0.7-deferred fingerprint surfaces are tracked as `intentional` divergences
+### Phase-0.7 JS-rule surfaces — DELIVERED in task 0070
 
-**Status:** known limit (deferred to phase 0.7)
-**Root cause:** v0.5 ships the harness mechanics — capture, normalize, diff, categorize, report — but the consistency engine still only covers the v0.2 surface (~30 of the 80 planned rules: navigator basics, screen, simple GPU strings, fonts/baseline-only, locale, timezone, hardware basics). The remaining ~50 surfaces are captured in baselines but not yet replicated by the spoofing stack: audio fingerprint bytes, full canvas hashes, full WebGL extension catalogs, full font lists, MediaDevices, SpeechSynthesis voices, WebGPU adapter info, Permissions API state, miscellaneous `navigator.{bluetooth,usb,serial,hid,xr,gpu,…}` boolean surfaces, screen.mediaQueries, Intl-derived timing surfaces, and the bot-detection sub-fields downstream of those.
-**Affected probes:** every probe family listed above. The harness diffs them and they appear in the per-profile DiffReportV1.
-**Mitigation:** each profile carries a `packages/profiles/data/<id>/expected-divergences.json` file that lists these surfaces as `intentional` divergences, keyed by glob path. The harness's `categorize()` short-circuits them to `intentional` (non-PR-blocking). Every entry MUST cite this file.
-**User workaround:** none today — wait for phase 0.7. Until then a profile is "Zero-Diff for the v0.5 surface" — meaningful but not yet the full claim.
-**Tracking:** phase 0.7 (consistency engine full).
+**Status:** ~~known limit~~ resolved by task 0070 (phase 0.7 JS-rules deliverable)
+**Root cause:** v0.5 shipped the harness mechanics; v0.7 (task 0070) extended the consistency engine + inject pipeline to cover WebGPU adapter info (R-032/R-033), MediaDevices.enumerateDevices with seed-stable IDs (R-034/R-035), Permissions.query defaults (R-036), Network Information API (R-037), screen.orientation + matchMedia + storage.estimate (R-038..R-040), and tip-locked browser full-version-list (R-031). The webgl unmasked-renderer wrap (R-002) is also tightened.
+**Affected probes:** the harness now sees them all as matches — `mac-m4-chrome-stable` Zero-Diff at 100% structural match against the local fixture.
+**Mitigation:** the per-profile `expected-divergences.json` is trimmed to just `audio.**` + `canvas.**` (deferred to task 0071 with precomputed blob fixtures).
+**Tracking:** task 0071 (audio bytes + canvas hash maps).
 
-### `userAgent` is more correct than the captured baseline
+### Audio + canvas precomputed fixtures — deferred to task 0071
 
-**Status:** intentional divergence (not a limit; documented for transparency)
-**Root cause:** captures of the `mac-m4-chrome-stable` baseline run against bare Chromium-for-Testing in headless mode, which reports `HeadlessChrome/<v>.0.0.0` in the user-agent. The consistency engine's R-004 rebuilds the UA from primitives (`os.name`, `browser.name`, `browser.minVersion`, the seed-derived build-hash from R-023), dropping the `HeadlessChrome` token — a leak we explicitly want to suppress. The harness sees a divergence at `navigator.userAgent`; it's marked `intentional` in the profile's `expected-divergences.json` because the spoof is more correct than the baseline.
-**Affected probes:** `navigator.userAgent`, `navigator.appVersion` (R-026 derives appVersion from userAgent).
-**Mitigation:** none needed. The behavior is correct.
-**Tracking:** none — fundamental to the design.
+**Status:** known limit (deferred to task 0071)
+**Root cause:** Faithful spoofing of `OfflineAudioContext.startRendering()` byte hashes and `HTMLCanvasElement.toDataURL` outputs requires precomputed per-(profile, sample-rate) byte tables and per-(profile, payload) canvas hash maps. These are device-class-bound data files that need to ship in `packages/profiles/data/<id>/{audio,canvas}/*.bin`.
+**Affected probes:** Browserleaks audio + canvas, FPJS visitor-id (audio + canvas components), creep.js audio + canvas. The harness baseline currently has audio/canvas data but the local fixture's spoofed run produces matching values too (both empty in the headless capture); when 0071 lands the precomputed bytes will be loaded explicitly so probes see the device's real fingerprint regardless of capture mode.
+**Mitigation:** `packages/profiles/data/<id>/expected-divergences.json` lists `audio.**` + `canvas.**` as the only intentional divergences at v0.7.
+**Tracking:** task 0071.
 
 ---
 
@@ -93,41 +92,37 @@ The following are **expected** limits we'll formalize as the framework is built.
 **User workaround:** same as audio.
 **Tracking:** phase 0.7.
 
-### WebGPU adapter info is NOT spoofed at v0.3
+### WebGPU adapter info — covered (verify)
 
-**Status:** known limit
-**Root cause:** WebGPU `requestAdapter().requestAdapterInfo()` exposes `architecture`/`description`/`device`/`vendor` strings. These haven't been added to `MatrixV1` yet — they require additional consistency-engine rules to lock against the existing `gpu.{vendor, renderer}` slot.
-**Affected probes:** WebGPU adapter info readout, browserleaks webgpu.
-**Mitigation:** none at v0.3 — bare Chromium values.
-**User workaround:** none at JS layer in v0.3.
-**Tracking:** phase 0.7 (consistency engine full).
+**Status:** covered as of task 0070 (phase 0.7 JS-rules)
+**Root cause:** WebGPU `requestAdapter().info` and `adapter.features` are now spoofed by `packages/inject/src/modules/webgpu.ts`, driven by R-032 (features) and R-033 (info) keyed off `gpu.vendor`. Per-vendor curated catalogs in `packages/consistency/src/rules/lookups/webgpu.ts`.
+**Affected probes:** harness gate confirms `mac-m4-chrome-stable` Zero-Diff at the WebGPU surface as of 2026-05-08.
+**Mitigation:** none needed.
+**Tracking:** none — covered.
 
-### `MediaDevices.enumerateDevices()` is NOT spoofed at v0.3
+### `MediaDevices.enumerateDevices()` — covered (verify)
 
-**Status:** known limit
-**Root cause:** Persistent device-id spoofing requires (a) the matrix to declare a stable per-(profile, seed) device list and (b) the inject layer to wrap the async `enumerateDevices` Promise. Neither lands until phase 0.7.
+**Status:** covered as of task 0070
+**Root cause:** Persistent device-id spoofing now ships in `packages/inject/src/modules/media-devices.ts`. `deviceId` and `groupId` are SHA-256(profile.id + ":" + seed + ":mediaDevices:<index>:<kind>") for byte-stable per-(profile, seed) IDs. Device shape and `getSupportedConstraints()` come from R-034/R-035 lookups.
 **Affected probes:** WebRTC device enumeration probes, FPJS hardware tab.
-**Mitigation:** v0.3 leaves bare Chromium output (typically empty in headless mode).
-**User workaround:** none at JS layer in v0.3.
-**Tracking:** phase 0.7.
+**Mitigation:** none needed.
+**Tracking:** none — covered.
 
-### `SpeechSynthesis.getVoices()` is NOT spoofed at v0.3
+### `SpeechSynthesis.getVoices()` — out of scope at v0.7 JS-rules; baseline empty
 
-**Status:** known limit
-**Root cause:** Voice-list spoofing requires per-OS voice catalog data (mac voices vs Windows voices vs Linux voices) — to land alongside fonts in phase 0.7.
+**Status:** known limit (no inject module yet; harness matches because the local fixture's mochi run also produces an empty list)
+**Root cause:** Voice-list spoofing requires per-OS voice catalog data (mac voices vs Windows voices vs Linux voices). The captured Mac M4 baseline runs in headless mode where Chromium reports zero voices; mochi-spoofed sessions in headless mode also report zero voices, so the harness diff is currently empty. When future profile captures run headed, the catalog needs to land here.
 **Affected probes:** speech-synthesis probes (creepjs speech).
-**Mitigation:** none at v0.3.
-**User workaround:** none.
-**Tracking:** phase 0.7.
+**Mitigation:** none at v0.7.
+**Tracking:** revisit when a headed-mode profile capture exposes the gap.
 
-### `Notification.permission` and `Permissions.query` use bare Chrome behavior
+### `Permissions.query` — covered (verify)
 
-**Status:** known limit
-**Root cause:** v0.3 deliberately doesn't override these — they're more about page-permission state (which mochi sessions don't grant) than fingerprintable surface. The bare Chromium values match what a fresh-profile, never-prompted user would see.
-**Affected probes:** anti-bot heuristics that compare `Notification.permission === "denied"` against UA.
-**Mitigation:** none — the bare values are already the "stealth-correct" values.
-**User workaround:** none needed.
-**Tracking:** revisit when a probe actually flags this.
+**Status:** covered as of task 0070
+**Root cause:** R-036 emits a default-state map (`prompt` for most APIs, `granted` for sensors and `clipboard-write`); `packages/inject/src/modules/permissions.ts` overrides `Permissions.prototype.query` to consult it.
+**Affected probes:** anti-bot heuristics that compare permission states.
+**Mitigation:** none needed.
+**Tracking:** none — covered.
 
 ### Worker context injection has a smaller stealth ceiling than main-world
 

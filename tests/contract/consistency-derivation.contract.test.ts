@@ -76,13 +76,18 @@ describe("contract: deriveMatrix output (v0.2 golden)", () => {
     );
   });
 
-  it("R-004 + R-023: userAgent has a seed-driven build version", () => {
-    // Same seed → same UA. Different seed → different UA.
+  it("R-004 + R-023: userAgent uses the tip-locked patch when published", () => {
+    // Phase 0.7 R-031 ranks the published-tip lookup ahead of the seed-derived
+    // build hash. Chrome 131 stable tip is `131.0.6778.110`; both seeds resolve
+    // to that tip, so the UA is byte-identical across seeds within a major.
+    // The UA *would* be seed-different for an unpublished major; the
+    // determinism contract still holds (same seed → same UA).
     const second = deriveMatrix(FIXTURE, SEED);
     expect(matrix.userAgent).toBe(second.userAgent);
     const other = deriveMatrix(FIXTURE, `${SEED}-other`);
-    expect(matrix.userAgent).not.toBe(other.userAgent);
-    expect(matrix.userAgent).toMatch(/Chrome\/131\.0\.\d+\.\d+/);
+    // Tip-locked: same UA across seeds for a known major.
+    expect(matrix.userAgent).toBe(other.userAgent);
+    expect(matrix.userAgent).toMatch(/Chrome\/131\.0\.6778\.110/);
   });
 
   it("R-005/R-006/R-007: client-hints are populated", () => {
