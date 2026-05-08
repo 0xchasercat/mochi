@@ -41,9 +41,28 @@ jobs:
         with:
           path: ~/.mochi/browsers
           key: chromium-for-testing-linux-${{ runner.os }}-v1
-      - name: Install Chromium-for-Testing (mochi browsers install)
-        if: steps.cache-chromium.outputs.cache-hit != 'true'
+      # Always run install — it's idempotent (no-op if already installed) and
+      # cheap on cache hit (~1s "already installed at <path>" log). On cache
+      # miss, this is the actual download. This makes the gate robust against
+      # cache-corruption scenarios where the cache was saved partial-state.
+      - name: Install Chromium-for-Testing (mochi browsers install — idempotent)
         run: bun packages/cli/src/bin.ts browsers install
+      # Diagnostic: show what's actually on disk + what the cli sees. Helps
+      # debug cache vs install vs cli-scan mismatches without an interactive
+      # session. Cheap (<1s) and only logs.
+      - name: Diagnose Chromium install state
+        run: |
+          set -u
+          echo "::group::~/.mochi/browsers tree"
+          ls -la ~/.mochi/browsers/ 2>/dev/null || echo "(empty or missing)"
+          find ~/.mochi/browsers/ -maxdepth 4 -type f 2>/dev/null | head -20
+          echo "::endgroup::"
+          echo "::group::mochi browsers list"
+          bun packages/cli/src/bin.ts browsers list || true
+          echo "::endgroup::"
+          echo "::group::mochi browsers path"
+          bun packages/cli/src/bin.ts browsers path || true
+          echo "::endgroup::"
       # Harness smoke gate — Phase 0.5 deliverable. Drives a Mochi-spoofed
       # session through tests/fixtures/probe-page.html, normalizes both sides,
       # and structurally diffs against each profile's committed baseline.

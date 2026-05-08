@@ -55,9 +55,21 @@ jobs:
         with:
           path: ~/.mochi/browsers
           key: chromium-for-testing-linux-${{ runner.os }}-v1
-      - name: Install Chromium-for-Testing (mochi browsers install)
-        if: steps.cache-chromium.outputs.cache-hit != 'true'
+      # Always run install — idempotent + diagnostic on cache hit. Same
+      # rationale as pr-fast.yml.
+      - name: Install Chromium-for-Testing (mochi browsers install — idempotent)
         run: bun packages/cli/src/bin.ts browsers install
+      - name: Diagnose Chromium install state
+        run: |
+          set -u
+          echo "::group::~/.mochi/browsers tree"
+          ls -la ~/.mochi/browsers/ 2>/dev/null || echo "(empty or missing)"
+          find ~/.mochi/browsers/ -maxdepth 4 -type f 2>/dev/null | head -20
+          echo "::endgroup::"
+          echo "::group::mochi browsers list + path"
+          bun packages/cli/src/bin.ts browsers list || true
+          bun packages/cli/src/bin.ts browsers path || true
+          echo "::endgroup::"
 
       # Pre-publish conformance gates — v1.0 release blocks on these.
       # PLAN.md I-7 ("the harness is the gate"). Publish is blocked unless
