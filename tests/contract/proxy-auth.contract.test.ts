@@ -1,22 +1,30 @@
 /**
- * Cross-package contract: proxy auth wiring (task 0160).
+ * Cross-package contract: proxy auth wiring (task 0160) + init-injector wiring
+ * (task 0266).
  *
  * Verifies the structural-wiring contract between `LaunchOptions.proxy`
  * (string + `ProxyConfig` shapes) and the CDP `Fetch.authRequired`
  * handler:
  *
  *   1. `Session({ proxyAuth: { ... } })` calls `Fetch.enable`
- *      with `handleAuthRequests: true, patterns: [{ urlPattern: "*" }]` and answers
- *      `Fetch.authRequired` events with `Fetch.continueWithAuth`.
- *   2. `Session()` without `proxyAuth` does NOT call `Fetch.enable`
- *      (no protocol surface, no perf cost).
- *   3. `Session.close()` sends `Fetch.disable` and tears down the listeners.
+ *      with `handleAuthRequests: true` and the task-0266 Document-first
+ *      patterns (`[{ urlPattern: "*", resourceType: "Document" }, { urlPattern: "*" }]`),
+ *      and answers `Fetch.authRequired` events with `Fetch.continueWithAuth`.
+ *   2. `Session()` without `proxyAuth` ALSO sends `Fetch.enable` (task 0266 —
+ *      the unified injector splices via `Fetch.fulfillRequest` so the Fetch
+ *      domain must be on whenever inject is active). `handleAuthRequests`
+ *      is then false, but the Document-first patterns remain.
+ *   3. `Session({ bypassInject: true })` without `proxyAuth` does NOT call
+ *      `Fetch.enable` — capture flow keeps zero protocol surface.
+ *   4. `Session.close()` sends `Fetch.disable` when EITHER inject OR proxy
+ *      auth was active, and skips it otherwise.
  *
  * We don't call `mochi.launch()` here because that would spawn Chromium —
  * we drive `Session` directly with a fake CDP transport.
  *
- * @see PLAN.md §8.2 / §10
+ * @see PLAN.md §8.2 / §8.4 / §10
  * @see tasks/0160-proxy-auth-and-ci-fix.md
+ * @see tasks/0266-init-script-fetch-fulfill.md
  */
 
 import { describe, expect, it } from "bun:test";
@@ -63,8 +71,8 @@ function makeProfile(): ProfileV1 {
 
 const SETUP_DELAY_MS = 30;
 
-describe("proxy-auth contract (PLAN.md §8.2 / §10, task 0160)", () => {
-  it("with proxy auth: sends Fetch.enable on construction", async () => {
+describe("proxy-auth contract (PLAN.md §8.2 / §10, tasks 0160 + 0266)", () => {
+  it("with proxy auth: sends Fetch.enable on construction with Document-first patterns", async () => {
     const pipe = makeFakePipe();
     const session = new Session({
       proc: fakeChromiumProcess(pipe, { userDataDir: "/tmp/contract-proxy" }),
@@ -72,13 +80,14 @@ describe("proxy-auth contract (PLAN.md §8.2 / §10, task 0160)", () => {
       seed: "seed",
       proxyAuth: { username: "u", password: "p" },
     });
-    // Wait for the deferred installProxyAuth to settle.
+    // Wait for the deferred init-injector install to settle.
     await new Promise((r) => setTimeout(r, SETUP_DELAY_MS));
     const enable = pipe.written.find((c) => c.parsed.method === "Fetch.enable");
     expect(enable).toBeDefined();
+    // Task 0266 unified Fetch.enable owner: Document-first + wildcard.
     expect(enable?.parsed.params).toEqual({
       handleAuthRequests: true,
-      patterns: [{ urlPattern: "*" }],
+      patterns: [{ urlPattern: "*", resourceType: "Document" }, { urlPattern: "*" }],
     });
     await session.close();
   });
@@ -110,7 +119,7 @@ describe("proxy-auth contract (PLAN.md §8.2 / §10, task 0160)", () => {
     await session.close();
   });
 
-  it("without proxy auth: NEVER sends Fetch.enable", async () => {
+  it("without proxy auth, default inject: still sends Fetch.enable (task 0266 — body splice path)", async () => {
     const pipe = makeFakePipe();
     const session = new Session({
       proc: fakeChromiumProcess(pipe, { userDataDir: "/tmp/contract-proxy" }),
@@ -119,11 +128,34 @@ describe("proxy-auth contract (PLAN.md §8.2 / §10, task 0160)", () => {
     });
     await new Promise((r) => setTimeout(r, SETUP_DELAY_MS));
     const enable = pipe.written.find((c) => c.parsed.method === "Fetch.enable");
+    expect(enable).toBeDefined();
+    // No auth → handleAuthRequests is false; patterns still cover Document
+    // (so we can fulfill) AND a wildcard fallback (so non-Document is
+    // forwarded immediately and Chromium doesn't hang).
+    expect(enable?.parsed.params).toEqual({
+      handleAuthRequests: false,
+      patterns: [{ urlPattern: "*", resourceType: "Document" }, { urlPattern: "*" }],
+    });
+    await session.close();
+  });
+
+  it("with bypassInject:true and no proxy auth — NEVER sends Fetch.enable", async () => {
+    // Capture-style flow keeps the v0.1 "zero extra protocol surface"
+    // posture: no payload, no auth → no Fetch domain at all.
+    const pipe = makeFakePipe();
+    const session = new Session({
+      proc: fakeChromiumProcess(pipe, { userDataDir: "/tmp/contract-proxy" }),
+      matrix: deriveMatrix(makeProfile(), "seed"),
+      seed: "seed",
+      bypassInject: true,
+    });
+    await new Promise((r) => setTimeout(r, SETUP_DELAY_MS));
+    const enable = pipe.written.find((c) => c.parsed.method === "Fetch.enable");
     expect(enable).toBeUndefined();
     await session.close();
   });
 
-  it("close() sends Fetch.disable when proxy auth was active", async () => {
+  it("close() sends Fetch.disable when the unified injector was active", async () => {
     const pipe = makeFakePipe();
     const session = new Session({
       proc: fakeChromiumProcess(pipe, { userDataDir: "/tmp/contract-proxy" }),
@@ -137,12 +169,13 @@ describe("proxy-auth contract (PLAN.md §8.2 / §10, task 0160)", () => {
     expect(disable).toBeDefined();
   });
 
-  it("close() does NOT send Fetch.disable when no proxy auth", async () => {
+  it("close() does NOT send Fetch.disable when neither inject nor proxy auth ran", async () => {
     const pipe = makeFakePipe();
     const session = new Session({
       proc: fakeChromiumProcess(pipe, { userDataDir: "/tmp/contract-proxy" }),
       matrix: deriveMatrix(makeProfile(), "seed"),
       seed: "seed",
+      bypassInject: true,
     });
     await new Promise((r) => setTimeout(r, SETUP_DELAY_MS));
     await session.close();

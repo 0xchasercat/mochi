@@ -25,11 +25,11 @@ import {
   type NetCtx,
   type NetFetchInit,
 } from "@mochi.js/net";
+import { type InitInjectorHandle, installInitInjector } from "./cdp/init-injector";
 import { MessageRouter } from "./cdp/router";
 import type { AttachedToTargetEvent } from "./cdp/types";
 import { Page } from "./page";
 import type { ChromiumProcess } from "./proc";
-import { installProxyAuth, type ProxyAuthHandle } from "./proxy-auth";
 import { VERSION } from "./version";
 
 /**
@@ -56,10 +56,10 @@ export interface SessionInit {
   /** Optional overrides for the underlying message-router timeout. */
   defaultTimeoutMs?: number;
   /**
-   * When true, skip {@link buildPayload} AND skip
-   * `Page.addScriptToEvaluateOnNewDocument` on every new page; worker
-   * targets receive no inject either. Intended for `mochi capture` and
-   * similar baseline-collection flows. PLAN.md §12.1, task 0040.
+   * When true, skip {@link buildPayload} AND skip the init-injector install
+   * (no `Fetch.fulfillRequest` body splice on documents); worker targets
+   * receive no inject either. Intended for `mochi capture` and similar
+   * baseline-collection flows. PLAN.md §12.1, task 0040.
    */
   bypassInject?: boolean;
   /**
@@ -243,18 +243,22 @@ export class Session {
   private readonly _payload: PayloadResult | null;
   /**
    * Whether this session bypasses the inject pipeline (no `buildPayload`,
-   * no `Page.addScriptToEvaluateOnNewDocument`, no worker injection).
-   * Set from {@link SessionInit.bypassInject}. PLAN.md §12.1, task 0040.
+   * no body splice via `Fetch.fulfillRequest`, no worker injection). Set
+   * from {@link SessionInit.bypassInject}. PLAN.md §12.1, task 0040.
    *
    * @internal
    */
   private readonly bypassInject: boolean;
   /**
-   * Live handle for the CDP `Fetch.authRequired` subscription. Created
-   * lazily on construction when `init.proxyAuth` is set; disposed on
-   * `Session.close`. Undefined when the session has no proxy auth.
+   * Live handle for the unified `Fetch` domain owner — installs once on
+   * construction and tears down on `Session.close`. Owns BOTH the
+   * Document-body splice (init-script delivery, task 0266) AND the
+   * `Fetch.authRequired` listener for proxy creds. Undefined when neither
+   * inject nor proxy auth is in play (capture-with-no-proxy short-circuit).
+   *
+   * @see PLAN.md §8.4, tasks/0266-fetch-fulfill-init-script.md
    */
-  private proxyAuthHandle: ProxyAuthHandle | undefined;
+  private initInjectorHandle: InitInjectorHandle | undefined;
   /**
    * Snapshot of the `challenges` launch option, retained so
    * {@link newPage} can install the per-page auto-click handler. Undefined
@@ -302,24 +306,37 @@ export class Session {
     this.cookieJar = createCookieJar(this);
     this.installAutoAttach();
     this.installCrashGuard();
-    // Wire CDP-driven proxy auth only when credentials were supplied. The
-    // no-auth path skips Fetch.enable entirely so we don't pay the
-    // protocol-attach cost or surface any extra CDP traffic.
-    if (init.proxyAuth !== undefined) {
+    // Task 0266: unified Fetch.enable owner — handles both Document-body
+    // splice (init-script delivery via Fetch.fulfillRequest, replacing
+    // Page.addScriptToEvaluateOnNewDocument) AND the proxy-auth handler
+    // when credentials are supplied. Single Fetch.enable per session.
+    //
+    // The injector skips Fetch.enable entirely when both are inactive
+    // (capture flow with no proxy) so we keep the §8.2-clean
+    // "no extra protocol surface" property of the v0.1 baseline for that
+    // narrow case.
+    const payloadCode = this._payload?.code ?? null;
+    const auth = init.proxyAuth;
+    if (payloadCode !== null || auth !== undefined) {
       // Fire-and-forget: surface failures via console.warn but don't reject
-      // the constructor — pages still launch and unauthenticated traffic
-      // will simply 407, giving callers a recoverable signal.
-      void installProxyAuth(this.router, init.proxyAuth)
+      // the constructor. The init-script path means a failure to install
+      // breaks inject delivery (the page still loads with the bare
+      // browser fingerprint), so we log loudly to keep the failure
+      // visible.
+      void installInitInjector(this.router, {
+        payloadCode,
+        ...(auth !== undefined ? { auth } : {}),
+      })
         .then((handle) => {
           if (this.closed) {
             void handle.dispose();
             return;
           }
-          this.proxyAuthHandle = handle;
+          this.initInjectorHandle = handle;
         })
         .catch((err: unknown) => {
           if (!this.closed) {
-            console.warn("[mochi] proxy-auth installation failed:", err);
+            console.warn("[mochi] init-injector installation failed:", err);
           }
         });
     }
@@ -330,12 +347,15 @@ export class Session {
    *   1. `Target.createTarget` opens a new browser tab.
    *   2. `Target.attachToTarget({ flatten: true })` returns a flat-mode session
    *      id we'll use to address page-level CDP methods.
-   *   3. `Page.addScriptToEvaluateOnNewDocument({ source, runImmediately: true,
-   *      worldName: "" })` installs the inject payload to run main-world,
-   *      before any page script, on every navigation. The returned identifier
-   *      is tracked on the {@link Page} so it can be removed on close.
-   *      Critical: `worldName: ""` — any non-empty string creates an isolated
-   *      world (PLAN.md §8.4) which is detectable.
+   *   3. The inject payload is delivered NOT via
+   *      `Page.addScriptToEvaluateOnNewDocument` but via the always-on
+   *      `Fetch` domain handler installed once at session-construction time
+   *      (`installInitInjector`). When this page navigates, the document
+   *      response is intercepted, its CSP rewritten, and the payload
+   *      spliced as an inline `<script>` at end-of-`<head>` before the
+   *      first non-comment `<script>`. See PLAN.md §8.4 / task 0266 for
+   *      the rationale (closes the source-attribution leak that
+   *      `addScriptToEvaluateOnNewDocument` otherwise carries).
    *
    * `flatten: true` is critical — without it, page CDP messages would need to
    * be wrapped in `Target.sendMessageToTarget` envelopes. Flat mode lets us
@@ -421,29 +441,17 @@ export class Session {
         { sessionId: attached.sessionId },
       );
     }
-    // PLAN.md §12.1 / task 0040 — capture flow short-circuits inject so the
-    // browser reports its bare fingerprint. Otherwise install the payload
-    // main-world via §8.4. worldName MUST be the empty string.
-    let injectScriptIdentifier: string | undefined;
-    if (!this.bypassInject && this._payload !== null) {
-      const installed = await this.router.send<{ identifier: string }>(
-        "Page.addScriptToEvaluateOnNewDocument",
-        {
-          source: this._payload.code,
-          runImmediately: true,
-          worldName: "",
-          // includeCommandLineAPI defaults to false; we don't set it.
-        },
-        { sessionId: attached.sessionId },
-      );
-      injectScriptIdentifier = installed.identifier;
-    }
+    // Task 0266: the inject payload is delivered per-navigation by the
+    // session-level `installInitInjector` handler, NOT by a per-page
+    // `Page.addScriptToEvaluateOnNewDocument` call. The handler is already
+    // installed (see constructor) and listens on `Fetch.requestPaused` for
+    // every Document response. There is therefore no per-page install here
+    // and no script identifier to track. PLAN.md §8.4 amended.
     const page = new Page({
       router: this.router,
       targetId: created.targetId,
       sessionId: attached.sessionId,
       initialUrl: "about:blank",
-      ...(injectScriptIdentifier !== undefined ? { injectScriptIdentifier } : {}),
       // PLAN.md I-5: behavior comes from MatrixV1.behavior (the matrix is
       // the single source of truth — `Session.profile` is the resolved
       // MatrixV1). Per-call opts may override individual fields.
@@ -620,15 +628,16 @@ export class Session {
       }
       this.netCtx = undefined;
     }
-    // Drop the proxy-auth subscription + Fetch.disable BEFORE we tear down
-    // the router so the disable round-trip can still complete.
-    if (this.proxyAuthHandle !== undefined) {
+    // Drop the unified init-injector subscription (and its `Fetch.disable`)
+    // BEFORE we tear down the router so the disable round-trip can still
+    // complete on the live transport.
+    if (this.initInjectorHandle !== undefined) {
       try {
-        await this.proxyAuthHandle.dispose();
+        await this.initInjectorHandle.dispose();
       } catch (err) {
-        console.warn("[mochi] proxy-auth dispose failed:", err);
+        console.warn("[mochi] init-injector dispose failed:", err);
       }
-      this.proxyAuthHandle = undefined;
+      this.initInjectorHandle = undefined;
     }
     await this.router.close();
     await this.proc.close();

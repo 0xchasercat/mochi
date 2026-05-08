@@ -85,7 +85,7 @@ describe("Session.bypassInject (PLAN.md §12.1, task 0040)", () => {
     }
   });
 
-  it("with bypassInject:true — newPage() never sends Page.addScriptToEvaluateOnNewDocument", async () => {
+  it("with bypassInject:true — newPage() never sends Page.addScriptToEvaluateOnNewDocument and no Fetch.enable for inject", async () => {
     const matrix = deriveMatrix(TEST_PROFILE, "bypass-test");
     session = new Session({
       proc: fakeChromiumProcess(pipe, { userDataDir: "/tmp/fake-mochi-test" }),
@@ -96,6 +96,9 @@ describe("Session.bypassInject (PLAN.md §12.1, task 0040)", () => {
 
     const page = await session.newPage();
     expect(page).toBeDefined();
+    // Allow the constructor's deferred init-injector promise to settle (it's
+    // a no-op in this case but the rejection-handler microtasks still queue).
+    await new Promise((r) => setTimeout(r, 5));
 
     const methods = pipe.written
       .map((w) => w.parsed.method)
@@ -103,10 +106,15 @@ describe("Session.bypassInject (PLAN.md §12.1, task 0040)", () => {
     expect(methods).toContain("Target.createTarget");
     expect(methods).toContain("Target.attachToTarget");
     expect(methods).toContain("Page.enable");
-    // The contract: ZERO addScriptToEvaluateOnNewDocument sends.
+    // Task 0266 contract: no Page.addScriptToEvaluateOnNewDocument under
+    // bypassInject — the session-level injector is also short-circuited.
     expect(methods).not.toContain("Page.addScriptToEvaluateOnNewDocument");
-    // And no Runtime.evaluate either (worker injection is also bypassed).
+    // No Runtime.evaluate — worker injection is also bypassed.
     expect(methods).not.toContain("Runtime.evaluate");
+    // No proxy creds, no payload to deliver — the unified injector
+    // short-circuits and does NOT send Fetch.enable. Capture flow keeps a
+    // zero-extra-protocol-surface posture.
+    expect(methods).not.toContain("Fetch.enable");
   });
 
   it("with bypassInject:true — _internalPayload() is null", () => {
@@ -121,10 +129,10 @@ describe("Session.bypassInject (PLAN.md §12.1, task 0040)", () => {
     expect(session._internalBypassInject()).toBe(true);
   });
 
-  it("with bypassInject omitted — _internalPayload() is non-null and newPage installs the inject script", async () => {
+  it("with bypassInject omitted — Session installs the unified Fetch-domain injector instead of Page.addScriptToEvaluateOnNewDocument (task 0266)", async () => {
     // Override the script identifier for this test — it asserts that the
-    // `addScriptToEvaluateOnNewDocument` call carries the matrix payload's
-    // compiled code.
+    // dual-mechanism `addScriptToEvaluateOnNewDocument` call (commit 2 of
+    // 0266) carries the wrapped matrix payload.
     const localPipe = makeFakePipe({
       responders: {
         "Target.createTarget": () => ({ targetId: "page-target-2" }),
@@ -145,20 +153,32 @@ describe("Session.bypassInject (PLAN.md §12.1, task 0040)", () => {
 
     const page = await session.newPage();
     expect(page).toBeDefined();
+    // Yield once so the deferred installInitInjector promise settles.
+    await new Promise((r) => setTimeout(r, 10));
 
     const methods = localPipe.written
       .map((w) => w.parsed.method)
       .filter((m): m is string => typeof m === "string");
-    // Default behavior: the inject script IS installed.
-    expect(methods).toContain("Page.addScriptToEvaluateOnNewDocument");
-    // And the params carry the compiled payload code.
-    const installCall = localPipe.written.find(
-      (w) => w.parsed.method === "Page.addScriptToEvaluateOnNewDocument",
-    );
-    const params = installCall?.parsed.params as
-      | { source?: string; runImmediately?: boolean }
+    // Task 0266: the per-page Page.addScriptToEvaluateOnNewDocument call is
+    // GONE — the session uses Fetch.enable + Fetch.fulfillRequest body
+    // splice as the inject delivery mechanism.
+    expect(methods).not.toContain("Page.addScriptToEvaluateOnNewDocument");
+    // Fetch.enable is sent ONCE on session construction with the
+    // Document-first patterns. Auth is off because no proxyAuth was set.
+    expect(methods).toContain("Fetch.enable");
+    const enableCall = localPipe.written.find((w) => w.parsed.method === "Fetch.enable");
+    const enableParams = enableCall?.parsed.params as
+      | {
+          handleAuthRequests?: boolean;
+          patterns?: { urlPattern?: string; resourceType?: string }[];
+        }
       | undefined;
-    expect(params?.source).toBe(payload?.code);
-    expect(params?.runImmediately).toBe(true);
+    expect(enableParams?.handleAuthRequests).toBe(false);
+    expect(enableParams?.patterns).toBeDefined();
+    expect(enableParams?.patterns?.[0]).toEqual({
+      urlPattern: "*",
+      resourceType: "Document",
+    });
+    expect(enableParams?.patterns?.[1]).toEqual({ urlPattern: "*" });
   });
 });

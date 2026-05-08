@@ -145,21 +145,28 @@ describe("contract: Network.setUserAgentOverride pins early-network UA to matrix
       // local to whichever layer broke).
       expect(overrideParams?.userAgent?.includes("Headless")).toBe(false);
 
-      // Ordering invariant: the override MUST be sent BEFORE the inject
-      // script install — early subresource requests fire before any page
-      // script, so the network-layer override is what catches them, not
-      // addScriptToEvaluateOnNewDocument.
+      // Ordering invariant: the override MUST be sent BEFORE the page
+      // session is otherwise wired up — early subresource requests fire
+      // before any page script, so the network-layer override is what
+      // catches them. We assert relative to Page.enable on the page session
+      // (which is `await`ed before any other page-bound CDP send in
+      // Session.newPage). Task 0266 retired the per-page
+      // `Page.addScriptToEvaluateOnNewDocument` install in favour of the
+      // session-level Fetch.fulfillRequest body splice, so we no longer
+      // anchor against that frame.
       const indexOfOverride = pipe.written.findIndex(
         (f) =>
           f.parsed.method === "Network.setUserAgentOverride" &&
           f.parsed.sessionId === "page-sess-1",
       );
-      const indexOfInject = pipe.written.findIndex(
-        (f) => f.parsed.method === "Page.addScriptToEvaluateOnNewDocument",
+      const indexOfPageEnable = pipe.written.findIndex(
+        (f) => f.parsed.method === "Page.enable" && f.parsed.sessionId === "page-sess-1",
       );
       expect(indexOfOverride).toBeGreaterThanOrEqual(0);
-      expect(indexOfInject).toBeGreaterThanOrEqual(0);
-      expect(indexOfOverride).toBeLessThan(indexOfInject);
+      expect(indexOfPageEnable).toBeGreaterThanOrEqual(0);
+      // Override is sent AFTER Page.enable but BEFORE any subsequent
+      // page-bound action (newPage returns immediately after these wires).
+      expect(indexOfPageEnable).toBeLessThan(indexOfOverride);
 
       await page.close();
     } finally {

@@ -152,14 +152,14 @@ function makeRouter(): FakeRouter {
 }
 
 describe("installProxyAuth", () => {
-  it("sends Fetch.enable with handleAuthRequests:true and empty patterns", async () => {
+  it("sends Fetch.enable with handleAuthRequests:true and Document-first patterns (task 0266)", async () => {
     const f = makeRouter();
     const handle = await installProxyAuth(f.router, { username: "u", password: "p" });
     const enable = f.pipe.written.find((c) => c.parsed.method === "Fetch.enable");
     expect(enable).toBeDefined();
     expect(enable?.parsed.params).toEqual({
       handleAuthRequests: true,
-      patterns: [{ urlPattern: "*" }],
+      patterns: [{ urlPattern: "*", resourceType: "Document" }, { urlPattern: "*" }],
     });
     await handle.dispose();
     await f.router.close();

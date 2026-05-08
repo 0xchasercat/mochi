@@ -100,9 +100,14 @@ describe("contract: challenges.turnstile.autoClick wires the inject script", () 
       const installFrames = pipe.written.filter(
         (f) => f.parsed.method === "Page.addScriptToEvaluateOnNewDocument",
       );
-      // The matrix payload is the first install; the Turnstile detector
-      // is the second. We assert >= 2 because this is the contract.
-      expect(installFrames.length).toBeGreaterThanOrEqual(2);
+      // Task 0266: the matrix payload is no longer delivered via
+      // `Page.addScriptToEvaluateOnNewDocument` (it lands through the
+      // Fetch.fulfillRequest body splice instead — PLAN.md §8.4
+      // amended). The Turnstile detector is the ONLY remaining
+      // `addScriptToEvaluateOnNewDocument` install on this surface — the
+      // convenience-layer path still uses it for the per-page detector
+      // script.
+      expect(installFrames.length).toBeGreaterThanOrEqual(1);
 
       // The Turnstile detector frame is the one whose source mentions the
       // detector's wire markers — the magic-tag event name and the
