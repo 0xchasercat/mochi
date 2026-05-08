@@ -23,7 +23,7 @@ import { loadLib, resolveDylibPath } from "./ffi";
 export const VERSION = "0.0.1" as const;
 
 // Re-export for power users / tests.
-export { dylibCandidates, resolveDylibPath } from "./ffi";
+export { dylibCandidates, nativeAssetFileName, resolveDylibPath } from "./ffi";
 
 /** Init shape accepted by {@link fetch}. Mirrors a subset of `RequestInit`. */
 export interface NetFetchInit {

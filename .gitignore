@@ -11,8 +11,11 @@ build/
 target/
 Cargo.lock.bak
 
-# native artifacts (downloaded by postinstall, not committed)
-packages/net-rs/native/
+# native artifacts (downloaded by postinstall, not committed) — keep
+# the .gitkeep placeholder so the dir survives a fresh clone, otherwise
+# `npm pack` for @mochi.js/net-rs ships an empty publish-tarball entry.
+packages/net-rs/native/*
+!packages/net-rs/native/.gitkeep
 
 # captured browser binaries (downloaded by `mochi browsers install`)
 .mochi/browsers/

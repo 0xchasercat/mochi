@@ -1,17 +1,27 @@
 /**
  * Bun:FFI binding to the `@mochi.js/net-rs` cdylib (Rust + wreq).
  *
- * Resolution order for the dylib path:
- *   1. `process.env.MOCHI_NET_DYLIB` — explicit override (used by tests &
- *      power users).
- *   2. `<workspace>/target/release/libmochi_net.<suffix>` — Cargo workspace
- *      target (the path Cargo actually emits to in our workspace).
- *   3. `<net-rs>/target/release/libmochi_net.<suffix>` — non-workspace target
- *      (fallback in case Cargo workspace settings change in future).
+ * Resolution order for the dylib path (PLAN.md §14 phase 0.10,
+ * tasks/0100):
+ *   1. `process.env.MOCHI_NET_DYLIB` — explicit override (tests + power
+ *      users).
+ *   2. `<net-rs>/native/mochi_net-${platform}.${ext}` — the path the
+ *      `@mochi.js/net-rs` postinstall script downloads to. Filename uses
+ *      a platform suffix (e.g. `mochi_net-darwin-arm64.dylib`,
+ *      `mochi_net-win32-x64.dll`) to match the per-platform build matrix
+ *      assets on GH Releases. Note: no `lib` prefix — Cargo emits
+ *      `mochi_net.dll` on Windows (no `lib`), and we keep the same root
+ *      across all platforms for consistency.
+ *   3. `<workspace>/target/release/libmochi_net.<suffix>` — Cargo
+ *      workspace target (developer cargo build).
+ *   4. `<net-rs>/target/release/libmochi_net.<suffix>` — non-workspace
+ *      target (fallback if Cargo workspace settings change).
+ *   5. Debug counterparts of (3) and (4) for `cargo build` (no
+ *      --release).
  *
- * Phase 0.6 requires running `cargo build --release --manifest-path
- * packages/net-rs/Cargo.toml` locally before the binding loads. Prebuilt
- * platform binaries are deferred to phase 0.10 (PLAN.md §14).
+ * On consumer machines (npm-installed), step 2 wins. On dev machines
+ * with a fresh `cargo build --release ...`, step 3 wins. Either way the
+ * loader Just Works without env config.
  *
  * @see PLAN.md §10
  */
@@ -28,8 +38,25 @@ const __dirname = dirname(__filename);
 export const DYLIB_SUFFIX = suffix;
 
 /**
+ * Resolve the platform-suffixed filename used by the postinstall asset
+ * matrix (e.g. `mochi_net-darwin-arm64.dylib`). Returns `null` for
+ * unsupported tuples — callers fall through to the cargo-target paths.
+ */
+export function nativeAssetFileName(
+  nodePlatform: NodeJS.Platform = process.platform,
+  nodeArch: string = process.arch,
+): string | null {
+  if (nodePlatform === "darwin" && nodeArch === "arm64") return "mochi_net-darwin-arm64.dylib";
+  if (nodePlatform === "darwin" && nodeArch === "x64") return "mochi_net-darwin-x64.dylib";
+  if (nodePlatform === "linux" && nodeArch === "x64") return "mochi_net-linux-x64.so";
+  if (nodePlatform === "linux" && nodeArch === "arm64") return "mochi_net-linux-arm64.so";
+  if (nodePlatform === "win32" && nodeArch === "x64") return "mochi_net-win32-x64.dll";
+  return null;
+}
+
+/**
  * Compute the candidate filesystem locations the cdylib may live at, in
- * preference order.
+ * preference order. See file-level docstring for the full ordering.
  */
 export function dylibCandidates(): string[] {
   const candidates: string[] = [];
@@ -44,11 +71,19 @@ export function dylibCandidates(): string[] {
   // packages/net/src/ → ../../net-rs = sibling crate dir
   const netRsRoot = resolve(__dirname, "../../net-rs");
 
-  const fileName = `libmochi_net.${suffix}`;
-  candidates.push(resolve(workspaceRoot, "target/release", fileName));
-  candidates.push(resolve(netRsRoot, "target/release", fileName));
-  candidates.push(resolve(workspaceRoot, "target/debug", fileName));
-  candidates.push(resolve(netRsRoot, "target/debug", fileName));
+  // (2) The postinstall-downloaded native asset, if available for this
+  // (platform, arch). This is the production path on consumer machines.
+  const nativeFile = nativeAssetFileName();
+  if (nativeFile !== null) {
+    candidates.push(resolve(netRsRoot, "native", nativeFile));
+  }
+
+  // (3) + (4) Cargo developer build — release first, then debug.
+  const cargoFileName = `libmochi_net.${suffix}`;
+  candidates.push(resolve(workspaceRoot, "target/release", cargoFileName));
+  candidates.push(resolve(netRsRoot, "target/release", cargoFileName));
+  candidates.push(resolve(workspaceRoot, "target/debug", cargoFileName));
+  candidates.push(resolve(netRsRoot, "target/debug", cargoFileName));
 
   return candidates;
 }
@@ -63,9 +98,12 @@ export function resolveDylibPath(): string {
     if (existsSync(c)) return c;
   }
   throw new Error(
-    `[mochi-net] cdylib not found. Looked at:\n${candidates.map((c) => `  - ${c}`).join("\n")}\n` +
-      "Build it with `cargo build --release --manifest-path packages/net-rs/Cargo.toml`. " +
-      "Alternatively set MOCHI_NET_DYLIB=/abs/path/to/libmochi_net." +
+    `[mochi-net] no @mochi.js/net-rs binary found for ${process.platform}-${process.arch}. ` +
+      `Looked at:\n${candidates.map((c) => `  - ${c}`).join("\n")}\n` +
+      "Either: (a) verify your platform is supported (darwin-arm64, darwin-x64, " +
+      "linux-x64, linux-arm64, win32-x64), (b) build from source with " +
+      "`cargo build --release --manifest-path packages/net-rs/Cargo.toml`, or " +
+      "(c) set MOCHI_NET_DYLIB=/abs/path/to/libmochi_net." +
       DYLIB_SUFFIX,
   );
 }

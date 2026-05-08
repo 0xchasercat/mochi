@@ -15,6 +15,8 @@
   },
   "files": [
     "src",
+    "scripts",
+    "native",
     "Cargo.toml",
     "README.md"
   ],
@@ -38,11 +40,12 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "bun test src/",
-    "lint": "biome check src/",
+    "test": "bun test src/ scripts/",
+    "lint": "biome check src/ scripts/",
     "build:rust": "cargo build --release --manifest-path Cargo.toml",
     "test:rust": "cargo test --manifest-path Cargo.toml",
-    "build": "echo 'no JS build; cargo build:rust handles native artifact'"
+    "build": "echo 'no JS build; cargo build:rust handles native artifact'",
+    "postinstall": "bun run scripts/install-prebuild.ts || exit 0"
   },
   "publishConfig": {
     "access": "public"
