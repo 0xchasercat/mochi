@@ -1,5 +1,65 @@
 # @mochi.js/core
 
+## 0.2.0
+
+### Minor Changes
+
+- be1c69b: Closed-shadow-root piercing locator on `Page` (task 0253).
+
+  `@mochi.js/core` adds `Page.querySelectorPiercing(selector)` /
+  `Page.querySelectorAllPiercing(selector)` plus a public `ElementHandle`. The
+  locator walks `DOM.getDocument({ depth: -1, pierce: true })` and matches a
+  parsed CSS selector in JS, which is the only way to find elements inside
+  **closed** shadow roots — `DOM.querySelector(..., pierce: true)` itself does
+  not pierce closed shadows. Required for task 0220's Turnstile auto-clicker
+  on Cloudflare CDN integrations where the iframe lives behind a closed shadow
+  root. Algorithm sourced from patchright `framesPatch.ts:868-1012`
+  (`_customFindElementsByParsed`); selector subset is intentionally narrower
+  (tag / id / class / attribute / descendant combinator / comma lists). XPath
+  deferred per task brief — TODO if a future surface needs it.
+
+  `Page.humanClickHandle(handle, opts)` is the click-via-handle counterpart;
+  required when no CSS path can name the element from the parent document.
+
+  `@mochi.js/challenges` updates `installTurnstileAutoClick` so each poll tick
+  also performs a host-side piercing scan via the new locator. Inject-side
+  detection (light DOM + open shadows) and host-side piercing detection
+  (closed shadows) merge into a single per-widget state machine; clicks route
+  through `humanClick(selector)` for selector-reachable widgets and
+  `humanClickHandle(handle)` for closed-shadow widgets. Documented in
+  `packages/challenges/src/inject.ts` why the inject MutationObserver alone
+  cannot pierce closed shadows.
+
+  Neither `DOM.getDocument` nor `DOM.resolveNode` is on the §8.2 forbidden
+  list, and no `Runtime.enable` / `Page.createIsolatedWorld` are used.
+
+### Patch Changes
+
+- 4f1b81e: Pass `--lang=<matrix.locale>` to the spawned Chromium so the network-layer
+  `Accept-Language` header agrees with the JS-layer `navigator.language(s)`
+  spoof. Closes the PLAN.md I-5 leak surfaced by task 0251.
+
+  Without this flag, Chromium falls back to the host OS locale (or the
+  `en-US,en;q=0.9` default), and a site that cross-references the request
+  header against `navigator.languages` saw a mismatch. The flag is sourced
+  from the matrix's primary BCP-47 locale; multi-locale q-weighting is
+  derived by Chromium itself from this single primary, while the broader
+  list still flows through `matrix.languages` to the inject layer.
+
+  We deliberately do NOT fall back to the host locale (unlike
+  undetected-chromedriver `__init__.py:359-369`) — locale comes from the
+  matrix or `--lang` is omitted, surfacing a missing-locale profile bug
+  loudly instead of leaking the OS default.
+
+  Source-cited reference: udc `__init__.py:359-369`.
+
+- Updated dependencies [be1c69b]
+- Updated dependencies [1231131]
+  - @mochi.js/challenges@0.2.1
+  - @mochi.js/inject@0.2.0
+  - @mochi.js/consistency@0.1.1
+  - @mochi.js/behavioral@0.1.2
+
 ## 0.1.2
 
 ### Patch Changes
