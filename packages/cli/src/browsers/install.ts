@@ -30,11 +30,7 @@
  */
 import { mkdir, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  formatMissingLibHint,
-  LINUX_RUNTIME_DEPS_APT_LINE,
-  MISSING_SHARED_LIB_RE,
-} from "../lib/linux-deps";
+import { formatMissingLibHint, MISSING_SHARED_LIB_RE } from "../lib/linux-deps";
 import {
   type ChannelManifest,
   fetchChannelManifest,

@@ -48,14 +48,8 @@
           }
         }
         customElements.define("cf-host", CfHost);
-        // Sanity check for manual debugging — log what page-side JS sees.
-        // (Closed shadows return null here; piercing happens host-side.)
-        const host = document.getElementById("host");
-        const reachable = !!host && !!host.shadowRoot;
-        console.debug({
-          __mochi_fixture: "closed-shadow",
-          page_side_can_see_shadow: reachable,
-        });
+        // Closed shadows return null from page-side `host.shadowRoot`;
+        // piercing happens host-side via DOM.getDocument({pierce:true}).
       })();
     </script>
   </body>

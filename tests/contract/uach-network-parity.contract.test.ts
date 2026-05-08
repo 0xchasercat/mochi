@@ -211,6 +211,13 @@ describe("contract: Network.setUserAgentOverride.userAgentMetadata mirrors injec
         } else if (f.method === "Page.enable") {
           inject({ id: f.id, result: {} });
           frame.__responded = true;
+        } else if (f.method === "Emulation.setTimezoneOverride") {
+          // Added by task 0262 (geo-consistency) per-target between Page.enable
+          // and Network.setUserAgentOverride. This test was written before
+          // 0262 landed; auto-respond so the new send doesn't block subsequent
+          // frames from being processed.
+          inject({ id: f.id, result: {} });
+          frame.__responded = true;
         } else if (f.method === "Network.setUserAgentOverride") {
           inject({ id: f.id, result: {} });
           frame.__responded = true;
