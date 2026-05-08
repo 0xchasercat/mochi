@@ -198,6 +198,109 @@ export interface ScreenshotOptions {
   encoding?: "binary" | "base64";
 }
 
+// ---- DX cluster: DOM storage + permissions (task 0257) ---------------------
+
+/**
+ * Options for {@link Page.localStorage} / {@link Page.sessionStorage}
+ * accessors. Both default to the page's main-frame origin (read at call time
+ * from `window.location.origin`); pass `origin` to read/write a different
+ * frame's storage explicitly.
+ */
+export interface DomStorageOptions {
+  /**
+   * Origin to scope the storage read/write to (e.g. `"https://example.com"`).
+   * Default: the page's current main-frame origin.
+   *
+   * Required when the call must hit a *different* origin's storage (e.g.
+   * cross-origin warm-session restore). If the page hasn't navigated yet
+   * (origin = `"about:blank"`), an explicit `origin` is required.
+   */
+  origin?: string;
+}
+
+/**
+ * The shape returned by {@link Page.localStorage} / {@link Page.sessionStorage}.
+ * Both accessors return the same surface — the only difference is the
+ * `isLocalStorage` flag CDP receives under the hood.
+ *
+ * Backed by `DOMStorage.getDOMStorageItems` / `DOMStorage.setDOMStorageItem`.
+ * Per CDP, the response shape for `getDOMStorageItems` is
+ * `{ entries: [string, string][] }` — we collapse that to a `Record` for
+ * Bun-native ergonomics.
+ *
+ * @see https://chromedevtools.github.io/devtools-protocol/tot/DOMStorage/
+ */
+export interface DomStorage {
+  /**
+   * Read every key/value pair currently in the (local|session)Storage of the
+   * scoped origin. Default scope: the page's main-frame origin at call time.
+   */
+  get(opts?: DomStorageOptions): Promise<Record<string, string>>;
+  /**
+   * Write each key in `items` to the scoped origin's storage. Existing keys
+   * not mentioned in `items` are left untouched (this is `Object.assign`
+   * semantics, not `replace`). To clear, set the key explicitly to `""` or
+   * fetch via {@link get} → mutate → call {@link set} with the union.
+   */
+  set(items: Record<string, string>, opts?: DomStorageOptions): Promise<void>;
+}
+
+/**
+ * Every browser-level permission descriptor `Browser.grantPermissions` accepts.
+ *
+ * Pinned to the CDP `Browser.PermissionType` enum on Chromium ≥ 131 (the
+ * mochi profile floor — same baseline the worker idOnly bootstrap relies on).
+ * The list is verbose-on-purpose: we want a contract test to catch the day
+ * Chromium adds a new permission so we can decide whether to forward it.
+ *
+ * @see https://chromedevtools.github.io/devtools-protocol/tot/Browser/#type-PermissionType
+ */
+export const ALL_BROWSER_PERMISSIONS = [
+  "accessibilityEvents",
+  "audioCapture",
+  "backgroundSync",
+  "backgroundFetch",
+  "captureHandle",
+  "clipboardReadWrite",
+  "clipboardSanitizedWrite",
+  "displayCapture",
+  "durableStorage",
+  "flash",
+  "geolocation",
+  "idleDetection",
+  "localFonts",
+  "midi",
+  "midiSysex",
+  "nfc",
+  "notifications",
+  "paymentHandler",
+  "periodicBackgroundSync",
+  "protectedMediaIdentifier",
+  "sensors",
+  "storageAccess",
+  "speakerSelection",
+  "topLevelStorageAccess",
+  "videoCapture",
+  "videoCapturePanTiltZoom",
+  "wakeLockScreen",
+  "wakeLockSystem",
+  "webAppInstallation",
+  "windowManagement",
+] as const;
+
+/** A single entry from {@link ALL_BROWSER_PERMISSIONS}. */
+export type BrowserPermission = (typeof ALL_BROWSER_PERMISSIONS)[number];
+
+/** Options for {@link Page.grantAllPermissions}. */
+export interface GrantAllPermissionsOptions {
+  /**
+   * Origin to grant permissions to. Default: the page's current main-frame
+   * origin (read at call time). When `about:blank`, an explicit `origin` is
+   * required — `Browser.grantPermissions` rejects opaque origins.
+   */
+  origin?: string;
+}
+
 export class Page {
   private readonly router: MessageRouter;
   private readonly targetId: string;
@@ -236,6 +339,10 @@ export class Page {
    * — see PLAN.md I-5: behavioral parameters come from MatrixV1.profile.behavior).
    */
   private cursor: { x: number; y: number };
+  /** localStorage namespace returned by the {@link localStorage} getter. */
+  private readonly localStorageJar: DomStorage;
+  /** sessionStorage namespace returned by the {@link sessionStorage} getter. */
+  private readonly sessionStorageJar: DomStorage;
 
   constructor(init: PageInit) {
     this.router = init.router;
@@ -246,6 +353,10 @@ export class Page {
     this.behavior = init.behavior ?? DEFAULT_BEHAVIOR_PROFILE;
     this.seed = init.seed ?? "default";
     this.cursor = init.initialCursor ?? { x: 0, y: 0 };
+    // Bind both DOM-storage namespaces once. The `isLocalStorage` flag
+    // routes the same plumbing to local vs session storage on the CDP side.
+    this.localStorageJar = createDomStorage(this, true);
+    this.sessionStorageJar = createDomStorage(this, false);
     this.subscribeFrameTopology();
   }
 
@@ -405,6 +516,67 @@ export class Page {
     this.assertOpen();
     const result = await this.send<{ cookies: Cookie[] }>("Network.getCookies");
     return result.cookies;
+  }
+
+  /**
+   * Per-origin localStorage accessor — `get()` and `set(items)`. Backed by
+   * `DOMStorage.getDOMStorageItems` / `DOMStorage.setDOMStorageItem`. Frame
+   * scope defaults to the page's current main-frame origin; pass
+   * `{ origin }` to target a different frame's storage. See {@link DomStorage}.
+   *
+   * Use cases (per `docs/audits/nodriver.md` LOW finding 3):
+   *   - "returning visitor" warming: seed `lastVisit`, A/B-test bucket,
+   *     consent-banner dismissal.
+   *   - Capture + replay across runs by serializing the `Record` to disk.
+   *
+   * Sister surface: {@link sessionStorage} — same shape, hits sessionStorage
+   * via the `isLocalStorage: false` CDP flag.
+   */
+  get localStorage(): DomStorage {
+    return this.localStorageJar;
+  }
+
+  /**
+   * Per-origin sessionStorage accessor. Same shape as {@link localStorage}
+   * but hits sessionStorage via `DOMStorage.getDOMStorageItems` /
+   * `DOMStorage.setDOMStorageItem` with `isLocalStorage: false`. Note
+   * sessionStorage is per-tab — values written here vanish when the page is
+   * closed, exactly as in a regular browsing session.
+   */
+  get sessionStorage(): DomStorage {
+    return this.sessionStorageJar;
+  }
+
+  /**
+   * Grant every permission `Browser.grantPermissions` accepts (the full
+   * descriptor list pinned by {@link ALL_BROWSER_PERMISSIONS}) to the
+   * scoped origin. Defaults to the page's current main-frame origin; pass
+   * `{ origin }` to grant explicitly.
+   *
+   * Pairs with R-036 (the per-permission `navigator.permissions.query()`
+   * spoof in `@mochi.js/inject/src/modules/permissions.ts`): this method
+   * grants ALL at the *browser* level (so the page never sees a permission
+   * prompt), but the page-side `query()` matrix still returns whatever
+   * `matrix.uaCh["permissions-defaults"]` says. The two surfaces are
+   * orthogonal — the inject module decides what the page *sees*; this method
+   * decides what the browser *enforces*.
+   *
+   * Throws when the page hasn't navigated yet (`about:blank` resolves to no
+   * usable origin) and no `origin` was passed explicitly — the CDP method
+   * rejects opaque origins.
+   *
+   * @see docs/audits/nodriver.md LOW finding 4 (`Browser.grant_all_permissions`).
+   */
+  async grantAllPermissions(opts: GrantAllPermissionsOptions = {}): Promise<void> {
+    this.assertOpen();
+    const origin = opts.origin ?? (await this.resolveOrigin("grantAllPermissions"));
+    // Browser.grantPermissions runs on the ROOT browser target — it's not a
+    // page-scoped method. The router's `sessionId` defaults to the root
+    // browser target when omitted, which is exactly what we want here.
+    await this.router.send("Browser.grantPermissions", {
+      permissions: [...ALL_BROWSER_PERMISSIONS],
+      origin,
+    });
   }
 
   /**
@@ -1015,6 +1187,52 @@ export class Page {
     return this.router.send<T>(method, params, { sessionId: this.sessionId });
   }
 
+  /**
+   * Resolve the page's main-frame origin via `Runtime.callFunctionOn` against
+   * the document objectId. Used by {@link grantAllPermissions} and the DOM
+   * storage namespaces when the caller didn't pass an explicit `origin`.
+   *
+   * Throws with a precise diagnostic when the origin is opaque
+   * (`about:blank` / `data:` URLs) — the consumers can't fall back to
+   * "current page" because there's nothing meaningful to scope.
+   */
+  private async resolveOrigin(callerName: string): Promise<string> {
+    const docId = await this.documentObjectId();
+    const r = await this.send<{ result: RemoteObject }>("Runtime.callFunctionOn", {
+      objectId: docId,
+      functionDeclaration:
+        "function() { return (this.defaultView || window).location && (this.defaultView || window).location.origin || ''; }",
+      returnByValue: true,
+    });
+    const v = r.result.value;
+    if (typeof v !== "string" || v.length === 0 || v === "null") {
+      throw new Error(
+        `[mochi] page.${callerName}: page origin is opaque (likely about:blank). Pass { origin } explicitly.`,
+      );
+    }
+    return v;
+  }
+
+  /**
+   * Module-private accessor used by {@link createDomStorage}. Mirrors the
+   * cookie-jar plumbing pattern on Session — the factory lives in module
+   * scope so its return type can be the public {@link DomStorage} interface
+   * without leaking implementation onto the Page surface.
+   *
+   * @internal
+   */
+  _internalDomStoragePlumbing(): {
+    send: <T>(method: string, params?: unknown) => Promise<T>;
+    resolveOrigin: (caller: string) => Promise<string>;
+    assertOpen: () => void;
+  } {
+    return {
+      send: <T>(method: string, params?: unknown) => this.send<T>(method, params),
+      resolveOrigin: (caller: string) => this.resolveOrigin(caller),
+      assertOpen: () => this.assertOpen(),
+    };
+  }
+
   /** Subscribe to frame events to keep `currentUrl` and `mainFrameId` fresh. */
   private subscribeFrameTopology(): void {
     this.router.on("Page.frameNavigated", (params, sessionId) => {
@@ -1256,4 +1474,55 @@ function hash01(s: string): number {
     h = Math.imul(h, 16777619) >>> 0;
   }
   return (h >>> 0) / 0x1_0000_0000;
+}
+
+// ---- DOM storage factory (task 0257) ----------------------------------------
+
+/**
+ * Build the {@link DomStorage} returned by `Page.localStorage` /
+ * `Page.sessionStorage`. Bound to one Page instance via
+ * {@link Page._internalDomStoragePlumbing}. Module-private; the public surface
+ * is the interface — instances are only created by the Page constructor.
+ *
+ * `isLocalStorage` flag picks the CDP storage backing:
+ *   - `true`  → `localStorage`  (the persistent per-origin store).
+ *   - `false` → `sessionStorage` (the per-tab transient store).
+ *
+ * @internal
+ */
+function createDomStorage(page: Page, isLocalStorage: boolean): DomStorage {
+  const { send, resolveOrigin, assertOpen } = page._internalDomStoragePlumbing();
+  const callerName = isLocalStorage ? "localStorage" : "sessionStorage";
+  return {
+    async get(opts: DomStorageOptions = {}) {
+      assertOpen();
+      const securityOrigin = opts.origin ?? (await resolveOrigin(`${callerName}.get`));
+      const result = await send<{ entries: Array<[string, string]> }>(
+        "DOMStorage.getDOMStorageItems",
+        { storageId: { securityOrigin, isLocalStorage } },
+      );
+      // CDP returns `[ [k, v], ... ]`. Collapse to a Record for ergonomics.
+      const out: Record<string, string> = {};
+      for (const entry of result.entries) {
+        const k = entry[0];
+        const v = entry[1];
+        if (typeof k === "string" && typeof v === "string") out[k] = v;
+      }
+      return out;
+    },
+    async set(items: Record<string, string>, opts: DomStorageOptions = {}) {
+      assertOpen();
+      const securityOrigin = opts.origin ?? (await resolveOrigin(`${callerName}.set`));
+      // CDP's `setDOMStorageItem` takes one key/value at a time. We fan out
+      // sequentially so a partial failure (e.g. a too-large value) surfaces
+      // with the offending key in the error frame.
+      for (const [k, v] of Object.entries(items)) {
+        await send("DOMStorage.setDOMStorageItem", {
+          storageId: { securityOrigin, isLocalStorage },
+          key: k,
+          value: v,
+        });
+      }
+    },
+  };
 }

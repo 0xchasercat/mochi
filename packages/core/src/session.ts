@@ -118,6 +118,86 @@ export interface StorageSnapshot {
   sessionStorage: Record<string, Record<string, string>>;
 }
 
+// ---- cookie-jar persistence (task 0257) -------------------------------------
+
+/**
+ * Current on-disk cookie-file format version. Bumped on incompatible header
+ * changes. The reader refuses unknown majors with a precise diagnostic so a
+ * stale jar doesn't silently load with the wrong shape.
+ */
+export const COOKIE_JAR_FORMAT_VERSION = 1 as const;
+
+/**
+ * On-disk shape for {@link Session.cookies.save}. The `cookies` array is the
+ * verbatim `Storage.getCookies` payload — every shipped Chromium revision
+ * agrees on this shape, so loading on a newer Chromium round-trips losslessly.
+ *
+ * @see tasks/0257-dx-cluster-cookies-storage-permissions.md (success criteria)
+ * @see https://chromedevtools.github.io/devtools-protocol/tot/Storage/#method-getCookies
+ */
+export interface CookieJarFile {
+  /** Format version (currently `1`). */
+  version: typeof COOKIE_JAR_FORMAT_VERSION;
+  /** ISO-8601 UTC timestamp of `save()` (ends in `Z`). */
+  savedAt: string;
+  /** Mochi core version that produced the file. */
+  mochiVersion: string;
+  /** The regex source that filtered the saved set (default `".*"`). */
+  pattern: string;
+  /** Number of cookies in the `cookies` array — redundant with `cookies.length`, kept for trace logs. */
+  count: number;
+  /** Raw `Storage.getCookies` cookies, optionally filtered by `pattern`. */
+  cookies: import("./page").Cookie[];
+}
+
+/** Options shared by `cookies.save` / `cookies.load`. */
+export interface CookieJarOptions {
+  /**
+   * Optional regex matched against each cookie's `domain`. Default `.*`
+   * (everything). Cookies failing the match are skipped on save AND on load
+   * (so a saved-with-everything jar can be partially restored).
+   */
+  pattern?: RegExp;
+}
+
+/**
+ * `Session.cookies` namespace — exposes the read/write/persist surface for the
+ * session's cookie jar. The legacy `Session.cookies(filter)` and
+ * `Session.setCookies(...)` shapes are gone; callers go through this object.
+ *
+ * The whole namespace is bound to a Session instance via the `Session.cookies`
+ * getter — every method routes through `Storage.getCookies` /
+ * `Storage.setCookies` on the root browser target (the only domain that
+ * exposes a global cookie reader without a per-page Network domain).
+ */
+export interface CookieJar {
+  /**
+   * All cookies the browser is aware of, optionally filtered by url. The url
+   * filter is a coarse hostname match (no path / secure / sameSite handling) —
+   * sufficient for "scope down to a session" use cases.
+   */
+  get(filter?: { url?: string }): Promise<import("./page").Cookie[]>;
+  /** Set cookies via the root-target Storage domain. */
+  set(cookies: import("./page").Cookie[]): Promise<void>;
+  /**
+   * Persist cookies to a JSON file at `path`. Cookies whose `domain` does NOT
+   * match `opts.pattern` (default: every domain) are skipped. The file format
+   * is {@link CookieJarFile}.
+   */
+  save(path: string, opts?: CookieJarOptions): Promise<void>;
+  /**
+   * Read a JSON file written by {@link save} and replay every cookie back into
+   * the browser via `Storage.setCookies`. Cookies whose `domain` does NOT
+   * match `opts.pattern` (default: everything) are skipped — useful when one
+   * jar holds multi-domain state but only a slice should be re-installed for
+   * the current run.
+   *
+   * Throws on missing/corrupt files or version mismatch with a diagnostic that
+   * pins the exact failure point.
+   */
+  load(path: string, opts?: CookieJarOptions): Promise<void>;
+}
+
 export class Session {
   /**
    * The resolved Matrix for this session — a relationally-locked snapshot
@@ -196,6 +276,13 @@ export class Session {
    * @internal
    */
   private readonly workerExecutionContextIds = new Map<string, number>();
+  /**
+   * The `CookieJar` instance returned by the {@link cookies} getter. Created
+   * once at construction and bound to this Session — every call routes
+   * through `Storage.getCookies` / `Storage.setCookies` on the root browser
+   * target. See {@link CookieJar} for the surface contract.
+   */
+  private readonly cookieJar: CookieJar;
 
   constructor(init: SessionInit) {
     this.proc = init.proc;
@@ -212,6 +299,7 @@ export class Session {
       defaultTimeoutMs: init.defaultTimeoutMs,
     });
     this.router.start();
+    this.cookieJar = createCookieJar(this);
     this.installAutoAttach();
     this.installCrashGuard();
     // Wire CDP-driven proxy auth only when credentials were supplied. The
@@ -394,38 +482,26 @@ export class Session {
   }
 
   /**
-   * All cookies the browser is aware of, optionally filtered by url.
+   * Cookie-jar surface: `get`, `set`, `save`, `load`. See {@link CookieJar}.
    *
-   * Uses `Storage.getCookies` on the *root* browser target (the only domain
-   * that exposes a global cookie reader without a per-page Network domain).
+   * All four methods route through `Storage.getCookies` /
+   * `Storage.setCookies` on the *root* browser target — the only domain that
+   * exposes a global cookie reader/writer without a per-page Network domain.
+   *
+   * The persistence layer (`save`/`load`) is JSON, NOT pickle (per audit:
+   * `docs/audits/nodriver.md` LOW finding 2 — Bun-native code uses JSON).
+   * Format pinned by {@link CookieJarFile}; a small header (`version`,
+   * `savedAt`, `mochiVersion`, `pattern`, `count`) lets a future incompatible
+   * change be detected before any cookie touches the browser.
    */
-  async cookies(filter: { url?: string } = {}): Promise<import("./page").Cookie[]> {
-    this.assertOpen();
-    const result = await this.router.send<{ cookies: import("./page").Cookie[] }>(
-      "Storage.getCookies",
-    );
-    if (filter.url === undefined) return result.cookies;
-    // v0.1 only supports a coarse host-string filter — full URL matching with
-    // path, secure, etc. is out of scope per the brief.
-    let host: string;
-    try {
-      host = new URL(filter.url).hostname;
-    } catch {
-      return [];
-    }
-    return result.cookies.filter((c) => c.domain.endsWith(host) || host.endsWith(c.domain));
-  }
-
-  /** Set cookies via the root-target Storage domain. */
-  async setCookies(cookies: import("./page").Cookie[]): Promise<void> {
-    this.assertOpen();
-    await this.router.send("Storage.setCookies", { cookies });
+  get cookies(): CookieJar {
+    return this.cookieJar;
   }
 
   /** Storage snapshot. v0.1: cookies only. localStorage/sessionStorage are empty placeholders pending phase 0.7. */
   async storage(): Promise<StorageSnapshot> {
     this.assertOpen();
-    const c = await this.cookies();
+    const c = await this.cookieJar.get();
     return { cookies: c, localStorage: {}, sessionStorage: {} };
   }
 
@@ -609,6 +685,25 @@ export class Session {
    * @internal
    */
   static readonly VERSION = VERSION;
+
+  /**
+   * Module-private accessor used by {@link createCookieJar}. The cookie-jar
+   * factory lives in module scope (so callers can subclass via the public
+   * {@link CookieJar} interface without touching the Session internals); this
+   * accessor lets the factory reach the router + the open-state guard while
+   * keeping both genuinely private to user code.
+   *
+   * @internal
+   */
+  _internalCookieJarPlumbing(): {
+    router: MessageRouter;
+    assertOpen: () => void;
+  } {
+    return {
+      router: this.router,
+      assertOpen: () => this.assertOpen(),
+    };
+  }
 
   // ---- internals --------------------------------------------------------------
 
@@ -980,5 +1075,96 @@ export function buildUserAgentMetadata(matrix: MatrixV1): {
     mobile,
     bitness,
     wow64: false,
+  };
+}
+
+// ---- cookie-jar factory (task 0257) -----------------------------------------
+
+/**
+ * Build the {@link CookieJar} returned by `Session.cookies`. Bound to one
+ * Session instance via {@link Session._internalCookieJarPlumbing}. Module-
+ * private; the public surface is the interface — instances are only created
+ * by the Session constructor.
+ *
+ * `save`/`load` use Bun's filesystem APIs (`Bun.file`, `Bun.write`) — Bun is
+ * the only supported runtime per PLAN.md I-3 so there's no Node fallback.
+ *
+ * @internal
+ */
+function createCookieJar(session: Session): CookieJar {
+  const { router, assertOpen } = session._internalCookieJarPlumbing();
+  return {
+    async get(filter: { url?: string } = {}) {
+      assertOpen();
+      const result = await router.send<{ cookies: import("./page").Cookie[] }>(
+        "Storage.getCookies",
+      );
+      if (filter.url === undefined) return result.cookies;
+      // Coarse host-string filter — full URL matching with path / secure /
+      // sameSite is out of scope per the brief. Mirrors the pre-0257
+      // behaviour of the legacy `Session.cookies(filter)` method.
+      let host: string;
+      try {
+        host = new URL(filter.url).hostname;
+      } catch {
+        return [];
+      }
+      return result.cookies.filter((c) => c.domain.endsWith(host) || host.endsWith(c.domain));
+    },
+    async set(cookies: import("./page").Cookie[]) {
+      assertOpen();
+      await router.send("Storage.setCookies", { cookies });
+    },
+    async save(path: string, opts: CookieJarOptions = {}) {
+      assertOpen();
+      const pattern = opts.pattern ?? /.*/;
+      const all = await router.send<{ cookies: import("./page").Cookie[] }>("Storage.getCookies");
+      const filtered = all.cookies.filter((c) => pattern.test(c.domain));
+      const file: CookieJarFile = {
+        version: COOKIE_JAR_FORMAT_VERSION,
+        savedAt: new Date().toISOString(),
+        mochiVersion: VERSION,
+        pattern: pattern.source,
+        count: filtered.length,
+        cookies: filtered,
+      };
+      // Pretty-print with 2-space indent: jars are committed by some users
+      // alongside fixtures (per nodriver's `pickle` use case); pretty JSON
+      // diffs cleanly. Negligible size impact for a few-kB cookie set.
+      await Bun.write(path, `${JSON.stringify(file, null, 2)}\n`);
+    },
+    async load(path: string, opts: CookieJarOptions = {}) {
+      assertOpen();
+      const pattern = opts.pattern ?? /.*/;
+      const file = Bun.file(path);
+      const exists = await file.exists();
+      if (!exists) {
+        throw new Error(`[mochi] cookies.load: file not found at ${path}`);
+      }
+      let parsed: unknown;
+      try {
+        const text = await file.text();
+        parsed = JSON.parse(text);
+      } catch (err) {
+        throw new Error(`[mochi] cookies.load: ${path} is not valid JSON: ${String(err)}`);
+      }
+      const jar = parsed as Partial<CookieJarFile>;
+      if (typeof jar !== "object" || jar === null) {
+        throw new Error(`[mochi] cookies.load: ${path} is not a JSON object`);
+      }
+      if (jar.version !== COOKIE_JAR_FORMAT_VERSION) {
+        throw new Error(
+          `[mochi] cookies.load: ${path} version ${String(jar.version)} is not supported (expected ${COOKIE_JAR_FORMAT_VERSION})`,
+        );
+      }
+      if (!Array.isArray(jar.cookies)) {
+        throw new Error(`[mochi] cookies.load: ${path} has no \`cookies\` array`);
+      }
+      // Filter on load too: a single saved-with-everything jar can be sliced
+      // domain-wise without re-saving.
+      const toLoad = jar.cookies.filter((c) => pattern.test(c.domain));
+      if (toLoad.length === 0) return;
+      await router.send("Storage.setCookies", { cookies: toLoad });
+    },
   };
 }
