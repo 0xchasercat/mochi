@@ -314,6 +314,19 @@ describeOrSkip(
                 timeout: 20_000,
               },
             );
+            // Short-circuit when goto soft-failed AND we have a registered
+            // expected-failure entry. Same pattern as the incolumitas test:
+            // the worker-inject + Runtime.runIfWaitingForDebugger timeouts
+            // pile up to ~120s, blowing past the 90s test budget before the
+            // catch block can convert the eventual evaluate timeout into an
+            // expected-failure pass. This early return logs the same
+            // EXPECTED FAILURE message and exits cleanly within ~20s.
+            if (!goto.navigated && expected !== undefined) {
+              process.stderr.write(
+                `[deviceandbrowserinfo] EXPECTED FAILURE per docs/limits.md (${expected.limitsAnchor}): goto did not settle (${goto.reason ?? "unknown"})\n`,
+              );
+              return;
+            }
             if (!goto.navigated) {
               process.stderr.write(
                 "[deviceandbrowserinfo] goto did not settle; attempting evaluate against partial DOM\n",
