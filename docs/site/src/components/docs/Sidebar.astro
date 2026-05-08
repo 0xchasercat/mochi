@@ -1,0 +1,46 @@
+---
+import { getCollection } from "astro:content";
+import { CATEGORY_LABELS, CATEGORY_EMOJI, DOC_CATEGORIES, type DocCategory } from "../../content.config.ts";
+
+interface Props {
+  /** Active doc id (collection entry id, e.g. "getting-started/install"). */
+  current?: string;
+}
+const { current } = Astro.props;
+
+const all = await getCollection("docs", ({ data }) => !data.hidden);
+
+// Group entries by category, ordered by `order`.
+const grouped = new Map<DocCategory, typeof all>();
+for (const cat of DOC_CATEGORIES) grouped.set(cat, []);
+for (const entry of all) {
+  const list = grouped.get(entry.data.category);
+  if (list) list.push(entry);
+}
+for (const list of grouped.values()) {
+  list.sort((a, b) => a.data.order - b.data.order);
+}
+---
+<aside class="d-side" aria-label="Docs navigation">
+  {DOC_CATEGORIES.map((cat) => {
+    const entries = grouped.get(cat) ?? [];
+    if (entries.length === 0) return null;
+    return (
+      <div class="d-side-section">
+        <div class="d-side-h">
+          <span class="d-side-h-emoji">{CATEGORY_EMOJI[cat]}</span>
+          {CATEGORY_LABELS[cat]}
+        </div>
+        {entries.map((entry) => (
+          <a
+            class={"d-side-link" + (current === entry.id ? " is-active" : "")}
+            href={`/docs/${entry.id}`}
+            aria-current={current === entry.id ? "page" : undefined}
+          >
+            <span>{entry.data.title}</span>
+          </a>
+        ))}
+      </div>
+    );
+  })}
+</aside>

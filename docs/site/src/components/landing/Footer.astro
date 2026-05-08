@@ -1,0 +1,39 @@
+---
+const githubUrl = "https://github.com/0xchasercat/mochi";
+const year = new Date().getFullYear();
+const version = "0.1.2";
+---
+<footer class="m-footer">
+  <div class="m-footer-inner">
+    <div class="m-footer-brand">
+      <span class="m-wordmark-sm">mochi<span class="m-dot"></span>js</span>
+      <p class="m-footer-tag">leaves no crumbs.</p>
+    </div>
+    <div class="m-footer-cols">
+      <div>
+        <div class="m-footer-h">Docs</div>
+        <a href="/docs/getting-started/install">Getting started</a>
+        <a href="/docs/concepts/consistency-engine">Consistency engine</a>
+        <a href="/docs/concepts/probe-manifest">Probe manifest</a>
+        <a href="/docs/api/core">API reference</a>
+      </div>
+      <div>
+        <div class="m-footer-h">Project</div>
+        <a href={githubUrl} rel="noopener">GitHub</a>
+        <a href={`${githubUrl}/releases`} rel="noopener">Releases</a>
+        <a href={`${githubUrl}/blob/main/PLAN.md`} rel="noopener">PLAN.md</a>
+        <a href="/docs/reference/limits">Known limits</a>
+      </div>
+      <div>
+        <div class="m-footer-h">Legal</div>
+        <a href={`${githubUrl}/blob/main/LICENSE`} rel="noopener">License (MIT)</a>
+        <a href={`${githubUrl}/blob/main/AGENTS.md`} rel="noopener">Contributing</a>
+        <a href="/docs/reference/invariants">Invariants</a>
+      </div>
+    </div>
+  </div>
+  <div class="m-footer-bottom">
+    <span>© {year} mochi.js contributors</span>
+    <span class="m-mono">v{version} · built with bun</span>
+  </div>
+</footer>

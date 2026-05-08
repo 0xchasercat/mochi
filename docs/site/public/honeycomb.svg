@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="80" height="92" viewBox="0 0 80 92">
+  <defs>
+    <pattern id="hc" x="0" y="0" width="80" height="92" patternUnits="userSpaceOnUse">
+      <circle cx="20" cy="23" r="2.2" fill="#e89425" opacity="0.35"></circle>
+      <circle cx="60" cy="23" r="2.2" fill="#e89425" opacity="0.35"></circle>
+      <circle cx="40" cy="46" r="2.2" fill="#e89425" opacity="0.35"></circle>
+      <circle cx="0" cy="46" r="2.2" fill="#e89425" opacity="0.35"></circle>
+      <circle cx="80" cy="46" r="2.2" fill="#e89425" opacity="0.35"></circle>
+      <circle cx="20" cy="69" r="2.2" fill="#e89425" opacity="0.35"></circle>
+      <circle cx="60" cy="69" r="2.2" fill="#e89425" opacity="0.35"></circle>
+    </pattern>
+  </defs>
+  <rect width="80" height="92" fill="url(#hc)"></rect>
+</svg>

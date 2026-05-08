@@ -1,0 +1,52 @@
+---
+// Five feature pillars — port of docs_site/FeaturePillars.jsx. Content
+// rewritten to match mochi's actual selling points (per the brief): relational
+// consistency, JA4 TLS impersonation, behavioral synth, probe-manifest
+// measurable diff, single coherent stack. One emoji per pillar — no
+// emoji-soup.
+const pillars = [
+  {
+    e: "🧬",
+    title: "Relational consistency engine",
+    body: "Every fingerprint surface — canvas, WebGL, audio, fonts, MediaDevices, WebGPU — derives from a single (profile, seed) pair through a 40-rule DAG. No Frankenstein fingerprints; a Mac UA never lands next to Linux WebGL.",
+  },
+  {
+    e: "🦀",
+    title: "JA4-coherent fetch",
+    body: "session.fetch() routes through Bun:FFI to a Rust crate wrapping wreq. TLS handshake bytes, HTTP/2 frame settings, and JA4 hashes match the spoofed Chrome profile. Same fingerprint on the wire and in the page.",
+  },
+  {
+    e: "🎯",
+    title: "Behavioral synthesis",
+    body: "humanClick / humanType / humanScroll synthesize from biomechanical models — Bezier paths with overshoot+correction, Fitts-law movement times, lognormal digraph delays. Profile-parameterized: hand, tremor, wpm, scrollStyle.",
+  },
+  {
+    e: "📐",
+    title: "Probe-Manifest harness",
+    body: "Captured baselines from real devices live in the repo. Every PR diffs the live session's Probe Manifest against the baseline; Zero-Diff is a CI gate. Intentional divergences live next to a written rationale.",
+  },
+  {
+    e: "🍡",
+    title: "One coherent stack",
+    body: "Replaces the usual hand-stitched pipeline (Patchright + fingerprint-injector + Turnstile clicker + curl-impersonate) with one library that owns it end-to-end. Bun-only. No Node, no Python sidecars, no proprietary bits.",
+  },
+];
+---
+<section class="m-features">
+  <div class="m-features-head">
+    <div class="m-eyebrow">five pillars</div>
+    <h2 class="m-h2">Built for the strictest probes.</h2>
+    <p class="m-lede" style="max-width: 640px">
+      Where Playwright and Puppeteer leave fingerprints, mochi.js leaves nothing measurable. Each pillar covers one class of detection.
+    </p>
+  </div>
+  <div class="m-features-grid">
+    {pillars.map((p) => (
+      <article class="m-feat">
+        <div class="m-feat-emoji">{p.e}</div>
+        <h3 class="m-feat-title">{p.title}</h3>
+        <p class="m-feat-body">{p.body}</p>
+      </article>
+    ))}
+  </div>
+</section>

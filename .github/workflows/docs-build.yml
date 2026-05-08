@@ -1,0 +1,80 @@
+name: Docs build
+
+# Smoke-builds the Astro site (docs/site/) on every PR and push to main.
+# The site is private (not published to npm) — this workflow exists to catch
+# broken links, missing assets, and Zod-schema frontmatter regressions before
+# they reach the deployed mochijs.com.
+#
+# Cloudflare Pages deploy is task 0241 (separate workflow).
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs-build.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs-build.yml"
+
+concurrency:
+  group: docs-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Astro build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+
+      # Cache Astro's content-collection cache between runs. Saves a couple
+      # of seconds on warm runs; the cache key keys on the lockfile so a
+      # dependency bump invalidates cleanly.
+      - name: Cache .astro
+        uses: actions/cache@v4
+        with:
+          path: docs/site/.astro
+          key: astro-${{ runner.os }}-${{ hashFiles('docs/site/package.json') }}
+          restore-keys: |
+            astro-${{ runner.os }}-
+
+      - name: Install (docs/site)
+        working-directory: docs/site
+        run: bun install
+
+      - name: Build
+        working-directory: docs/site
+        # `--verbose` so a broken-link or missing-asset failure shows the
+        # full Astro diagnostic, not just the exit code.
+        run: bun run build
+
+      # Sanity-check the build output. Astro builds with `format: "directory"`,
+      # so each route emits `<route>/index.html`. We assert the landing, the
+      # 404, and at least one docs page exist.
+      - name: Verify build artifacts
+        run: |
+          set -euo pipefail
+          test -f docs/site/dist/index.html || { echo "::error::Missing dist/index.html"; exit 1; }
+          test -f docs/site/dist/404.html || { echo "::error::Missing dist/404.html"; exit 1; }
+          if [ ! -f docs/site/dist/docs/getting-started/install/index.html ]; then
+            echo "::error::Missing dist/docs/getting-started/install/index.html"
+            ls -la docs/site/dist/docs/ || true
+            exit 1
+          fi
+          echo "Site artifacts OK."
+
+      # Upload the build for any downstream deploy job (Cloudflare Pages
+      # action will pick it up in task 0241).
+      - name: Upload dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-site-dist
+          path: docs/site/dist
+          retention-days: 7
+          if-no-files-found: error

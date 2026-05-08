@@ -1,0 +1,17 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Nav from "../components/landing/Nav.astro";
+import Hero from "../components/landing/Hero.astro";
+import FeaturePillars from "../components/landing/FeaturePillars.astro";
+import CodeShowcase from "../components/landing/CodeShowcase.astro";
+import Footer from "../components/landing/Footer.astro";
+---
+<BaseLayout title="mochi.js" description="Bun-native, raw-CDP browser automation. Relational fingerprint locking, JIT-installed spoofing, JA4-coherent fetch. Leaves no crumbs.">
+  <Nav />
+  <main id="main">
+    <Hero />
+    <FeaturePillars />
+    <CodeShowcase />
+  </main>
+  <Footer />
+</BaseLayout>

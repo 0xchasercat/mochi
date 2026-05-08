@@ -1,0 +1,31 @@
+# Cloudflare Workers (with Static Assets) deploy config for mochijs.com.
+#
+# Cloudflare merged Pages into Workers (~2025); the site deploys as a
+# Worker whose only job is serving the Astro `dist/` directory. No
+# Worker script required — `[assets]` alone is sufficient when there's
+# no `main` entrypoint.
+#
+# How this is used:
+#   - `bun run build` (in docs/site/) produces `./dist`
+#   - `npx wrangler deploy` (in docs/site/) uploads `./dist` to CF as
+#     this Worker's static assets
+#   - CF serves them at the assigned route + the custom domain
+#     (mochijs.com once DNS is configured)
+#
+# Set up via the Workers dashboard's "Connect to Git" flow with these
+# build / deploy commands:
+#   build:           cd docs/site && bun install --frozen-lockfile && bun run build
+#   deploy:          cd docs/site && npx wrangler deploy
+#   non-prod deploy: cd docs/site && npx wrangler versions upload
+
+name = "mochi"
+compatibility_date = "2026-05-09"
+
+# Static-asset configuration. Astro emits multi-page output (one
+# index.html per route + a 404.html), so we use `404-page` not
+# `single-page-application` — the latter would serve the root
+# index.html for every unknown URL, which would break /docs/* deep
+# links and the proper-404 UX.
+[assets]
+directory = "./dist"
+not_found_handling = "404-page"

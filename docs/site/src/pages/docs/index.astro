@@ -1,0 +1,18 @@
+---
+// /docs → first getting-started page. Hard redirect at the HTTP layer would
+// require a server; we emit a static page that meta-refreshes. Cloudflare
+// Pages will also honor a _redirects file added in 0241.
+const target = "/docs/getting-started/install";
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>mochi.js docs</title>
+    <meta http-equiv="refresh" content={`0;url=${target}`} />
+    <link rel="canonical" href={target} />
+  </head>
+  <body>
+    <p>Redirecting to <a href={target}>{target}</a>…</p>
+  </body>
+</html>

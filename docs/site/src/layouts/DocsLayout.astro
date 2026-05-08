@@ -1,0 +1,50 @@
+---
+import BaseLayout from "./BaseLayout.astro";
+import TopNav from "../components/docs/TopNav.astro";
+import Sidebar from "../components/docs/Sidebar.astro";
+import Toc from "../components/docs/Toc.astro";
+import PageFooter from "../components/docs/PageFooter.astro";
+import SearchModal from "../components/docs/SearchModal.astro";
+import { CATEGORY_LABELS, type DocCategory } from "../content.config.ts";
+import type { MarkdownHeading } from "astro";
+
+interface NavEntry { id: string; title: string }
+
+export interface Props {
+  title: string;
+  description?: string;
+  category: DocCategory;
+  currentId: string;
+  headings: MarkdownHeading[];
+  prev?: NavEntry;
+  next?: NavEntry;
+  editUrl?: string;
+  lastUpdated?: Date;
+}
+
+const { title, description, category, currentId, headings, prev, next, editUrl, lastUpdated } = Astro.props;
+const categoryLabel = CATEGORY_LABELS[category];
+---
+<BaseLayout title={title} description={description}>
+  <TopNav />
+  <SearchModal />
+  <div class="d-shell">
+    <Sidebar current={currentId} />
+    <main class="d-main" id="main">
+      <div class="d-crumbs">
+        <span>Docs</span>
+        <span>/</span>
+        <span>{categoryLabel}</span>
+        <span>/</span>
+        <span>{title}</span>
+      </div>
+      <h1 class="d-page-title">{title}</h1>
+      {description && <p class="d-page-lede">{description}</p>}
+      <article class="d-prose">
+        <slot />
+      </article>
+      <PageFooter prev={prev} next={next} />
+    </main>
+    <Toc headings={headings} editUrl={editUrl} lastUpdated={lastUpdated} />
+  </div>
+</BaseLayout>

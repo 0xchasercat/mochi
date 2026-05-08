@@ -1,0 +1,27 @@
+---
+// Top nav — same shape as docs/.design-reference/ui_kits/docs_site/Nav.jsx,
+// rewritten as a pure Astro component (no React; no client JS needed for the
+// landing nav). The "Search" button is a visual stub on the landing page
+// itself — the docs shell wires the real Pagefind UI.
+const githubUrl = "https://github.com/0xchasercat/mochi";
+---
+<nav class="m-nav">
+  <a class="m-nav-brand" href="/">
+    <span class="m-wordmark-sm">mochi<span class="m-dot"></span>js</span>
+  </a>
+  <div class="m-nav-links">
+    <a href="/docs/getting-started/install">Docs</a>
+    <a href="/docs/api/core">API</a>
+    <a href="/docs/concepts/consistency-engine">Concepts</a>
+    <a href={`${githubUrl}/releases`}>Releases</a>
+  </div>
+  <div class="m-nav-actions">
+    <a class="m-search" href="/docs/getting-started/install" aria-label="Search docs">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <span>Search docs</span>
+      <span class="m-kbd">⌘K</span>
+    </a>
+    <a class="m-btn m-btn-ghost-sm" href={githubUrl} rel="noopener">GitHub</a>
+    <a class="m-btn m-btn-primary-sm" href="/docs/getting-started/install">Install</a>
+  </div>
+</nav>
