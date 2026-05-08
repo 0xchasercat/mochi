@@ -53,6 +53,40 @@ const defaultNetAdapter: NetAdapter = {
   requestOnCtx: defaultRequestOnCtx,
 };
 
+/**
+ * Per-call timeout for the worker idOnly inject roundtrip. 5s, not the
+ * router's 30s default — workers spawned by sites like sannysoft,
+ * bot.incolumitas, fingerprintjs probes routinely die between
+ * `Target.attachedToTarget` and our reply. Without a tight cap, every
+ * orphan worker stalls the route loop for the full 30s. Real workers
+ * resolve in single-digit ms; 5s is generous.
+ *
+ * If you ever see a legitimate worker fail at 5s, raise this — but the
+ * symptom would be a missing inject on a long-running worker, which is
+ * separate from the orphan-worker race we're sizing for.
+ */
+const WORKER_INJECT_TIMEOUT_MS = 5_000;
+
+/**
+ * Predicate: is this an "expected" failure from the worker idOnly inject
+ * race (worker died between attach and our roundtrip)? Recognized:
+ *   - `CdpTimeoutError` — router gave up after WORKER_INJECT_TIMEOUT_MS
+ *     because the target stopped responding. Most common path.
+ *   - CDP `Session with given id not found` — target detached mid-call.
+ *   - CDP `Target closed` — same race, different message variant.
+ *
+ * All three are routine and silent. A genuine bug (bad contextId,
+ * wrong serialization, schema drift) surfaces as anything else and
+ * still warns through the console.
+ */
+function isTransientWorkerError(err: unknown): boolean {
+  if (err === null || typeof err !== "object") return false;
+  const name = (err as { name?: string }).name;
+  if (name === "CdpTimeoutError") return true;
+  const msg = (err as { message?: string }).message ?? "";
+  return msg.includes("Session with given id not found") || msg.includes("Target closed");
+}
+
 export interface SessionInit {
   proc: ChromiumProcess;
   matrix: MatrixV1;
@@ -833,6 +867,14 @@ export class Session {
         // so the call binds to the worker's own context, not whatever
         // `Runtime.evaluate` happens to resolve. The payload IIFE is wrapped
         // as a function declaration so `callFunctionOn` accepts it.
+        //
+        // Timeout: 5s, not the 30s default. Transient workers (sannysoft,
+        // bot.incolumitas, etc. spawn brief workers that die between attach
+        // and inject) WILL silently disappear; without a per-call cap the
+        // route loop blocks for 30s waiting on a reply that's never coming,
+        // adding 30s × N orphan workers per test run. 5s is plenty for a
+        // real worker (callFunctionOn against a live context returns in
+        // single-digit ms); anything past that, the target is dead.
         await this.router.send(
           "Runtime.callFunctionOn",
           {
@@ -842,11 +884,26 @@ export class Session {
             awaitPromise: false,
             // includeCommandLineAPI must remain false (§8.2).
           },
-          { sessionId: childSessionId },
+          { sessionId: childSessionId, timeoutMs: WORKER_INJECT_TIMEOUT_MS },
         );
       } catch (err: unknown) {
         if (!this.closed) {
-          console.warn(`[mochi] payload inject into worker ${ev.targetInfo.targetId} failed:`, err);
+          // Downgrade to debug for the expected race (worker died before
+          // inject completed). The two error fingerprints are: our own
+          // CdpTimeoutError (router gave up), or CDP's own "Session with
+          // given id not found" / "Target closed" (target detached
+          // mid-roundtrip). Both are routine on real-world pages with
+          // short-lived workers; warning on every one is just noise. A
+          // genuine bug (e.g. the idOnly extraction returning a bad
+          // contextId) is anything else and still warns.
+          if (isTransientWorkerError(err)) {
+            // best-effort: silent. The worker is gone; nothing to do.
+          } else {
+            console.warn(
+              `[mochi] payload inject into worker ${ev.targetInfo.targetId} failed:`,
+              err,
+            );
+          }
         }
       }
     }
@@ -855,13 +912,18 @@ export class Session {
       try {
         await this.router.send("Runtime.runIfWaitingForDebugger", undefined, {
           sessionId: childSessionId,
+          timeoutMs: WORKER_INJECT_TIMEOUT_MS,
         });
       } catch (err: unknown) {
         if (!this.closed) {
-          console.warn(
-            `[mochi] Runtime.runIfWaitingForDebugger on target ${ev.targetInfo.targetId} failed:`,
-            err,
-          );
+          if (isTransientWorkerError(err)) {
+            // best-effort: silent. Same race as the inject path above.
+          } else {
+            console.warn(
+              `[mochi] Runtime.runIfWaitingForDebugger on target ${ev.targetInfo.targetId} failed:`,
+              err,
+            );
+          }
         }
       }
     }
