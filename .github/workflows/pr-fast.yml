@@ -17,9 +17,14 @@ jobs:
     # 128 GB DDR5). Keeps PR-fast tight; the matrix-OS prebuilds in
     # build-prebuilds.yml stay on GitHub-hosted because the chaser-runner is
     # Linux/x64 only and prebuilds need mac + win + arm.
-    # NOTE: until this repo goes public, fork-PR risk doesn't apply. When
-    # we open-source, gate self-hosted with `if: github.event.pull_request.head.repo.full_name == github.repository`
-    # (or split into a "trusted" workflow that only fires post-approval).
+    #
+    # Fork-gate: skip on PRs from forks. `pull_request` (NOT
+    # `pull_request_target`) + this guard means a fork PR's checkout never
+    # lands on the self-hosted runner, so an attacker can't run code on
+    # our hardware. Same-repo branches and pushes to main always run.
+    # Trade-off: fork PRs get no PR-fast CI signal; orchestrator pulls
+    # the branch into a same-repo branch when they want validation.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
@@ -196,6 +201,8 @@ jobs:
     # Same chaser-runner. Cargo + Rust toolchain caches persist across runs
     # on the self-hosted runner, so a warm cdylib build is sub-second vs.
     # ~30s on ubuntu-latest. dtolnay/rust-toolchain@stable is idempotent.
+    # Fork-gate: same as `ts` job above.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4

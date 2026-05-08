@@ -28,6 +28,10 @@ jobs:
     name: Astro build
     # Self-hosted (chaser-runner). Astro build is pure CPU + Bun — no
     # special hardware needed; bare-metal just makes it instant.
+    # Fork-gate: same pattern as pr-fast.yml — skip self-hosted when
+    # the PR comes from a fork to keep an attacker's branch off our
+    # hardware.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4

@@ -36,6 +36,10 @@ jobs:
     # OIDC works on self-hosted runners identically (id-token: write
     # populates ACTIONS_ID_TOKEN_REQUEST_URL/TOKEN regardless of runner
     # provider). NPM provenance signing is sigstore — also runner-agnostic.
+    # Release only fires on push to main (no PR trigger), so fork-gate
+    # is moot here — but kept symmetric with pr-fast/docs-build for
+    # defense-in-depth in case the trigger surface ever expands.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, Linux, X64]
     steps:
       - name: Checkout
