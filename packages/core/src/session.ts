@@ -25,7 +25,11 @@ import {
   type NetCtx,
   type NetFetchInit,
 } from "@mochi.js/net";
-import { type InitInjectorHandle, installInitInjector } from "./cdp/init-injector";
+import {
+  type InitInjectorHandle,
+  installInitInjector,
+  wrapSelfRemovingPayload,
+} from "./cdp/init-injector";
 import { MessageRouter } from "./cdp/router";
 import type { AttachedToTargetEvent } from "./cdp/types";
 import { Page } from "./page";
@@ -441,17 +445,55 @@ export class Session {
         { sessionId: attached.sessionId },
       );
     }
-    // Task 0266: the inject payload is delivered per-navigation by the
-    // session-level `installInitInjector` handler, NOT by a per-page
-    // `Page.addScriptToEvaluateOnNewDocument` call. The handler is already
-    // installed (see constructor) and listens on `Fetch.requestPaused` for
-    // every Document response. There is therefore no per-page install here
-    // and no script identifier to track. PLAN.md §8.4 amended.
+    // Task 0266: the inject payload is delivered via a TWO-MECHANISM strategy:
+    //
+    //   1. Session-level `installInitInjector` (constructor) — listens on
+    //      `Fetch.requestPaused`, splices the wrapped payload into every
+    //      HTTP/HTTPS Document response. This is the load-bearing path for
+    //      real navigations: closes the `addScriptToEvaluateOnNewDocument`
+    //      source-attribution leak.
+    //
+    //   2. Per-page `Page.addScriptToEvaluateOnNewDocument` (this block) —
+    //      registers the SAME wrapped payload as a fallback for URL schemes
+    //      that the Fetch domain does NOT intercept: `about:blank`,
+    //      `data:`, `blob:`. Without this, an `await page.goto("about:blank")`
+    //      followed by an inject-dependent assertion (e.g. `navigator.
+    //      webdriver` patched via R-022) would fail because the inject
+    //      never fired.
+    //
+    // The wrapper sets `__mochi_inject_marker = true` on globalThis and
+    // checks for it at entry, so when both paths fire on the same realm
+    // (a normal HTTP nav has Fetch splice + new-document fire), the second
+    // invocation early-returns before any side effect. PLAN.md §8.4
+    // documents this dual-mechanism design and the trade-off it accepts:
+    // the source-attribution leak is closed for every URL scheme that
+    // matters (HTTP/HTTPS — i.e. every fingerprinter-relevant page) but
+    // remains for transitional URLs (about:blank/data:/blob:) where no
+    // fingerprinter typically reads.
+    let injectScriptIdentifier: string | undefined;
+    if (!this.bypassInject && this._payload !== null) {
+      const wrapped = wrapSelfRemovingPayload(this._payload.code);
+      const installed = await this.router.send<{ identifier: string }>(
+        "Page.addScriptToEvaluateOnNewDocument",
+        {
+          source: wrapped,
+          // Run before the first script in the document — same timing the
+          // Fetch.fulfillRequest splice achieves on HTTP nav.
+          runImmediately: true,
+          // Empty `worldName` MUST be the literal empty string — naming any
+          // world creates a fingerprintable isolated world (PLAN.md §8.4).
+          worldName: "",
+        },
+        { sessionId: attached.sessionId },
+      );
+      injectScriptIdentifier = installed.identifier;
+    }
     const page = new Page({
       router: this.router,
       targetId: created.targetId,
       sessionId: attached.sessionId,
       initialUrl: "about:blank",
+      ...(injectScriptIdentifier !== undefined ? { injectScriptIdentifier } : {}),
       // PLAN.md I-5: behavior comes from MatrixV1.behavior (the matrix is
       // the single source of truth — `Session.profile` is the resolved
       // MatrixV1). Per-call opts may override individual fields.

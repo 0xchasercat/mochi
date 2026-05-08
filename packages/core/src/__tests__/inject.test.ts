@@ -159,10 +159,22 @@ describe("Session.bypassInject (PLAN.md §12.1, task 0040)", () => {
     const methods = localPipe.written
       .map((w) => w.parsed.method)
       .filter((m): m is string => typeof m === "string");
-    // Task 0266: the per-page Page.addScriptToEvaluateOnNewDocument call is
-    // GONE — the session uses Fetch.enable + Fetch.fulfillRequest body
-    // splice as the inject delivery mechanism.
-    expect(methods).not.toContain("Page.addScriptToEvaluateOnNewDocument");
+    // Task 0266 dual-mechanism: Session uses BOTH Fetch.fulfillRequest body
+    // splice (HTTP/HTTPS Document responses — closes source-attribution
+    // leak) AND Page.addScriptToEvaluateOnNewDocument (per-page fallback for
+    // about:blank / data: / blob: where Fetch domain can't intercept). The
+    // wrapped payload's `__mochi_inject_marker` early-return prevents
+    // double-execution when both fire on the same realm.
+    expect(methods).toContain("Page.addScriptToEvaluateOnNewDocument");
+    const addScriptCall = localPipe.written.find(
+      (w) => w.parsed.method === "Page.addScriptToEvaluateOnNewDocument",
+    );
+    const addScriptParams = addScriptCall?.parsed.params as
+      | { source?: string; runImmediately?: boolean; worldName?: string }
+      | undefined;
+    expect(addScriptParams?.runImmediately).toBe(true);
+    expect(addScriptParams?.worldName).toBe(""); // PLAN.md §8.4 — main world
+    expect(addScriptParams?.source).toContain("__mochi_inject_marker"); // idempotency guard
     // Fetch.enable is sent ONCE on session construction with the
     // Document-first patterns. Auth is off because no proxyAuth was set.
     expect(methods).toContain("Fetch.enable");
