@@ -28,9 +28,9 @@
 
 import { describe, expect, it } from "bun:test";
 import { deriveMatrix, type ProfileV1 } from "../../packages/consistency/src/index";
-import type { PipeReader, PipeWriter } from "../../packages/core/src/cdp/transport";
 import { Session } from "../../packages/core/src/session";
 import { buildPayload } from "../../packages/inject/src/index";
+import { fakeChromiumProcess, makeFakePipe } from "../helpers/cdp-fixture";
 
 // ---- shared fixture ---------------------------------------------------------
 
@@ -69,62 +69,6 @@ function fixtureProfile(): ProfileV1 {
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.6778.86 Safari/537.36",
     uaCh: {},
     entropyBudget: { fixed: [], perSeed: [] },
-  };
-}
-
-// ---- fake CDP pipes (copy from headless-ua-no-leak.contract.test.ts) --------
-
-interface RecordedFrame {
-  raw: string;
-  parsed: {
-    id?: number;
-    method?: string;
-    params?: unknown;
-    sessionId?: string;
-  };
-  __responded?: boolean;
-}
-
-function makeFakePipes(): {
-  reader: PipeReader;
-  writer: PipeWriter;
-  written: RecordedFrame[];
-  inject: (msg: object) => void;
-} {
-  const written: RecordedFrame[] = [];
-  let pushChunk: ((chunk: Uint8Array) => void) | null = null;
-  const stream = new ReadableStream<Uint8Array>({
-    start(ctrl) {
-      pushChunk = (chunk) => ctrl.enqueue(chunk);
-    },
-  });
-  return {
-    reader: { getReader: () => stream.getReader() },
-    writer: {
-      write(chunk) {
-        const buf = chunk as Uint8Array;
-        const end = buf[buf.length - 1] === 0 ? buf.length - 1 : buf.length;
-        const raw = new TextDecoder().decode(buf.subarray(0, end));
-        let parsed: RecordedFrame["parsed"] = {};
-        try {
-          parsed = JSON.parse(raw) as RecordedFrame["parsed"];
-        } catch {
-          // ignore
-        }
-        written.push({ raw, parsed });
-      },
-      flush() {},
-      end() {},
-    },
-    written,
-    inject(msg) {
-      if (pushChunk === null) throw new Error("pipe not ready");
-      // CDP pipe-mode framing is NUL-delimited (`packages/core/src/cdp/framer.ts`).
-      // String.fromCharCode keeps the NUL byte legible in source rather than
-      // smuggling a literal `\0` into the template literal.
-      const data = `${JSON.stringify(msg)}${String.fromCharCode(0)}`;
-      pushChunk(new TextEncoder().encode(data));
-    },
   };
 }
 
@@ -171,76 +115,28 @@ interface NetworkUaMetadata {
 
 describe("contract: Network.setUserAgentOverride.userAgentMetadata mirrors inject client-hints", () => {
   it("every userAgentMetadata field equals the matching inject SPOOF_* constant", async () => {
-    const { reader, writer, written, inject } = makeFakePipes();
+    const pipe = makeFakePipe({
+      responders: {
+        "Target.createTarget": () => ({ targetId: "tgt-uach" }),
+        "Target.attachToTarget": () => ({ sessionId: "page-uach" }),
+        "Page.addScriptToEvaluateOnNewDocument": () => ({ identifier: "scr-uach" }),
+      },
+    });
     const matrix = deriveMatrix(fixtureProfile(), "uach-parity-pin");
 
     const session = new Session({
-      proc: {
-        reader,
-        writer,
-        userDataDir: "/tmp/contract-fake-uach-parity",
-        pid: 0,
-        exited: new Promise<number>(() => {
-          /* never resolves */
-        }),
-        close: async () => {
-          /* no-op */
-        },
-      },
+      proc: fakeChromiumProcess(pipe, { userDataDir: "/tmp/contract-fake-uach-parity" }),
       matrix,
       seed: "uach-parity-pin",
       defaultTimeoutMs: 250,
     });
-
-    let pollCount = 0;
-    const responder = setInterval(() => {
-      pollCount++;
-      for (const frame of written) {
-        const f = frame.parsed;
-        if (frame.__responded === true) continue;
-        if (typeof f.id !== "number") continue;
-        if (f.method === "Target.setAutoAttach") {
-          inject({ id: f.id, result: {} });
-          frame.__responded = true;
-        } else if (f.method === "Target.createTarget") {
-          inject({ id: f.id, result: { targetId: "tgt-uach" } });
-          frame.__responded = true;
-        } else if (f.method === "Target.attachToTarget") {
-          inject({ id: f.id, result: { sessionId: "page-uach" } });
-          frame.__responded = true;
-        } else if (f.method === "Page.enable") {
-          inject({ id: f.id, result: {} });
-          frame.__responded = true;
-        } else if (f.method === "Emulation.setTimezoneOverride") {
-          // Added by task 0262 (geo-consistency) per-target between Page.enable
-          // and Network.setUserAgentOverride. This test was written before
-          // 0262 landed; auto-respond so the new send doesn't block subsequent
-          // frames from being processed.
-          inject({ id: f.id, result: {} });
-          frame.__responded = true;
-        } else if (f.method === "Network.setUserAgentOverride") {
-          inject({ id: f.id, result: {} });
-          frame.__responded = true;
-        } else if (f.method === "Page.addScriptToEvaluateOnNewDocument") {
-          inject({ id: f.id, result: { identifier: "scr-uach" } });
-          frame.__responded = true;
-        } else if (f.method === "Page.removeScriptToEvaluateOnNewDocument") {
-          inject({ id: f.id, result: {} });
-          frame.__responded = true;
-        } else if (f.method === "Target.closeTarget") {
-          inject({ id: f.id, result: { success: true } });
-          frame.__responded = true;
-        }
-      }
-      if (pollCount > 200) clearInterval(responder);
-    }, 5);
 
     try {
       const page = await session.newPage();
       expect(page).toBeDefined();
 
       // Locate the captured override frame.
-      const overrideFrame = written.find(
+      const overrideFrame = pipe.written.find(
         (f) =>
           f.parsed.method === "Network.setUserAgentOverride" && f.parsed.sessionId === "page-uach",
       );
@@ -297,7 +193,6 @@ describe("contract: Network.setUserAgentOverride.userAgentMetadata mirrors injec
 
       await page.close();
     } finally {
-      clearInterval(responder);
       await session.close();
     }
   }, 10_000);

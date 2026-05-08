@@ -22,13 +22,7 @@
 import { describe, expect, it } from "bun:test";
 import { deriveMatrix, type ProfileV1 } from "../../packages/consistency/src/index";
 import { Session } from "../../packages/core/src/index";
-import type { ChromiumProcess } from "../../packages/core/src/proc";
-
-interface FakeProc {
-  proc: ChromiumProcess;
-  written: { method: string; params?: unknown }[];
-  pushFrame(frame: unknown): void;
-}
+import { fakeChromiumProcess, makeFakePipe } from "../helpers/cdp-fixture";
 
 function makeProfile(): ProfileV1 {
   return {
@@ -67,99 +61,45 @@ function makeProfile(): ProfileV1 {
   };
 }
 
-function makeFakeProc(): FakeProc {
-  const written: { method: string; params?: unknown }[] = [];
-  let pumpController: ReadableStreamDefaultController<Uint8Array> | null = null;
-  const stream = new ReadableStream<Uint8Array>({
-    start(c) {
-      pumpController = c;
-    },
-  });
-  const reader = {
-    getReader: () => stream.getReader(),
-  };
-  const writer = {
-    write(chunk: Uint8Array): number {
-      const last = chunk[chunk.length - 1] === 0 ? chunk.length - 1 : chunk.length;
-      const json = new TextDecoder().decode(chunk.subarray(0, last));
-      try {
-        const obj = JSON.parse(json) as { id?: number; method: string; params?: unknown };
-        written.push({ method: obj.method, params: obj.params });
-        // Auto-resolve the request so installProxyAuth's await doesn't hang.
-        if (typeof obj.id === "number") {
-          const reply = JSON.stringify({ id: obj.id, result: {} });
-          const enc = new TextEncoder().encode(reply);
-          const out = new Uint8Array(enc.length + 1);
-          out.set(enc, 0);
-          out[enc.length] = 0;
-          pumpController?.enqueue(out);
-        }
-      } catch {
-        // ignore
-      }
-      return chunk.byteLength;
-    },
-    flush(): void {},
-    end(): void {},
-  };
-  const proc = {
-    reader,
-    writer,
-    userDataDir: "/tmp/contract-proxy",
-    pid: 0,
-    exited: new Promise<number>(() => undefined),
-    async close(): Promise<void> {},
-  } as unknown as ChromiumProcess;
-  const enc = new TextEncoder();
-  return {
-    proc,
-    written,
-    pushFrame(frame: unknown): void {
-      const bytes = enc.encode(JSON.stringify(frame));
-      const out = new Uint8Array(bytes.length + 1);
-      out.set(bytes, 0);
-      out[bytes.length] = 0;
-      pumpController?.enqueue(out);
-    },
-  };
-}
-
 const SETUP_DELAY_MS = 30;
 
 describe("proxy-auth contract (PLAN.md §8.2 / §10, task 0160)", () => {
   it("with proxy auth: sends Fetch.enable on construction", async () => {
-    const f = makeFakeProc();
+    const pipe = makeFakePipe();
     const session = new Session({
-      proc: f.proc,
+      proc: fakeChromiumProcess(pipe, { userDataDir: "/tmp/contract-proxy" }),
       matrix: deriveMatrix(makeProfile(), "seed"),
       seed: "seed",
       proxyAuth: { username: "u", password: "p" },
     });
     // Wait for the deferred installProxyAuth to settle.
     await new Promise((r) => setTimeout(r, SETUP_DELAY_MS));
-    const enable = f.written.find((c) => c.method === "Fetch.enable");
+    const enable = pipe.written.find((c) => c.parsed.method === "Fetch.enable");
     expect(enable).toBeDefined();
-    expect(enable?.params).toEqual({ handleAuthRequests: true, patterns: [{ urlPattern: "*" }] });
+    expect(enable?.parsed.params).toEqual({
+      handleAuthRequests: true,
+      patterns: [{ urlPattern: "*" }],
+    });
     await session.close();
   });
 
   it("with proxy auth: answers Fetch.authRequired with credentials", async () => {
-    const f = makeFakeProc();
+    const pipe = makeFakePipe();
     const session = new Session({
-      proc: f.proc,
+      proc: fakeChromiumProcess(pipe, { userDataDir: "/tmp/contract-proxy" }),
       matrix: deriveMatrix(makeProfile(), "seed"),
       seed: "seed",
       proxyAuth: { username: "alice", password: "s3cret" },
     });
     await new Promise((r) => setTimeout(r, SETUP_DELAY_MS));
-    f.pushFrame({
+    pipe.inject({
       method: "Fetch.authRequired",
       params: { requestId: "req-1", authChallenge: { source: "Proxy" } },
     });
     await new Promise((r) => setTimeout(r, SETUP_DELAY_MS));
-    const reply = f.written.find((c) => c.method === "Fetch.continueWithAuth");
+    const reply = pipe.written.find((c) => c.parsed.method === "Fetch.continueWithAuth");
     expect(reply).toBeDefined();
-    expect(reply?.params).toEqual({
+    expect(reply?.parsed.params).toEqual({
       requestId: "req-1",
       authChallengeResponse: {
         response: "ProvideCredentials",
@@ -171,42 +111,42 @@ describe("proxy-auth contract (PLAN.md §8.2 / §10, task 0160)", () => {
   });
 
   it("without proxy auth: NEVER sends Fetch.enable", async () => {
-    const f = makeFakeProc();
+    const pipe = makeFakePipe();
     const session = new Session({
-      proc: f.proc,
+      proc: fakeChromiumProcess(pipe, { userDataDir: "/tmp/contract-proxy" }),
       matrix: deriveMatrix(makeProfile(), "seed"),
       seed: "seed",
     });
     await new Promise((r) => setTimeout(r, SETUP_DELAY_MS));
-    const enable = f.written.find((c) => c.method === "Fetch.enable");
+    const enable = pipe.written.find((c) => c.parsed.method === "Fetch.enable");
     expect(enable).toBeUndefined();
     await session.close();
   });
 
   it("close() sends Fetch.disable when proxy auth was active", async () => {
-    const f = makeFakeProc();
+    const pipe = makeFakePipe();
     const session = new Session({
-      proc: f.proc,
+      proc: fakeChromiumProcess(pipe, { userDataDir: "/tmp/contract-proxy" }),
       matrix: deriveMatrix(makeProfile(), "seed"),
       seed: "seed",
       proxyAuth: { username: "u", password: "p" },
     });
     await new Promise((r) => setTimeout(r, SETUP_DELAY_MS));
     await session.close();
-    const disable = f.written.find((c) => c.method === "Fetch.disable");
+    const disable = pipe.written.find((c) => c.parsed.method === "Fetch.disable");
     expect(disable).toBeDefined();
   });
 
   it("close() does NOT send Fetch.disable when no proxy auth", async () => {
-    const f = makeFakeProc();
+    const pipe = makeFakePipe();
     const session = new Session({
-      proc: f.proc,
+      proc: fakeChromiumProcess(pipe, { userDataDir: "/tmp/contract-proxy" }),
       matrix: deriveMatrix(makeProfile(), "seed"),
       seed: "seed",
     });
     await new Promise((r) => setTimeout(r, SETUP_DELAY_MS));
     await session.close();
-    const disable = f.written.find((c) => c.method === "Fetch.disable");
+    const disable = pipe.written.find((c) => c.parsed.method === "Fetch.disable");
     expect(disable).toBeUndefined();
   });
 });

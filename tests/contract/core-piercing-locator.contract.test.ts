@@ -4,8 +4,8 @@
  * pre-existing `Page.text` / `Page.humanClick` (which use plain
  * `DOM.querySelector`) intentionally cannot.
  *
- * Strategy: drive a `Page` against a fake-pipe transport (same harness used
- * by `inject-no-runtime-enable.contract.test.ts`), respond to
+ * Strategy: drive a `Page` against a fake-pipe transport (via the shared
+ * `tests/helpers/cdp-fixture.ts` helper), respond to
  * `DOM.getDocument({ depth:-1, pierce:true })` with a hand-built tree that
  * embeds an iframe behind a closed shadow root, and verify that:
  *
@@ -22,59 +22,10 @@
 
 import { describe, expect, it } from "bun:test";
 import { MessageRouter } from "../../packages/core/src/cdp/router";
-import type { PipeReader, PipeWriter } from "../../packages/core/src/cdp/transport";
 import type { PierceDomNode } from "../../packages/core/src/cdp/types";
 import { ElementHandle } from "../../packages/core/src/index";
 import { Page } from "../../packages/core/src/page";
-
-interface RecordedFrame {
-  raw: string;
-  parsed: { id?: number; method?: string; params?: unknown; sessionId?: string };
-}
-
-function makeFakePipes(): {
-  reader: PipeReader;
-  writer: PipeWriter;
-  written: RecordedFrame[];
-  inject: (msg: object) => void;
-} {
-  const written: RecordedFrame[] = [];
-  let pushChunk: ((chunk: Uint8Array) => void) | null = null;
-  const stream = new ReadableStream<Uint8Array>({
-    start(ctrl) {
-      pushChunk = (chunk) => ctrl.enqueue(chunk);
-    },
-  });
-  return {
-    reader: { getReader: () => stream.getReader() },
-    writer: {
-      write(chunk) {
-        const buf = chunk as Uint8Array;
-        const end = buf[buf.length - 1] === 0 ? buf.length - 1 : buf.length;
-        const raw = new TextDecoder().decode(buf.subarray(0, end));
-        let parsed: RecordedFrame["parsed"] = {};
-        try {
-          parsed = JSON.parse(raw) as RecordedFrame["parsed"];
-        } catch {
-          // ignore
-        }
-        written.push({ raw, parsed });
-      },
-      flush() {},
-      end() {},
-    },
-    written,
-    inject(msg) {
-      if (pushChunk === null) throw new Error("pipe not ready");
-      const json = JSON.stringify(msg);
-      const utf8 = new TextEncoder().encode(json);
-      const out = new Uint8Array(utf8.length + 1);
-      out.set(utf8, 0);
-      out[utf8.length] = 0;
-      pushChunk(out);
-    },
-  };
-}
+import { type CdpResponders, makeFakePipe } from "../helpers/cdp-fixture";
 
 /** Build a CDP DOM.getDocument response that nests a turnstile iframe under a CLOSED shadow root. */
 function buildClosedShadowTree(): PierceDomNode {
@@ -133,82 +84,49 @@ function buildClosedShadowTree(): PierceDomNode {
   };
 }
 
-/** Auto-respond to the small CDP method set the piercing path needs. */
-function startResponder(
-  written: RecordedFrame[],
-  inject: (msg: object) => void,
-  closedShadowTree: PierceDomNode,
-): NodeJS.Timeout {
-  const responder = setInterval(() => {
-    for (const frame of written) {
-      const f = frame.parsed;
-      const responded = (frame as unknown as { __responded?: boolean }).__responded;
-      if (responded === true) continue;
-      if (typeof f.id !== "number") continue;
-      const tag = frame as unknown as { __responded: boolean };
-      if (f.method === "DOM.getDocument") {
-        const params = f.params as { depth?: number; pierce?: boolean } | undefined;
-        if (params?.depth === -1 && params?.pierce === true) {
-          inject({ id: f.id, result: { root: closedShadowTree } });
-        } else {
-          // Non-piercing fallback (used by `page.text` etc.) — a shallow tree
-          // *without* the closed shadow descendants. This is what real CDP
-          // returns for depth: 1.
-          inject({
-            id: f.id,
-            result: {
-              root: {
-                nodeId: 1,
-                backendNodeId: 1,
-                nodeType: 9,
-                nodeName: "#document",
-              },
-            },
-          });
-        }
-        tag.__responded = true;
-      } else if (f.method === "DOM.querySelector") {
-        // The light-DOM querySelector cannot see into the closed shadow
-        // root — return nodeId: 0 to model the real CDP behavior.
-        inject({ id: f.id, result: { nodeId: 0 } });
-        tag.__responded = true;
-      } else if (f.method === "DOM.resolveNode") {
-        const params = f.params as { backendNodeId?: number } | undefined;
-        const id = params?.backendNodeId ?? 0;
-        inject({
-          id: f.id,
-          result: {
-            object: {
-              type: "object",
-              subtype: "node",
-              objectId: `obj-${id}`,
-              description: `Element[${id}]`,
-            },
-          },
-        });
-        tag.__responded = true;
-      } else if (f.method === "Page.enable") {
-        inject({ id: f.id, result: {} });
-        tag.__responded = true;
-      } else if (f.method === "Target.closeTarget") {
-        inject({ id: f.id, result: { success: true } });
-        tag.__responded = true;
-      } else if (f.method === "Page.removeScriptToEvaluateOnNewDocument") {
-        inject({ id: f.id, result: {} });
-        tag.__responded = true;
+/**
+ * The piercing path needs a small set of dynamic responders: `DOM.getDocument`
+ * branches on whether `pierce: true` was requested, and `DOM.resolveNode`
+ * echoes the input `backendNodeId` into a synthetic `objectId`. Express
+ * those as a `CdpResponders` map and pass them to `makeFakePipe`.
+ */
+function piercingResponders(closedShadowTree: PierceDomNode): CdpResponders {
+  return {
+    "DOM.getDocument": (params: unknown) => {
+      const p = params as { depth?: number; pierce?: boolean } | undefined;
+      if (p?.depth === -1 && p?.pierce === true) {
+        return { root: closedShadowTree };
       }
-    }
-  }, 5);
-  return responder;
+      // Non-piercing fallback (used by `page.text` etc.) — a shallow tree
+      // *without* the closed shadow descendants. This is what real CDP
+      // returns for depth: 1.
+      return {
+        root: { nodeId: 1, backendNodeId: 1, nodeType: 9, nodeName: "#document" },
+      };
+    },
+    // The light-DOM querySelector cannot see into the closed shadow root —
+    // return nodeId: 0 to model the real CDP behavior.
+    "DOM.querySelector": () => ({ nodeId: 0 }),
+    "DOM.resolveNode": (params: unknown) => {
+      const p = params as { backendNodeId?: number } | undefined;
+      const id = p?.backendNodeId ?? 0;
+      return {
+        object: {
+          type: "object",
+          subtype: "node",
+          objectId: `obj-${id}`,
+          description: `Element[${id}]`,
+        },
+      };
+    },
+  };
 }
 
 describe("contract: Page.querySelectorPiercing finds elements inside CLOSED shadow roots", () => {
   it("resolves an iframe behind a closed-shadow host", async () => {
-    const { reader, writer, written, inject } = makeFakePipes();
     const tree = buildClosedShadowTree();
-    const responder = startResponder(written, inject, tree);
-
-    const router = new MessageRouter(reader, writer, { defaultTimeoutMs: 2000 });
+    const pipe = makeFakePipe({ responders: piercingResponders(tree) });
+    const router = new MessageRouter(pipe.reader, pipe.writer, { defaultTimeoutMs: 2000 });
     router.start();
     const page = new Page({
       router,
@@ -226,17 +144,14 @@ describe("contract: Page.querySelectorPiercing finds elements inside CLOSED shad
       // backendNodeId 9001, the deeply-nested element under the closed shadow.
       expect(handle?.backendNodeId).toBe(9001);
     } finally {
-      clearInterval(responder);
       await router.close();
     }
   }, 5000);
 
   it("querySelectorAllPiercing returns every match in pre-order", async () => {
-    const { reader, writer, written, inject } = makeFakePipes();
     const tree = buildClosedShadowTree();
-    const responder = startResponder(written, inject, tree);
-
-    const router = new MessageRouter(reader, writer, { defaultTimeoutMs: 2000 });
+    const pipe = makeFakePipe({ responders: piercingResponders(tree) });
+    const router = new MessageRouter(pipe.reader, pipe.writer, { defaultTimeoutMs: 2000 });
     router.start();
     const page = new Page({
       router,
@@ -249,17 +164,14 @@ describe("contract: Page.querySelectorPiercing finds elements inside CLOSED shad
       expect(handles).toHaveLength(1);
       expect(handles[0]?.backendNodeId).toBe(9001);
     } finally {
-      clearInterval(responder);
       await router.close();
     }
   }, 5000);
 
   it("returns null when nothing matches — even with a piercing walk", async () => {
-    const { reader, writer, written, inject } = makeFakePipes();
     const tree = buildClosedShadowTree();
-    const responder = startResponder(written, inject, tree);
-
-    const router = new MessageRouter(reader, writer, { defaultTimeoutMs: 2000 });
+    const pipe = makeFakePipe({ responders: piercingResponders(tree) });
+    const router = new MessageRouter(pipe.reader, pipe.writer, { defaultTimeoutMs: 2000 });
     router.start();
     const page = new Page({
       router,
@@ -271,17 +183,14 @@ describe("contract: Page.querySelectorPiercing finds elements inside CLOSED shad
       const handle = await page.querySelectorPiercing(".no-such-class");
       expect(handle).toBeNull();
     } finally {
-      clearInterval(responder);
       await router.close();
     }
   }, 5000);
 
   it("the pre-existing page.text(...) returns null for closed-shadow targets — confirming piercing is required", async () => {
-    const { reader, writer, written, inject } = makeFakePipes();
     const tree = buildClosedShadowTree();
-    const responder = startResponder(written, inject, tree);
-
-    const router = new MessageRouter(reader, writer, { defaultTimeoutMs: 2000 });
+    const pipe = makeFakePipe({ responders: piercingResponders(tree) });
+    const router = new MessageRouter(pipe.reader, pipe.writer, { defaultTimeoutMs: 2000 });
     router.start();
     const page = new Page({
       router,
@@ -297,7 +206,6 @@ describe("contract: Page.querySelectorPiercing finds elements inside CLOSED shad
       const text = await page.text('iframe[src*="challenges.cloudflare.com/turnstile"]');
       expect(text).toBeNull();
     } finally {
-      clearInterval(responder);
       await router.close();
     }
   }, 5000);

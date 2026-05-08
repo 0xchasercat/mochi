@@ -5,7 +5,8 @@
  * with-auth/no-auth × edge cases (missing port, IPv6 host, percent-encoded
  * creds, empty password).
  *
- * `installProxyAuth`: drives a fake CDP router. Verifies:
+ * `installProxyAuth`: drives a fake CDP router via the shared
+ * `tests/helpers/cdp-fixture.ts` helper. Verifies:
  *   - `Fetch.enable` is sent with `handleAuthRequests: true, patterns: [{ urlPattern: "*" }]`.
  *   - `Fetch.authRequired` events trigger `Fetch.continueWithAuth` carrying
  *     the configured creds.
@@ -16,8 +17,8 @@
  */
 
 import { describe, expect, it } from "bun:test";
+import { type FakePipe, makeFakePipe } from "../../../../tests/helpers/cdp-fixture";
 import { MessageRouter } from "../cdp/router";
-import type { PipeReader, PipeWriter } from "../cdp/transport";
 import { installProxyAuth, parseProxyUrl } from "../proxy-auth";
 
 describe("parseProxyUrl", () => {
@@ -131,58 +132,21 @@ describe("parseProxyUrl", () => {
 
 interface FakeRouter {
   router: MessageRouter;
-  written: { method: string; params?: unknown }[];
+  pipe: FakePipe;
   pushEvent(method: string, params: unknown): void;
 }
 
 function makeRouter(): FakeRouter {
-  const written: { method: string; params?: unknown }[] = [];
-  let pumpController: ReadableStreamDefaultController<Uint8Array> | null = null;
-  const stream = new ReadableStream<Uint8Array>({
-    start(c) {
-      pumpController = c;
-    },
-  });
-  const reader: PipeReader = {
-    getReader: () => stream.getReader(),
-  };
-  const writer: PipeWriter = {
-    write: (chunk: Uint8Array) => {
-      const last = chunk[chunk.length - 1] === 0 ? chunk.length - 1 : chunk.length;
-      const json = new TextDecoder().decode(chunk.subarray(0, last));
-      try {
-        const obj = JSON.parse(json) as { id?: number; method: string; params?: unknown };
-        written.push({ method: obj.method, params: obj.params });
-        // Auto-resolve the request immediately so the await in
-        // `installProxyAuth` doesn't hang.
-        if (typeof obj.id === "number") {
-          const reply = JSON.stringify({ id: obj.id, result: {} });
-          const enc = new TextEncoder().encode(reply);
-          const out = new Uint8Array(enc.length + 1);
-          out.set(enc, 0);
-          out[enc.length] = 0;
-          pumpController?.enqueue(out);
-        }
-      } catch {
-        // ignore
-      }
-      return chunk.byteLength;
-    },
-    flush: () => undefined,
-    end: () => undefined,
-  };
-  const router = new MessageRouter(reader, writer);
+  // Default responders auto-answer Fetch.enable / Fetch.disable / etc with
+  // `{}` — that's everything `installProxyAuth` waits on.
+  const pipe = makeFakePipe();
+  const router = new MessageRouter(pipe.reader, pipe.writer);
   router.start();
-  const enc = new TextEncoder();
   return {
     router,
-    written,
+    pipe,
     pushEvent(method: string, params: unknown): void {
-      const bytes = enc.encode(JSON.stringify({ method, params }));
-      const out = new Uint8Array(bytes.length + 1);
-      out.set(bytes, 0);
-      out[bytes.length] = 0;
-      pumpController?.enqueue(out);
+      pipe.inject({ method, params });
     },
   };
 }
@@ -191,9 +155,12 @@ describe("installProxyAuth", () => {
   it("sends Fetch.enable with handleAuthRequests:true and empty patterns", async () => {
     const f = makeRouter();
     const handle = await installProxyAuth(f.router, { username: "u", password: "p" });
-    const enable = f.written.find((c) => c.method === "Fetch.enable");
+    const enable = f.pipe.written.find((c) => c.parsed.method === "Fetch.enable");
     expect(enable).toBeDefined();
-    expect(enable?.params).toEqual({ handleAuthRequests: true, patterns: [{ urlPattern: "*" }] });
+    expect(enable?.parsed.params).toEqual({
+      handleAuthRequests: true,
+      patterns: [{ urlPattern: "*" }],
+    });
     await handle.dispose();
     await f.router.close();
   });
@@ -204,9 +171,9 @@ describe("installProxyAuth", () => {
     f.pushEvent("Fetch.authRequired", { requestId: "req-42", authChallenge: { source: "Proxy" } });
     // Allow microtasks + the writer push to flush.
     await new Promise((r) => setTimeout(r, 10));
-    const reply = f.written.find((c) => c.method === "Fetch.continueWithAuth");
+    const reply = f.pipe.written.find((c) => c.parsed.method === "Fetch.continueWithAuth");
     expect(reply).toBeDefined();
-    expect(reply?.params).toEqual({
+    expect(reply?.parsed.params).toEqual({
       requestId: "req-42",
       authChallengeResponse: {
         response: "ProvideCredentials",
@@ -223,9 +190,9 @@ describe("installProxyAuth", () => {
     const handle = await installProxyAuth(f.router, { username: "u", password: "p" });
     f.pushEvent("Fetch.requestPaused", { requestId: "rp-1" });
     await new Promise((r) => setTimeout(r, 10));
-    const reply = f.written.find((c) => c.method === "Fetch.continueRequest");
+    const reply = f.pipe.written.find((c) => c.parsed.method === "Fetch.continueRequest");
     expect(reply).toBeDefined();
-    expect(reply?.params).toEqual({ requestId: "rp-1" });
+    expect(reply?.parsed.params).toEqual({ requestId: "rp-1" });
     await handle.dispose();
     await f.router.close();
   });
@@ -235,7 +202,7 @@ describe("installProxyAuth", () => {
     const handle = await installProxyAuth(f.router, { username: "u", password: "p" });
     await handle.dispose();
     await handle.dispose();
-    const disables = f.written.filter((c) => c.method === "Fetch.disable");
+    const disables = f.pipe.written.filter((c) => c.parsed.method === "Fetch.disable");
     expect(disables.length).toBe(1);
     await f.router.close();
   });
@@ -246,7 +213,7 @@ describe("installProxyAuth", () => {
     await handle.dispose();
     f.pushEvent("Fetch.authRequired", { requestId: "late" });
     await new Promise((r) => setTimeout(r, 10));
-    const replies = f.written.filter((c) => c.method === "Fetch.continueWithAuth");
+    const replies = f.pipe.written.filter((c) => c.parsed.method === "Fetch.continueWithAuth");
     expect(replies.length).toBe(0);
     await f.router.close();
   });
