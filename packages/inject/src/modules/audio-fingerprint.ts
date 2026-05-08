@@ -21,7 +21,17 @@
  *      a real graph.
  *   2. After the real promise resolves, *overwrite* the [4500..4510) slice
  *      of channel 0 with the captured `sampleValues`, and balance the
- *      [4500..5000) range so `sum(|data[i]|)` matches `audioHash` exactly.
+ *      [4500..5000) range so `sum(|data[i]|)` matches `audioHash`
+ *      byte-exactly. The residual (`audioHash - sum(|sampleValues|)`) is
+ *      *distributed* across the 489 slots in [4510..4999) using a forward
+ *      sweep that re-reads each f32 cell after writing — this models the
+ *      page's f32-storage / f64-readback path precisely. A single-sample
+ *      residual at a high magnitude would f32-quantize off by ~one ULP
+ *      (3e-8) — fine on Mac M-series whose native render happens to match
+ *      the captured baseline, but fatal on Linux x86_64 where the spoof
+ *      is the only thing producing the value. The distribution keeps the
+ *      final-slot correction at residual magnitude ~1e-10 where f32 has
+ *      enough density to round-trip to the captured f64 target.
  *      The remaining samples (channel 1+, indices outside the probe window)
  *      stay native — anything probing other indices sees real audio output.
  *   3. Preserve real-startRendering timing. CfT renders ~44100 samples in
@@ -116,9 +126,28 @@ export function emitAudioFingerprintModule(matrix: MatrixV1): string {
 
   /**
    * Overlay the captured sample window on a rendered AudioBuffer's channel 0.
-   * The remaining samples in the [4500..5000) range are zeroed and one
-   * sentinel sample at index 4999 is set to the residual so the absolute-
-   * value sum hits the captured audioHash.
+   *
+   * The 10 reported samples land at [4500..4510) byte-exact. The remaining
+   * 490 slots [4510..5000) are filled to make
+   *   sum_{i=4500..5000} Math.abs(ch[i]) === SPOOF_HASH
+   * byte-exactly on every host.
+   *
+   * Why distribute (vs. plant the whole residual at index 4999): \`ch\` is a
+   * Float32Array. The probe sums each |ch[i]| in f64. If we collapse the
+   * residual into a single sample at magnitude ~0.25, f32 ULP at that
+   * magnitude is ~3e-8 — much larger than f64 ULP at the running sum
+   * (~1.4e-14 at magnitude 124). The single-sample residual then quantizes
+   * away from the f64 target by ~one f32 ULP, producing host-dependent
+   * drift (Mac M-series happens to hit the captured baseline because the
+   * baseline IS its native f32 sum; Linux x86_64 misses).
+   *
+   * Spreading the residual across 489 slots keeps each per-slot value
+   * small. The f64 running sum is updated using the actual f32-stored
+   * value at each step (Math.abs(ch[i]) — reading f32 storage promotes to
+   * f64), so we model the page's readback exactly. By the final slot, the
+   * remaining residual is small enough (~1e-10) that its f32 quantization
+   * loss is well below f64 ULP at the target magnitude — the addition lands
+   * on the target byte-exact.
    */
   function overlay(buffer) {
     if (buffer === null || buffer === undefined) return buffer;
@@ -130,22 +159,43 @@ export function emitAudioFingerprintModule(matrix: MatrixV1): string {
     }
     if (ch === undefined || ch === null || ch.length < WINDOW_HASH_END) return buffer;
 
-    // 1. Plant the 10 reported samples.
-    var capturedAbsSum = 0;
+    // 1. Plant the 10 reported samples (byte-exact at [4500..4510)).
     for (var i = 0; i < SPOOF_SAMPLES.length; i++) {
-      var v = SPOOF_SAMPLES[i];
-      ch[WINDOW_START + i] = v;
-      capturedAbsSum += v < 0 ? -v : v;
+      ch[WINDOW_START + i] = SPOOF_SAMPLES[i];
     }
 
-    // 2. Zero the [4510..4999) range so we control the abs-sum.
-    for (var j = WINDOW_REPORT_END; j < WINDOW_HASH_END - 1; j++) ch[j] = 0;
+    // 2. Compute running f64 sum of |ch[4500..4510)| using the values that
+    //    will actually be re-read by the page (post f32-quantize). Reading
+    //    a Float32Array element promotes to f64, so this mirrors the
+    //    probe's accumulation exactly.
+    var running = 0;
+    for (var k = WINDOW_START; k < WINDOW_REPORT_END; k++) {
+      var s = ch[k];
+      running += s < 0 ? -s : s;
+    }
 
-    // 3. Plant the residual at index 4999. Probe is sum |data[i]| over
-    //    [4500..5000), so the residual is positive by construction.
-    var residual = SPOOF_HASH - capturedAbsSum;
-    if (residual < 0) residual = 0; // capture invariant: hash >= captured-window sum
-    ch[WINDOW_HASH_END - 1] = residual;
+    // 3. Distribute the residual across [4510..4999) — 489 slots — leaving
+    //    [4999] for the final tiny correction. At each step pick
+    //    v = remaining / slotsLeft, write (which f32-quantizes), and update
+    //    running with the *stored* magnitude. Using the stored value (not
+    //    the pre-quantize v) is what keeps us aligned with the page's
+    //    readback.
+    for (var j = WINDOW_REPORT_END; j < WINDOW_HASH_END - 1; j++) {
+      var slotsLeft = (WINDOW_HASH_END - 1) - j; // 489 down to 1
+      var remaining = SPOOF_HASH - running;
+      var v = remaining > 0 ? remaining / slotsLeft : 0;
+      ch[j] = v;
+      var stored = ch[j];
+      running += stored < 0 ? -stored : stored;
+    }
+
+    // 4. Final correction at [4999]. By this point \`running\` is within
+    //    ~1 f32 ULP of SPOOF_HASH at residual magnitude — well-representable
+    //    in f32, so the write+readback round-trip is lossless to f64 ULP at
+    //    the target magnitude.
+    var finalResidual = SPOOF_HASH - running;
+    if (finalResidual < 0) finalResidual = 0; // capture invariant safety net
+    ch[WINDOW_HASH_END - 1] = finalResidual;
     return buffer;
   }
 

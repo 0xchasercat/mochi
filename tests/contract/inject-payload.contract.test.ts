@@ -73,6 +73,13 @@ const CANONICAL_SEED = "contract-pin-seed";
  * the payload's bytes intentionally change.
  *
  * Last updated 2026-05-09 alongside tasks/0267-audio-canvas-fingerprint-blobs.md
+ * follow-up (audio overlay() residual distribution — fixes Linux x86_64 CI
+ * f32-quantization mismatch in the audio fingerprint spoof; the emitted
+ * overlay() body changed from a single-cell residual at index 4999 to a
+ * 489-slot forward-sweep distribution across [4510..4999), shifting the
+ * payload bytes. See packages/inject/src/modules/audio-fingerprint.ts.
+ *
+ * Previously last updated 2026-05-09 alongside tasks/0267-audio-canvas-fingerprint-blobs.md
  * (R-047 + R-048: audio + canvas fingerprint blobs — closes the two largest
  * JS-layer stealth gaps per the README "what works/doesn't" matrix. New
  * inject modules `audio-fingerprint` and `canvas-fingerprint` patch
@@ -108,7 +115,7 @@ const CANONICAL_SEED = "contract-pin-seed";
  * absent) and plugins (curated 5-plugin PluginArray only when underlying
  * browser reports an empty list).
  */
-const PINNED_SHA256 = "777bf61add6699154a3e9308596a8fd48e24d064b224f5a85239bdeb716f84f2";
+const PINNED_SHA256 = "630cd02eaf71d386907dde77c0cc852ef01c9d2f3779d4b2ea94ebef6dc8d0d8";
 
 describe("contract: @mochi.js/inject buildPayload sha256 is byte-stable per (profile, seed)", () => {
   it("buildPayload(deriveMatrix(profile, seed)) is deterministic", () => {
