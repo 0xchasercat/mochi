@@ -108,6 +108,27 @@ export interface LaunchOptions {
    */
   bypassInject?: boolean;
   /**
+   * When `true`, re-applies the harness/CI-only Chromium flags
+   * (`--disable-component-update`, `--disable-default-apps`,
+   * `--disable-background-networking`, `--disable-sync`, plus a noise-
+   * reduction `--disable-features=` block) on top of the production
+   * default flag set. Used by `@mochi.js/harness`, CI runs, and
+   * `mochi capture` flows where update traffic, default-apps auto-install,
+   * sync, and feed prefetches would inject non-determinism into baseline
+   * collection or stealth conformance.
+   *
+   * Defaults to `false` — production users get a cleaner flag set without
+   * the passive command-line bot-tells that patchright explicitly removes
+   * from its Playwright fork (`chromiumSwitchesPatch.ts:20-34`) and that
+   * `puppeteer-real-browser` strips for the same reason
+   * (`lib/cjs/index.js:57-58`).
+   *
+   * Pairs with — but is independent of — {@link bypassInject}. Capture
+   * flows set both `true`; harness conformance runs set `hermetic: true`
+   * with full inject pipeline active. PLAN.md §8.6 + task 0256.
+   */
+  hermetic?: boolean;
+  /**
    * Convenience layer toggles for common bot-defense widgets. When
    * `challenges.turnstile.autoClick` is `true`, every page returned by
    * `Session.newPage` has `installTurnstileAutoClick(page, opts)` wired
@@ -169,6 +190,12 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
     matrix.display.height > 0
       ? { windowSize: { width: matrix.display.width, height: matrix.display.height } }
       : {}),
+    // Hermetic harness/CI escape hatch — re-applies the patchright-trim
+    // flags (`--disable-component-update`, `--disable-default-apps`,
+    // `--disable-background-networking`, `--disable-sync`, hermetic
+    // `--disable-features=` extras). Default `false` keeps production users
+    // off the passive command-line bot-tell list. Task 0256, PLAN.md §8.6.
+    ...(opts.hermetic === true ? { hermetic: true } : {}),
   });
 
   const session = new Session({

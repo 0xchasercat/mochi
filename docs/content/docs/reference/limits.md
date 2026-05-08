@@ -172,6 +172,57 @@ cadence. None of these are inside mochi's scope — they're operator
 concerns.
 **Tracking:** none — fundamental.
 
+### `LaunchOptions.hermetic` — required for harness/CI; `false` by default for production
+
+**Status:** documented surface as of task 0256
+**Root cause:** Patchright (`chromiumSwitchesPatch.ts:20-34`) and
+puppeteer-real-browser (`lib/cjs/index.js:57-58`) explicitly REMOVE
+`--disable-component-update`, `--disable-default-apps`,
+`--disable-background-networking`, and `--disable-sync` from their default
+flag sets because each is a passive command-line bot-tell — anti-bot
+heuristics that read `chrome://version` (or a sibling-tab equivalent) can
+string-match the trimmed argv. Mochi previously inherited all four from
+PLAN.md §8.6 for hermetic harness reasons and leaked the same surface to
+production users. The audit (task 0256) split the flag set into a
+production default (clean) and a hermetic addendum that re-applies them
+under `LaunchOptions.hermetic: true`.
+**Affected probes:** none directly — this is a defensive flag-set trim, not
+a new fingerprint vector. The improvement is *removal* of an existing
+passive surface.
+**Mitigation:** `mochi.launch({ hermetic: true })` re-applies the harness/
+CI flag set:
+  - `--disable-default-apps` — suppresses preinstalled-app auto-install.
+  - `--disable-component-update` — suppresses updater traffic.
+  - `--disable-background-networking` — suppresses safe-browsing /
+    field-trial / variations pings.
+  - `--disable-sync` — suppresses the (account-less) sync pipeline.
+  - `--disable-features=OptimizationHints,MediaRouter,InterestFeedContentSuggestions,CalculateNativeWinOcclusion`
+    — suppresses ML-prefetch / Cast-discovery / feed-prefetch / Win occlusion
+    network noise.
+
+`@mochi.js/harness`, `@mochi.js/cli` `mochi capture`, and the stealth
+conformance fixture all set `hermetic: true` automatically. Production
+`mochi.launch()` callers stay on the cleaner default flag set unless they
+explicitly opt in.
+**Known asymmetries:**
+  - `--disable-features=Translate,AcceptCHFrame,IsolateOrigins,site-per-process`
+    is kept in BOTH modes. `IsolateOrigins,site-per-process` is load-bearing
+    for inject reach (mochi has no OOPIF context resolution today, so
+    cross-origin iframes must stay in the same renderer process for
+    `addScriptToEvaluateOnNewDocument` to land). `AcceptCHFrame` keeps the
+    UA-CH single-source-of-truth posture (`Sec-CH-UA` derives from R-007).
+    `Translate` suppresses the headed translate prompt UI.
+  - `--no-sandbox` is NOT in either set. CI uses
+    `MOCHI_EXTRA_ARGS=--no-sandbox` env passthrough exclusively;
+    production users should never have it set.
+  - `--disable-blink-features=AutomationControlled` is NOT in either set.
+    Mochi patches `navigator.webdriver` from JS via R-022; the flag itself
+    is a `chrome://version` tell.
+**User workaround:** none needed — the production default is the safer
+posture.
+**Tracking:** task 0256 (this entry); future revisits if the audit surfaces
+a new patchright trim or a CRBug-class flag-effect change.
+
 ### Proxy authentication — supported (HTTP basic + SOCKS5 user/pass)
 
 **Status:** covered as of task 0160 (replaces the prior "ProxyConfig.auth ignored" limit)

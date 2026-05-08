@@ -13,9 +13,45 @@ import { join } from "node:path";
 import type { PipeReader, PipeWriter } from "./cdp/transport";
 
 /**
- * The chromium flags PLAN.md §8.6 mandates we always pass. Order does not
- * matter; Chromium accepts late-arriving overrides for most flags but we
- * never override these.
+ * The chromium flags PLAN.md §8.6 mandates we always pass in PRODUCTION
+ * (non-hermetic) mode. Trimmed against patchright's
+ * `chromiumSwitchesPatch.ts:20-34` removal list (task 0256): every flag
+ * here passes two tests — (a) it isn't a passive command-line bot-tell that
+ * patchright explicitly drops, AND (b) we have a concrete production reason
+ * to keep it (CDP transport, UI suppression that matters in headed mode,
+ * keychain/keyring, or load-bearing for inject reach).
+ *
+ * Flags moved to {@link HERMETIC_ONLY_CHROMIUM_FLAGS} (re-applied when
+ * `LaunchOptions.hermetic === true`):
+ *   - `--disable-component-update`  — patchright drops; cmdline tell.
+ *   - `--disable-default-apps`      — patchright drops; cmdline tell.
+ *   - `--disable-background-networking` — patchright drops; updater-traffic suppressor.
+ *   - `--disable-sync`              — patchright drops; cmdline tell.
+ *   - `--disable-features` extras   — `OptimizationHints,MediaRouter,
+ *     InterestFeedContentSuggestions,CalculateNativeWinOcclusion` are
+ *     network/noise suppressors valid only for hermetic harness/CI runs;
+ *     real users want the natural network surface so the production list
+ *     keeps just the load-bearing entries.
+ *
+ * Production `--disable-features=` keepers + rationale:
+ *   - `Translate`            — suppresses the translate-prompt UI bar that
+ *                              would surface in headed mode.
+ *   - `AcceptCHFrame`        — keeps UA-CH negotiation off the frame path
+ *                              so our `Sec-CH-UA` headers (R-007) stay the
+ *                              single source of truth.
+ *   - `IsolateOrigins,site-per-process` — load-bearing for inject reach:
+ *                              mochi doesn't yet resolve cross-origin OOPIF
+ *                              contexts, so disabling site isolation keeps
+ *                              cross-origin frames in the same renderer
+ *                              process where `addScriptToEvaluateOnNewDocument`
+ *                              actually runs.
+ *
+ * Order does not matter; Chromium accepts late-arriving overrides for most
+ * flags but we never override these.
+ *
+ * @see PLAN.md §8.6 (decision ledger).
+ * @see docs/audits/patchright.md MED finding (chromiumSwitchesPatch.ts:20-34).
+ * @see docs/audits/puppeteer-real-browser.md LOW finding (lib/cjs/index.js:57-58).
  */
 export const DEFAULT_CHROMIUM_FLAGS: readonly string[] = [
   "--remote-debugging-pipe",
@@ -24,13 +60,41 @@ export const DEFAULT_CHROMIUM_FLAGS: readonly string[] = [
   "--no-service-autorun",
   "--password-store=basic",
   "--use-mock-keychain",
+  "--disable-features=Translate,AcceptCHFrame,IsolateOrigins,site-per-process",
+  "--enable-features=NetworkService,NetworkServiceInProcess",
+];
+
+/**
+ * Flags re-applied on top of {@link DEFAULT_CHROMIUM_FLAGS} when
+ * `LaunchOptions.hermetic === true`. The harness fixture matrix, CI runs,
+ * and capture flows pair `bypassInject: true` with `hermetic: true` so
+ * baseline collection isn't perturbed by updater traffic, default-apps
+ * auto-install, sync, or feed prefetches.
+ *
+ * Production users (the non-hermetic default) get a clean production flag
+ * set: no obvious cmdline tells, normal-looking updater + sync traffic.
+ *
+ * Each entry here was either explicitly removed by patchright as a passive
+ * bot-tell (`--disable-component-update`, `--disable-default-apps`,
+ * `--disable-background-networking`, `--disable-sync`) or is a noise-
+ * reduction `--disable-features=` token whose suppression is desirable for
+ * hermetic determinism but undesirable for production stealth.
+ *
+ * The hermetic `--disable-features=` token is appended SEPARATELY from the
+ * production one — Chromium merges multiple `--disable-features=` flags on
+ * the command line into a union, so the final disabled set is
+ * `{Translate,AcceptCHFrame,IsolateOrigins,site-per-process} ∪
+ *  {OptimizationHints,MediaRouter,InterestFeedContentSuggestions,
+ *   CalculateNativeWinOcclusion}`. Keeping them separate makes the
+ * production-only subset legible and avoids fingerprintable list-order
+ * coincidence with Playwright defaults.
+ */
+export const HERMETIC_ONLY_CHROMIUM_FLAGS: readonly string[] = [
   "--disable-default-apps",
   "--disable-component-update",
-  // Single comma-joined --disable-features flag (Chromium accepts comma list).
-  "--disable-features=Translate,OptimizationHints,MediaRouter,AcceptCHFrame,InterestFeedContentSuggestions,CalculateNativeWinOcclusion,IsolateOrigins,site-per-process",
-  "--enable-features=NetworkService,NetworkServiceInProcess",
   "--disable-background-networking",
   "--disable-sync",
+  "--disable-features=OptimizationHints,MediaRouter,InterestFeedContentSuggestions,CalculateNativeWinOcclusion",
 ];
 
 const SIGTERM_GRACE_MS = 2000;
@@ -82,6 +146,22 @@ export interface SpawnConfig {
    * @see UDC `__init__.py:410-411`, UDC issue #2242, task 0252.
    */
   windowSize?: { width: number; height: number };
+  /**
+   * When `true`, re-apply {@link HERMETIC_ONLY_CHROMIUM_FLAGS} on top of
+   * {@link DEFAULT_CHROMIUM_FLAGS}. Used by the harness, CI, and
+   * `mochi capture` flows where update-checks, sync traffic, default-apps
+   * auto-install, and feed prefetches would inject non-determinism.
+   *
+   * Defaults to `false` (production posture). Production users get the
+   * cleaner flag set without obvious command-line bot-tells.
+   *
+   * Sourced from `LaunchOptions.hermetic` (see `launch.ts`). Pairs with
+   * `bypassInject: true` for capture flows but is independent — a hermetic
+   * launch with full inject is the harness's fingerprint-conformance run.
+   *
+   * @see task 0256, PLAN.md §8.6.
+   */
+  hermetic?: boolean;
 }
 
 /**
@@ -265,6 +345,17 @@ export function buildChromiumArgs(
   envExtra: string | undefined,
 ): string[] {
   const args: string[] = [`--user-data-dir=${userDataDir}`, ...DEFAULT_CHROMIUM_FLAGS];
+  // Hermetic harness/CI escape hatch: re-apply the trim-list flags Chromium
+  // would otherwise leak as passive bot-tells. Inserted directly after the
+  // production defaults so the relative order is `defaults → hermetic-extras
+  // → headless → proxy → lang → window-size → extras → env-extras` — i.e. a
+  // user-supplied `--disable-features=…` in `extraArgs` still wins by virtue
+  // of Chromium's last-occurrence semantics for repeated `--disable-features`
+  // tokens (which are merged, not overwritten — but ordering matters for
+  // tooling that greps argv).
+  if (cfg.hermetic === true) {
+    args.push(...HERMETIC_ONLY_CHROMIUM_FLAGS);
+  }
   if (cfg.headless) {
     // Modern headless mode (matches stable Chrome behavior more closely than
     // legacy --headless). The `=new` is critical — old `--headless` is

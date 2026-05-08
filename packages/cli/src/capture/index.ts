@@ -176,6 +176,11 @@ export async function runCapture(opts: CaptureOptions): Promise<CaptureResult> {
     seed,
     headless: opts.headless ?? true,
     bypassInject: true,
+    // Capture is a hermetic flow: we want the bare un-spoofed Chromium
+    // surface AND we want it free of updater / sync / default-apps /
+    // feed-prefetch network noise so the baseline manifest is byte-stable
+    // across reruns. Pairs with `bypassInject: true`. Task 0256.
+    hermetic: true,
     binary,
   };
   const session = await mochi.launch(launchOpts);
