@@ -19,11 +19,16 @@
 #     and links against the bundled SDK (Apple ships universal SDK on
 #     macos-13+).
 #   - Linux x64: native on ubuntu-latest.
-#   - Linux arm64: cross-compiled with `cargo-zigbuild`. Picked over
-#     `cross` because:
-#       • no Docker-in-Docker dance,
-#       • zig acts as the cross-linker AND C compiler in one binary,
-#       • produces a glibc-linked .so without container ceremony.
+#   - Linux arm64: NATIVE on `ubuntu-24.04-arm` (GitHub-hosted public arm64
+#     runner — free tier since Jan 2025). Cross-compile via cargo-zigbuild
+#     was tried first but boring-sys2 (BoringSSL transitive dep of wreq) has
+#     a perlasm-driven build script that doesn't accept zig as the C
+#     compiler — it tries to apply arch-specific patches and fails the build
+#     script. Native arm64 build sidesteps the problem entirely; no
+#     Docker, no zig, no env-var dance with BORING_BSSL_PATH.
+#     The `use_zigbuild` matrix flag is left in place but unused on the
+#     linux-arm64 row in case a future native compile breaks and we need
+#     to fall back.
 #   - Windows x64: native on windows-latest.
 
 name: Build prebuilds
@@ -87,10 +92,10 @@ jobs:
             use_zigbuild: false
           - target: linux-arm64
             rust_target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-24.04-arm   # native arm64 runner; no cross-compile.
             ext: so
             cargo_artifact: libmochi_net.so
-            use_zigbuild: true
+            use_zigbuild: false    # native = boring-sys2 builds cleanly.
           - target: windows-x64
             rust_target: x86_64-pc-windows-msvc
             os: windows-latest
