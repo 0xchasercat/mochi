@@ -52,6 +52,20 @@ Close out the 14 material divergences the phase 0.5 harness surfaces for `mac-m4
 
 - Phase-0.7 surfaces (audio bytes, canvas hash, full WebGL extensions, full font lists, MediaDevices, SpeechSynthesis voices). Those remain in `expected-divergences.json` until phase 0.7 lands.
 
+## Implementation notes
+
+Each bug group is self-contained and surgical — fix at the source, do NOT introduce new abstractions. The "Group A/B/C/D" sections above name the exact files + lines + root causes; treat them as the implementation guide.
+
+After fixing each group, REMOVE its corresponding entries from `packages/profiles/data/mac-m4-chrome-stable/expected-divergences.json` (the entries with comments referencing "tasks/0051" or "Bug surfaced"). The rules + inject modules then emit correct values directly, with no entry on the divergence list — that's the proof of fix.
+
+For Group A (R-008 passthrough): the file labels the rule as `R-008 [device.cpuFamily] → device.cores`, but PLAN.md §9.2 documents it as `R-009 [device.cores] → navigator.hardwareConcurrency` (passthrough). Bring the implementation back to PLAN's intent — make the rule a passthrough that respects the profile's declared `device.cores`.
+
+For Group B (brand list): preserve the `SEC_CH_UA_BRANDS_BY_BROWSER` shape; just fix the order, the GREASE label string, and the GREASE version (pinned `8`, not the major version).
+
+For Group C (formFactor): single-line change in `client-hints.ts` — `null` instead of `[]` when not mobile.
+
+For Group D (sec-ch-ua-model): edit the profile's JSON to `""` AND fix the capture-side derivation in `derive-profile.ts` so future captures don't repeat the bug.
+
 ## Validation
 
 Same as 0050 — but expects `EQUIVALENT` instead of the residual-material verdict 0050 ships with.
