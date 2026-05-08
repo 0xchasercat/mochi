@@ -251,6 +251,8 @@ describe("Session.bypassInject (PLAN.md §12.1, task 0040)", () => {
     fake.autoRespond((m) => m === "Target.createTarget", { targetId: "page-target-2" });
     fake.autoRespond((m) => m === "Target.attachToTarget", { sessionId: "session-2" });
     fake.autoRespond((m) => m === "Page.enable", {});
+    // Task 0255: Session now sends Network.setUserAgentOverride per page.
+    fake.autoRespond((m) => m === "Network.setUserAgentOverride", {});
     fake.autoRespond((m) => m === "Target.closeTarget", { success: true });
     fake.autoRespond((m) => m === "Page.removeScriptToEvaluateOnNewDocument", {});
     fake.autoRespond((m) => m === "Page.addScriptToEvaluateOnNewDocument", {
