@@ -20,6 +20,24 @@
  *      visible surface and uses a Symbol so iterators / `Object.keys` /
  *      `for-in` don't enumerate it.
  *
+ * **Closed-shadow design (task 0253).** The inject script CANNOT see iframes
+ * that live behind a closed shadow root: from page JS, `Element.shadowRoot`
+ * is `null` for closed shadows and `MutationObserver` doesn't fire on
+ * mutations inside them. So this script is intentionally only a coarse
+ * detector — it covers light DOM and OPEN shadow integrations. The
+ * authoritative scan happens host-side in `install.ts`'s tick loop, which
+ * issues `Page.querySelectorAllPiercing(...)` (the host-side locator that
+ * walks `DOM.getDocument({ depth:-1, pierce:true })` and traverses both open
+ * and closed shadow descendants — see `packages/core/src/page/piercing.ts`).
+ *
+ * Trade-off: the host-side scan adds one CDP `DOM.getDocument` call per
+ * `pollIntervalMs`-ms tick (default 500ms). On a busy page the tree can be
+ * sizeable, but Cloudflare-protected pages are usually small at the point a
+ * Turnstile widget appears, and `getDocument` is a single round-trip. We do
+ * NOT ship a piercing MutationObserver here because there's no JS-only
+ * mechanism for one — every inject-side observer falls back to host-side
+ * CDP traversal anyway.
+ *
  * Stealth invariants honored (PLAN.md §5.3, §8.4):
  *   - Wrapped in a single IIFE — no top-level identifiers escape.
  *   - All state lives in IIFE-locals; nothing on `window` / `globalThis`.

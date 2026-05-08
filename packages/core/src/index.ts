@@ -44,6 +44,7 @@ export {
   type WaitState,
   type WaitUntil,
 } from "./page";
+export { ElementHandle, type ElementHandleInit } from "./page/element-handle";
 // Proxy URL parsing — exported so tests + downstream tools can normalize
 // proxy strings without going through `launch()`.
 export { type ParsedProxy, parseProxyUrl } from "./proxy-auth";
