@@ -30,6 +30,7 @@
       "dependencies": {
         "@mochi.js/consistency": "workspace:*",
         "@mochi.js/core": "workspace:*",
+        "@mochi.js/harness": "workspace:*",
       },
     },
     "packages/consistency": {
@@ -49,6 +50,11 @@
     "packages/harness": {
       "name": "@mochi.js/harness",
       "version": "0.0.1",
+      "dependencies": {
+        "@mochi.js/consistency": "workspace:*",
+        "@mochi.js/core": "workspace:*",
+        "@mochi.js/profiles": "workspace:*",
+      },
     },
     "packages/inject": {
       "name": "@mochi.js/inject",

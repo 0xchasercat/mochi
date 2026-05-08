@@ -41,7 +41,8 @@
   },
   "dependencies": {
     "@mochi.js/consistency": "workspace:*",
-    "@mochi.js/core": "workspace:*"
+    "@mochi.js/core": "workspace:*",
+    "@mochi.js/harness": "workspace:*"
   },
   "publishConfig": {
     "access": "public"

@@ -52,6 +52,27 @@ The following are **expected** limits we'll formalize as the framework is built.
 
 ---
 
+## v0.5 (validation harness landed) — known limits
+
+### Phase-0.7-deferred fingerprint surfaces are tracked as `intentional` divergences
+
+**Status:** known limit (deferred to phase 0.7)
+**Root cause:** v0.5 ships the harness mechanics — capture, normalize, diff, categorize, report — but the consistency engine still only covers the v0.2 surface (~30 of the 80 planned rules: navigator basics, screen, simple GPU strings, fonts/baseline-only, locale, timezone, hardware basics). The remaining ~50 surfaces are captured in baselines but not yet replicated by the spoofing stack: audio fingerprint bytes, full canvas hashes, full WebGL extension catalogs, full font lists, MediaDevices, SpeechSynthesis voices, WebGPU adapter info, Permissions API state, miscellaneous `navigator.{bluetooth,usb,serial,hid,xr,gpu,…}` boolean surfaces, screen.mediaQueries, Intl-derived timing surfaces, and the bot-detection sub-fields downstream of those.
+**Affected probes:** every probe family listed above. The harness diffs them and they appear in the per-profile DiffReportV1.
+**Mitigation:** each profile carries a `packages/profiles/data/<id>/expected-divergences.json` file that lists these surfaces as `intentional` divergences, keyed by glob path. The harness's `categorize()` short-circuits them to `intentional` (non-PR-blocking). Every entry MUST cite this file.
+**User workaround:** none today — wait for phase 0.7. Until then a profile is "Zero-Diff for the v0.5 surface" — meaningful but not yet the full claim.
+**Tracking:** phase 0.7 (consistency engine full).
+
+### `userAgent` is more correct than the captured baseline
+
+**Status:** intentional divergence (not a limit; documented for transparency)
+**Root cause:** captures of the `mac-m4-chrome-stable` baseline run against bare Chromium-for-Testing in headless mode, which reports `HeadlessChrome/<v>.0.0.0` in the user-agent. The consistency engine's R-004 rebuilds the UA from primitives (`os.name`, `browser.name`, `browser.minVersion`, the seed-derived build-hash from R-023), dropping the `HeadlessChrome` token — a leak we explicitly want to suppress. The harness sees a divergence at `navigator.userAgent`; it's marked `intentional` in the profile's `expected-divergences.json` because the spoof is more correct than the baseline.
+**Affected probes:** `navigator.userAgent`, `navigator.appVersion` (R-026 derives appVersion from userAgent).
+**Mitigation:** none needed. The behavior is correct.
+**Tracking:** none — fundamental to the design.
+
+---
+
 ## v0.3 (inject engine landed) — known limits
 
 ### Audio fingerprinting (`OfflineAudioContext`) is NOT spoofed at v0.3

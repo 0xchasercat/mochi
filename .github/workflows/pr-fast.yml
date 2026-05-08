@@ -29,6 +29,31 @@ jobs:
         run: bun run lint
       - name: Test
         run: bun run test
+      - name: Contract tests
+        run: bun run test:contract
+      # Harness smoke gate — Phase 0.5 deliverable. Drives a Mochi-spoofed
+      # session through tests/fixtures/probe-page.html, normalizes both sides,
+      # and structurally diffs against each profile's committed baseline.
+      # PR-blocking metric is `counts.material === 0` (PLAN.md §13.6).
+      #
+      # SOFT-FAIL at v0.5 — we ship the harness mechanics here, not the full
+      # phase-0.7 consistency coverage. Many surfaces (audio bytes, full
+      # canvas, full WebGL extensions, media-devices, speech voices) are
+      # legitimately deferred and tracked in expected-divergences.json. The
+      # warning becomes a hard-fail at the end of phase 0.7 once the 80-rule
+      # consistency engine lands. tasks/0050-harness-mvp.md.
+      - name: Harness smoke (soft-fail at v0.5)
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          MOCHI_E2E: "1"
+        run: |
+          set -u
+          if ! bun run harness:smoke; then
+            echo "::warning title=Harness smoke divergence::bun harness:smoke produced material divergences. Soft-fail at v0.5; will hard-fail when phase 0.7 (full consistency) lands. See tasks/0050-harness-mvp.md and the per-profile expected-divergences.json."
+          else
+            echo "Harness smoke OK — Zero-Diff against committed baselines."
+          fi
       # Soft-fail at v0.0 — most early infra PRs don't ship user-visible surface,
       # so a missing changeset is a warning, not a build failure. Flip to hard-fail
       # when phase 0.1 (CDP transport) lands per tasks/0004-changesets.md.

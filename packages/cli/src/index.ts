@@ -90,6 +90,10 @@ export async function main(argv: readonly string[]): Promise<number> {
     const { runCaptureCommand } = await import("./capture/subcommand");
     return runCaptureCommand(argv.slice(1));
   }
+  if (arg === "harness") {
+    const { runHarnessCommand } = await import("./harness/subcommand");
+    return runHarnessCommand(argv.slice(1));
+  }
   console.error(
     `mochi v${VERSION} (claim release)\n` +
       `subcommands not yet implemented; see https://github.com/0xchasercat/mochi`,
