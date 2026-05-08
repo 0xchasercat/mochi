@@ -1,6 +1,6 @@
 {
   "name": "@mochi.js/net",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "TS facade for @mochi.js/net-rs — out-of-band HTTP with profile-matching JA3/JA4 via Rust+wreq + Bun:FFI.",
   "license": "MIT",
   "type": "module",
