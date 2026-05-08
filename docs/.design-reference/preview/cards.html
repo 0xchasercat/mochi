@@ -1,0 +1,17 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Cards</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="_card.css">
+<style>
+.row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.feat{background:#fff;border:1px solid #e6d6b6;border-radius:28px;padding:24px;display:flex;flex-direction:column;gap:10px;box-shadow:0 2px 6px rgba(27,36,71,0.08)}
+.emoji{font-size:32px;line-height:1}
+.title{font-family:Nunito;font-weight:800;font-size:20px;color:#1b2447;letter-spacing:-0.02em}
+.desc{font-family:Inter;font-size:14px;line-height:1.55;color:#4a558a}
+</style></head>
+<body><div class="card" style="height:280px">
+  <div style="font-family:JetBrains Mono;font-size:11px;letter-spacing:0.08em;color:#c5791a;text-transform:uppercase">Feature Cards — totem emoji as marker</div>
+  <div class="row">
+    <div class="feat"><div class="emoji">🍡</div><div class="title">Bun-First Architecture</div><div class="desc">Talks to Chrome over <code style="font-family:JetBrains Mono;background:#fdf3df;padding:1px 6px;border-radius:6px;font-size:0.92em">--remote-debugging-pipe</code> FDs. Sub-ms latency.</div></div>
+    <div class="feat"><div class="emoji">🧬</div><div class="title">The Consistency Engine</div><div class="desc">Seed + profile locks WebGL, AudioContext, Canvas noise into a relationally-coherent fingerprint.</div></div>
+  </div>
+</div></body></html>

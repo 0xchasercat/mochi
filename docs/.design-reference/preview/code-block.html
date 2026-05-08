@@ -1,0 +1,24 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Code Block</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="_card.css">
+</head>
+<body><div class="card" style="height:280px">
+  <div style="font-family:JetBrains Mono;font-size:11px;letter-spacing:0.08em;color:#c5791a;text-transform:uppercase">Code Block — stealth surface</div>
+  <div style="background:#11141c;border-radius:14px;overflow:hidden;border:1px solid #232838">
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #232838;background:#181c27">
+      <span style="width:11px;height:11px;border-radius:50%;background:#d24a52"></span>
+      <span style="width:11px;height:11px;border-radius:50%;background:#e89425"></span>
+      <span style="width:11px;height:11px;border-radius:50%;background:#3f9d6b"></span>
+      <span style="font-family:JetBrains Mono;font-size:11px;color:#5b6178;margin-left:8px">stealth.ts</span>
+      <span style="margin-left:auto;font-family:JetBrains Mono;font-size:11px;color:#5b6178">copy</span>
+    </div>
+    <pre style="margin:0;padding:18px 20px;font-family:JetBrains Mono;font-size:13px;line-height:1.65;color:#ece6d6"><span style="color:#5b6178">// pass a seed; get a fingerprint that survives every probe</span>
+<span style="color:#f5b65a">import</span> { chromium } <span style="color:#f5b65a">from</span> <span style="color:#7dcb9a">"mochi"</span><span style="color:#9aa0b3">;</span>
+
+<span style="color:#f5b65a">const</span> browser <span style="color:#9aa0b3">=</span> <span style="color:#f5b65a">await</span> <span style="color:#8db1ea">chromium.launch</span>({
+  profile<span style="color:#9aa0b3">:</span> <span style="color:#7dcb9a">"mac-safari-17"</span><span style="color:#9aa0b3">,</span>
+  seed<span style="color:#9aa0b3">:</span>    <span style="color:#f5b65a">0xb3a1</span><span style="color:#9aa0b3">,</span>
+  proxy<span style="color:#9aa0b3">:</span>   <span style="color:#7dcb9a">"http://us-east.mochi.proxy:443"</span>
+})<span style="color:#9aa0b3">;</span></pre>
+  </div>
+</div></body></html>

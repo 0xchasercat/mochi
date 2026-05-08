@@ -1,0 +1,28 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Buttons</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="_card.css">
+<style>
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.btn{font-family:Nunito;font-weight:800;font-size:15px;border:0;cursor:pointer;display:inline-flex;align-items:center;gap:8px;padding:12px 22px;border-radius:999px;letter-spacing:-0.01em}
+.btn-primary{background:#e89425;color:#1b2447;box-shadow:0 8px 24px rgba(232,148,37,0.30), inset 0 -3px 0 rgba(27,36,71,0.08)}
+.btn-primary:hover{background:#c5791a}
+.btn-secondary{background:#fdf3df;color:#1b2447;border:1.5px solid #e6d6b6}
+.btn-ghost{background:transparent;color:#1b2447}
+.btn-dark{background:#1b2447;color:#fffaf2}
+.btn-sm{padding:8px 16px;font-size:13px}
+</style></head>
+<body><div class="card" style="height:230px">
+  <div style="font-family:JetBrains Mono;font-size:11px;letter-spacing:0.08em;color:#c5791a;text-transform:uppercase">Buttons</div>
+  <div class="row">
+    <button class="btn btn-primary">Install mochi 🍡</button>
+    <button class="btn btn-secondary">Read the docs</button>
+    <button class="btn btn-ghost">Cancel</button>
+    <button class="btn btn-dark">npm i mochi</button>
+  </div>
+  <div class="row">
+    <button class="btn btn-primary btn-sm">Get started</button>
+    <button class="btn btn-secondary btn-sm">View on GitHub</button>
+    <button class="btn btn-ghost btn-sm">Skip</button>
+    <span style="font-family:Inter;font-size:12px;color:#8a93b8">hover lifts &amp; switches to honey shadow · press settles 1px down</span>
+  </div>
+</div></body></html>

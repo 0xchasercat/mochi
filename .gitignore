@@ -53,3 +53,9 @@ yarn-error.log*
 .turbo/
 coverage/
 .nyc_output/
+
+# Astro docs site (lands in task 0240)
+docs/site/dist/
+docs/site/.astro/
+docs/site/node_modules/
+docs/site/.cache/
