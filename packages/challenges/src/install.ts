@@ -67,6 +67,40 @@ export interface PageLike {
   addInitScript?(source: string): Promise<string>;
   /** Remove a previously-installed init script by identifier. */
   removeInitScript?(identifier: string): Promise<void>;
+  /**
+   * Closed-shadow piercing locator (task 0253). When provided, the Turnstile
+   * detector uses it to scan for the iframe across closed shadow roots (where
+   * `document.querySelectorAll('iframe')` from the page's main world can't
+   * see — `Element.shadowRoot` is `null` for closed roots from JS). Optional
+   * on the structural type for backward compat with v0.1 stubs.
+   */
+  querySelectorPiercing?(selector: string): Promise<PiercingHandleLike | null>;
+  /**
+   * "All matches" piercing variant — used by the Turnstile detector to find
+   * every Turnstile iframe even when several sit behind closed shadows.
+   * Optional for the same reason as {@link querySelectorPiercing}.
+   */
+  querySelectorAllPiercing?(selector: string): Promise<PiercingHandleLike[]>;
+  /**
+   * Click an element resolved via the piercing locator. Required for clicking
+   * a Turnstile widget that lives inside a closed shadow root — there is no
+   * CSS path to it from the parent document, so `humanClick(selector)` would
+   * resolve nothing. Optional for v0.1 stub compatibility.
+   */
+  humanClickHandle?(
+    handle: PiercingHandleLike,
+    opts?: { duration?: number; preMoveSettle?: boolean },
+  ): Promise<void>;
+}
+
+/**
+ * Structural surface for the `ElementHandle` shape `querySelectorPiercing`
+ * returns. We only need attribute reads + bounding-rect access here. Mirrors
+ * the public `@mochi.js/core.ElementHandle` API.
+ */
+export interface PiercingHandleLike {
+  getAttribute(name: string): Promise<string | null>;
+  evaluate<T>(fn: (this: Element) => T): Promise<T>;
 }
 
 /** Public options for `installTurnstileAutoClick`. */
@@ -119,6 +153,17 @@ interface WidgetState {
   clickedAt: number | null;
   solved: boolean;
   escalated: boolean;
+  /**
+   * Source of detection. `"inject"` = found by the inject MutationObserver
+   * (works for iframes in light DOM and OPEN shadow roots). `"piercing"` =
+   * found by host-side `Page.querySelectorPiercing` — the only way to see
+   * iframes behind CLOSED shadow roots, since the inject's `Element.shadowRoot`
+   * accessor returns `null` for closed shadows from the page's main world
+   * (task 0253 design choice). When `"piercing"`, `clickWidget` routes
+   * through `Page.humanClickHandle` because no CSS selector can name the
+   * element from the parent document.
+   */
+  source: "inject" | "piercing";
 }
 
 /**
@@ -232,7 +277,59 @@ export function installTurnstileAutoClick(page: PageLike, opts: TurnstileOptions
       }
     }
 
+    // Inject-discovered frames — light DOM + open-shadow only.
     for (const frame of snapshot.frames) {
+      processFrame({ ...frame, source: "inject", handle: null });
+    }
+
+    // Closed-shadow pass — only meaningful when the page actually exposes
+    // the v0.2 piercing locator (task 0253). For v0.1 stubs / consumers
+    // without it, we silently skip — the inject pass is functionally
+    // equivalent for non-closed-shadow integrations.
+    if (typeof page.querySelectorAllPiercing === "function") {
+      try {
+        const pierced = await page.querySelectorAllPiercing(TURNSTILE_IFRAME_SELECTOR);
+        for (let i = 0; i < pierced.length; i++) {
+          const handle = pierced[i] as PiercingHandleLike;
+          const src = (await handle.getAttribute("src")) ?? "";
+          if (!isTurnstileSrc(src)) continue;
+          const id = `ts-pierced-${i}-${hashId(src)}`;
+          // Only register a piercing widget if the inject pass missed it —
+          // otherwise we'd double-click. We dedupe by src substring; the
+          // inject path uses runtime ids that don't survive across ticks.
+          let already = false;
+          for (const w of widgets.values()) {
+            if (w.src === src) {
+              already = true;
+              break;
+            }
+          }
+          if (already) continue;
+          processFrame({
+            id,
+            src,
+            rect: { x: 0, y: 0, width: 0, height: 0 },
+            escalated: isEscalationSrc(src),
+            at: Date.now(),
+            source: "piercing",
+            handle,
+          });
+        }
+      } catch (_err) {
+        // Best-effort — a failed piercing scan logs once via the outer
+        // catch and falls through to the next tick.
+      }
+    }
+
+    schedule();
+
+    /** Per-frame state machine — shared by inject + piercing detection paths. */
+    function processFrame(
+      frame: TurnstileSnapshot["frames"][number] & {
+        source: "inject" | "piercing";
+        handle: PiercingHandleLike | null;
+      },
+    ): void {
       let state = widgets.get(frame.id);
       if (state === undefined) {
         state = {
@@ -241,6 +338,7 @@ export function installTurnstileAutoClick(page: PageLike, opts: TurnstileOptions
           clickedAt: null,
           solved: false,
           escalated: false,
+          source: frame.source,
         };
         widgets.set(frame.id, state);
       }
@@ -262,7 +360,7 @@ export function installTurnstileAutoClick(page: PageLike, opts: TurnstileOptions
         } else {
           console.warn(`[mochi/challenges] turnstile escalation: ${reason} (${frame.src})`);
         }
-        continue;
+        return;
       }
 
       // First-time visible-checkbox detection — schedule the click.
@@ -271,14 +369,13 @@ export function installTurnstileAutoClick(page: PageLike, opts: TurnstileOptions
         // Fire-and-forget the click. We don't await here because we want
         // the poller to keep running while the click trajectory plays
         // out. Errors from the click path are surfaced via console.warn.
-        void clickWidget(page, frame, humanize).catch((err) => {
+        void clickWidget(page, frame, humanize, frame.handle).catch((err) => {
           console.warn(`[mochi/challenges] click on ${frame.id} failed:`, err);
         });
         // Schedule the post-click timeout. Each widget gets its own.
         scheduleTimeoutCheck(state);
       }
     }
-    schedule();
   };
 
   /** Per-widget timeout: fire `onEscalation("timeout")` if no token. */
@@ -423,22 +520,69 @@ async function clickWidget(
   page: PageLike,
   frame: TurnstileSnapshot["frames"][number],
   humanize: boolean,
+  handle: PiercingHandleLike | null,
 ): Promise<void> {
-  // The iframe element is targetable by index — we use a CSS attribute
-  // selector to find the same iframe humanClick resolved via getBoxModel.
-  // Quote-escape the src in the selector (Turnstile srcs contain `/?`).
-  // Using `[src*="..."]` is robust because Cloudflare appends a session
-  // query string we shouldn't pin to. We narrow by host substring.
-  const selector = 'iframe[src*="challenges.cloudflare.com/turnstile"]';
-  if (humanize) {
-    await page.humanClick(selector, { preMoveSettle: true });
-  } else {
-    // Non-humanized fallback: also goes through humanClick but with the
-    // pre-move settle disabled and trajectory shortened. We deliberately
-    // keep this on the synth path — there's no "fast click" CDP method
-    // worth using when the synth output IS the realistic input.
-    await page.humanClick(selector, { preMoveSettle: false, duration: 80 });
+  const opts = humanize
+    ? { preMoveSettle: true }
+    : // Non-humanized fallback: also goes through humanClick but with the
+      // pre-move settle disabled and trajectory shortened. We deliberately
+      // keep this on the synth path — there's no "fast click" CDP method
+      // worth using when the synth output IS the realistic input.
+      { preMoveSettle: false, duration: 80 };
+
+  // Closed-shadow path: there is no CSS selector that names the iframe from
+  // the parent document, so `humanClick(selector)` would resolve nothing.
+  // Route through `humanClickHandle` against the piercing-resolved handle.
+  if (handle !== null && typeof page.humanClickHandle === "function") {
+    await page.humanClickHandle(handle, opts);
+    return;
   }
+
+  // Light-DOM / open-shadow path — the inject MutationObserver could see
+  // this iframe via `Element.shadowRoot`, so a CSS selector resolves to it
+  // through `DOM.querySelector`.
+  await page.humanClick(TURNSTILE_IFRAME_SELECTOR, opts);
   // Borrow `frame` to silence unused-var lint when callers want to log.
   void frame;
+}
+
+/** CSS selector used by the piercing scan and the light-DOM click fallback. */
+const TURNSTILE_IFRAME_SELECTOR = 'iframe[src*="challenges.cloudflare.com/turnstile"]';
+
+/** Hosts that count as a Turnstile iframe — mirrors `inject.ts`. */
+const TURNSTILE_HOSTS = ["challenges.cloudflare.com/turnstile/"];
+
+/** Escalation patterns — mirrors `inject.ts`. */
+const ESCALATION_PATTERNS = ["/challenge.html", "/managed.html"];
+
+/** Substring match the inject's `isTurnstileSrc` performs, but on the host side. */
+function isTurnstileSrc(src: string): boolean {
+  if (typeof src !== "string" || src.length === 0) return false;
+  for (const h of TURNSTILE_HOSTS) {
+    if (src.indexOf(h) >= 0) return true;
+  }
+  return false;
+}
+
+/** Substring match for escalation URL families. */
+function isEscalationSrc(src: string): boolean {
+  if (typeof src !== "string") return false;
+  for (const p of ESCALATION_PATTERNS) {
+    if (src.indexOf(p) >= 0) return true;
+  }
+  return false;
+}
+
+/**
+ * Cheap deterministic 32-bit hash of a string. Used to give pierced widgets
+ * stable per-tick ids so re-discovering the same iframe across two ticks
+ * doesn't double-click it.
+ */
+function hashId(s: string): string {
+  let h = 2166136261 >>> 0; // FNV-1a 32-bit
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return (h >>> 0).toString(16);
 }

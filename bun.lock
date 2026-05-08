@@ -16,18 +16,18 @@
     },
     "packages/behavioral": {
       "name": "@mochi.js/behavioral",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@mochi.js/consistency": "workspace:*",
       },
     },
     "packages/challenges": {
       "name": "@mochi.js/challenges",
-      "version": "0.1.0",
+      "version": "0.2.0",
     },
     "packages/cli": {
       "name": "@mochi.js/cli",
-      "version": "0.1.0",
+      "version": "0.1.2",
       "bin": {
         "mochi": "./src/bin.ts",
       },
@@ -43,7 +43,7 @@
     },
     "packages/core": {
       "name": "@mochi.js/core",
-      "version": "0.1.0",
+      "version": "0.1.2",
       "dependencies": {
         "@mochi.js/behavioral": "workspace:*",
         "@mochi.js/challenges": "workspace:*",
@@ -54,7 +54,7 @@
     },
     "packages/harness": {
       "name": "@mochi.js/harness",
-      "version": "0.1.0",
+      "version": "0.1.2",
       "dependencies": {
         "@mochi.js/behavioral": "workspace:*",
         "@mochi.js/consistency": "workspace:*",
@@ -64,14 +64,14 @@
     },
     "packages/inject": {
       "name": "@mochi.js/inject",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@mochi.js/consistency": "workspace:*",
       },
     },
     "packages/net": {
       "name": "@mochi.js/net",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@mochi.js/net-rs": "workspace:*",
       },
@@ -82,7 +82,7 @@
     },
     "packages/profiles": {
       "name": "@mochi.js/profiles",
-      "version": "0.0.2",
+      "version": "0.0.3",
       "dependencies": {
         "@mochi.js/consistency": "workspace:*",
       },

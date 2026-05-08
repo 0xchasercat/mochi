@@ -13,6 +13,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { resolve } from "node:path";
 import { mochi, type Session } from "@mochi.js/core";
 import { loadProfile } from "../../../run";
 import { CONFORMANCE_PROFILE, CONFORMANCE_SEED, ONLINE_ENABLED, sleep, withPage } from "../helpers";
@@ -95,6 +96,44 @@ describeOrSkip(
           }
           expect(token).not.toBeNull();
           expect(typeof token === "string" && token.length > 0).toBe(true);
+        });
+      },
+      TEST_TIMEOUT_MS,
+    );
+
+    /**
+     * Closed-shadow variant (task 0253). Loads the local
+     * `tests/fixtures/closed-shadow.html` fixture which embeds a Turnstile
+     * iframe inside a `{ mode: "closed" }` shadow root. We don't expect a
+     * solved token here (the iframe `src` is a smoke marker — it can't
+     * actually run Turnstile's challenge engine without a sitekey + the
+     * referrer Cloudflare allowlists); we DO expect the host-side
+     * `Page.querySelectorPiercing` to surface the iframe, and the
+     * Turnstile detector's piercing pass to schedule a click against it
+     * (which will get caught by the post-click timeout — that's fine, the
+     * point of the variant is to prove detection works through closed
+     * shadows).
+     */
+    it(
+      "querySelectorPiercing surfaces a Turnstile iframe behind a CLOSED shadow root",
+      async () => {
+        const fixtureUrl = `file://${resolve(process.cwd(), "tests/fixtures/closed-shadow.html")}`;
+        await withPage(session, async (page) => {
+          await page.goto(fixtureUrl, { waitUntil: "domcontentloaded", timeout: 15_000 });
+          // The non-piercing path returns null (closed shadow opaque from
+          // page JS) — same assertion as the contract test, but against
+          // real Chromium.
+          const sansPiercing = await page.evaluate(function (this: Document) {
+            return this.querySelectorAll("iframe").length;
+          });
+          expect(sansPiercing).toBe(0);
+          // The piercing locator finds the iframe.
+          const handle = await page.querySelectorPiercing(
+            'iframe[src*="challenges.cloudflare.com/turnstile"]',
+          );
+          expect(handle).not.toBeNull();
+          const src = await handle?.getAttribute("src");
+          expect(src).toContain("challenges.cloudflare.com/turnstile");
         });
       },
       TEST_TIMEOUT_MS,

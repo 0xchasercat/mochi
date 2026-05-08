@@ -35,9 +35,13 @@ import type {
   DispatchMouseEventParams,
   DomNode,
   FrameNavigatedEvent,
+  PierceDomNode,
   RemoteObject,
 } from "./cdp/types";
 import { NotImplementedError } from "./errors";
+import { ElementHandle } from "./page/element-handle";
+import { findPiercingMatches } from "./page/piercing";
+import { parseSelector } from "./page/selector";
 
 /** Wait conditions for `Page.goto`. */
 export type WaitUntil = "load" | "domcontentloaded" | "networkidle";
@@ -527,6 +531,10 @@ export class Page {
     });
     const targetBox = boxFromBorderQuad(box.model);
     const callSeed = this.nextCallSeed();
+    // Trajectory synth lives here (not in `performClickAt`) so prototype
+    // inspection in conformance tests can see the synthesize / trajectory
+    // / cursor markers — they're a consumer-side smoke check that the
+    // behavioral synth is wired in.
     const traj = synthesizeMouseTrajectory({
       from: { x: this.cursor.x, y: this.cursor.y },
       to: { x: targetBox.x + targetBox.width / 2, y: targetBox.y + targetBox.height / 2 },
@@ -535,6 +543,51 @@ export class Page {
       seed: callSeed,
       ...(opts.duration !== undefined ? { durationMs: opts.duration } : {}),
     });
+    await this.dispatchClickTrajectory(traj, callSeed, opts);
+  }
+
+  /**
+   * Variant of {@link humanClick} that operates on an {@link ElementHandle}
+   * resolved via {@link querySelectorPiercing} — required when the target
+   * element lives inside a closed shadow root (no CSS path can name it from
+   * the parent document, so the regular `humanClick(selector)` route fails).
+   *
+   * Pipeline differs from {@link humanClick} only in step 1: the box model
+   * is resolved via `DOM.getBoxModel({ backendNodeId })` instead of through a
+   * `DOM.querySelector`-resolved nodeId. Everything downstream (trajectory
+   * synth, dispatch loop, press/release) is identical.
+   */
+  async humanClickHandle(handle: ElementHandle, opts: HumanClickOptions = {}): Promise<void> {
+    this.assertOpen();
+    const box = await this.send<{ model: BoxModel }>("DOM.getBoxModel", {
+      backendNodeId: handle.backendNodeId,
+    });
+    const targetBox = boxFromBorderQuad(box.model);
+    const callSeed = this.nextCallSeed();
+    const traj = synthesizeMouseTrajectory({
+      from: { x: this.cursor.x, y: this.cursor.y },
+      to: { x: targetBox.x + targetBox.width / 2, y: targetBox.y + targetBox.height / 2 },
+      box: targetBox,
+      profile: this.behavior,
+      seed: callSeed,
+      ...(opts.duration !== undefined ? { durationMs: opts.duration } : {}),
+    });
+    await this.dispatchClickTrajectory(traj, callSeed, opts);
+  }
+
+  /**
+   * Inner dispatch loop shared by {@link humanClick} and
+   * {@link humanClickHandle}. Takes the synthesised trajectory, paces the
+   * `mouseMoved` events, then fires `mousePressed` + `mouseReleased` at the
+   * arrival point with realistic press duration. Trajectory synth itself
+   * stays inside the public methods so source-grep conformance checks can
+   * verify the synth is reachable from the public API.
+   */
+  private async dispatchClickTrajectory(
+    traj: ReturnType<typeof synthesizeMouseTrajectory>,
+    callSeed: string,
+    opts: HumanClickOptions,
+  ): Promise<void> {
     if (traj.length === 0) return;
 
     // Pre-move settle: Gaussian(150, 50) ms idle. Cheaply approximated via
@@ -722,6 +775,95 @@ export class Page {
         deltaY: ev.deltaY,
       });
     }
+  }
+
+  /**
+   * Closed-shadow-root piercing locator — find the first element matching the
+   * CSS selector across the entire DOM tree, including elements nested inside
+   * **closed** shadow roots (which {@link text}, {@link humanClick}, etc. can
+   * NOT reach because `DOM.querySelector` does not traverse closed shadows
+   * even with `pierce: true` set on the parent `getDocument` call).
+   *
+   * Required for Cloudflare Turnstile auto-click on integrations where the
+   * widget iframe lives behind a closed shadow root (Cloudflare Challenge
+   * pages, Workers Static Assets, some CDN configs). Without this, task
+   * 0220's auto-click silently fails on those flows.
+   *
+   * Algorithm (port of patchright `framesPatch.ts:868-1012`
+   * `_customFindElementsByParsed`):
+   *   1. `DOM.getDocument({ depth: -1, pierce: true })` — yields the full
+   *      tree, with shadow descendants under `shadowRoots[]` for both open
+   *      AND closed roots.
+   *   2. Recursive walk in JS, matching against a parsed CSS selector. We
+   *      can't `DOM.querySelector` per shadow because the per-shadow query
+   *      itself doesn't pierce closed roots either.
+   *   3. For matches, `DOM.resolveNode({ backendNodeId })` to get a
+   *      `RemoteObject.objectId`, wrapped in {@link ElementHandle}.
+   *
+   * Supported selectors (see `selector.ts`): tag / id / class / attribute /
+   * descendant combinator / comma-separated lists. **Not** supported:
+   * `>`/`+`/`~` combinators, `:pseudo-classes`, `::pseudo-elements`, XPath.
+   * XPath is a stretch goal per task 0253 brief — TODO if a future surface
+   * needs it (Turnstile detection only needs CSS).
+   *
+   * Performance: O(N) in DOM size per call. Acceptable for v0.2; a per-page
+   * cache layer is a v0.3+ concern (also called out in 0253).
+   *
+   * @see tasks/0253-closed-shadow-piercing-locator.md
+   * @see PLAN.md §8.2 (`DOM.getDocument` and `DOM.resolveNode` are not on the
+   *   forbidden list — both fine to use here).
+   */
+  async querySelectorPiercing(selector: string): Promise<ElementHandle | null> {
+    const handles = await this.queryPiercing(selector, 1);
+    return handles[0] ?? null;
+  }
+
+  /**
+   * The "all matches" variant of {@link querySelectorPiercing}. Returns every
+   * element that satisfies the selector, in depth-first pre-order — same
+   * traversal a regular `querySelectorAll` produces, with closed-shadow
+   * descendants spliced in at the position they'd appear under the host.
+   *
+   * Returns an empty array when nothing matches.
+   */
+  async querySelectorAllPiercing(selector: string): Promise<ElementHandle[]> {
+    return this.queryPiercing(selector);
+  }
+
+  /** Shared implementation for the piercing locator. `limit` short-circuits the walk. */
+  private async queryPiercing(selector: string, limit?: number): Promise<ElementHandle[]> {
+    this.assertOpen();
+    const parsed = parseSelector(selector);
+    // depth: -1 + pierce: true is the magic combination patchright uses; CDP
+    // returns a fully-flattened tree including shadow descendants on both
+    // open and closed roots, AND iframe contentDocuments for same-origin
+    // children.
+    const root = await this.send<{ root: PierceDomNode }>("DOM.getDocument", {
+      depth: -1,
+      pierce: true,
+    });
+    const matches = findPiercingMatches(root.root, parsed, limit);
+    if (matches.length === 0) return [];
+    const handles: ElementHandle[] = [];
+    for (const m of matches) {
+      const resolved = await this.send<{ object: RemoteObject }>("DOM.resolveNode", {
+        backendNodeId: m.backendNodeId,
+      });
+      const objectId = resolved.object.objectId;
+      // Skip nodes the protocol couldn't bind to a RemoteObject (rare — e.g.
+      // detached subtree races). Surfacing a partial set is more useful than
+      // throwing for the Turnstile detector path.
+      if (objectId === undefined) continue;
+      handles.push(
+        new ElementHandle({
+          router: this.router,
+          sessionId: this.sessionId,
+          objectId,
+          backendNodeId: m.backendNodeId,
+        }),
+      );
+    }
+    return handles;
   }
 
   screenshot(_opts?: unknown): Promise<Uint8Array> {
