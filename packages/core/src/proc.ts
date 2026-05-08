@@ -48,6 +48,28 @@ export interface SpawnConfig {
   headless: boolean;
   /** Optional proxy server, e.g. "http://host:port" or "socks5://host:port". */
   proxy?: string;
+  /**
+   * Primary BCP-47 locale for the spawned Chromium. Passed as `--lang=<value>`
+   * so Chromium's network stack derives an `Accept-Language` header that
+   * agrees with the JS-layer `navigator.language(s)` spoof. Without this,
+   * Chromium falls back to the host OS locale (or `en-US,en;q=0.9`), which a
+   * site can cross-reference against `navigator.languages` to detect the
+   * mismatch — direct PLAN.md I-5 violation.
+   *
+   * Sourced from `MatrixV1.locale` (the canonical primary BCP-47 string,
+   * e.g. `"en-US"`). Multi-locale `Accept-Language` q-weighting is derived
+   * by Chromium itself from this single primary; the broader list is
+   * surfaced separately via the JS-side `navigator.languages` spoof.
+   *
+   * Honored under `--headless=new` — the flag drives `ICU::Locale::Default`
+   * and `IOThread::Globals::system_request_context_->set_accept_language()`,
+   * both of which run regardless of headless mode.
+   *
+   * Source-cited from undetected-chromedriver `__init__.py:359-369` (which
+   * falls back to `locale.getdefaultlocale()` → `en-US`); we deliberately
+   * do NOT fall back to host locale — locale must come from the matrix.
+   */
+  locale?: string;
 }
 
 /**
@@ -73,20 +95,15 @@ export interface ChromiumProcess {
 }
 
 /**
- * Spawn Chromium with `--remote-debugging-pipe` and the standard flag set.
+ * Build the full Chromium arg vector for a given spawn config + user-data-dir.
  *
- * Pipe FD convention (Chromium CDP pipe spec, matches Puppeteer / Playwright):
- *   - FD 3 in the *child* is the read end. The parent writes commands to it.
- *   - FD 4 in the *child* is the write end. The parent reads responses from it.
- *
- * Note: task brief 0011 has the FD direction labels reversed; we follow
- * Chromium's actual convention here so the protocol works. Either way Bun's
- * `stdio: ["pipe", "pipe", "pipe", "pipe", "pipe"]` allocates two extra pipes
- * and gives us back numeric FDs at `proc.stdio[3]` and `proc.stdio[4]`.
+ * Pure / synchronous so the launcher can unit-test the flag set without
+ * spawning a real process. Order of pushes is documented in line — the only
+ * load-bearing ordering is `--lang` BEFORE `extraArgs` so a deliberate
+ * user-supplied `--lang=<override>` in `args` wins (Chromium honors last
+ * occurrence on the command line for this flag).
  */
-export async function spawnChromium(cfg: SpawnConfig): Promise<ChromiumProcess> {
-  const userDataDir = await mkdtemp(join(tmpdir(), "mochi-"));
-
+export function buildChromiumArgs(cfg: SpawnConfig, userDataDir: string): string[] {
   const args: string[] = [`--user-data-dir=${userDataDir}`, ...DEFAULT_CHROMIUM_FLAGS];
   if (cfg.headless) {
     // Modern headless mode (matches stable Chrome behavior more closely than
@@ -96,6 +113,14 @@ export async function spawnChromium(cfg: SpawnConfig): Promise<ChromiumProcess> 
   }
   if (cfg.proxy !== undefined && cfg.proxy.length > 0) {
     args.push(`--proxy-server=${cfg.proxy}`);
+  }
+  // Matrix-derived primary locale — feeds Chromium's `Accept-Language`
+  // header so the network surface matches the JS-layer `navigator.language`
+  // spoof (PLAN.md I-5). Pushed BEFORE `extraArgs` so a user-supplied
+  // override in `args` can win on the command line if absolutely needed —
+  // Chromium honors the last-occurrence on the line for `--lang`.
+  if (cfg.locale !== undefined && cfg.locale.length > 0) {
+    args.push(`--lang=${cfg.locale}`);
   }
   if (cfg.extraArgs !== undefined && cfg.extraArgs.length > 0) {
     args.push(...cfg.extraArgs);
@@ -111,6 +136,25 @@ export async function spawnChromium(cfg: SpawnConfig): Promise<ChromiumProcess> 
   if (typeof envExtra === "string" && envExtra.trim().length > 0) {
     args.push(...envExtra.trim().split(/\s+/));
   }
+  return args;
+}
+
+/**
+ * Spawn Chromium with `--remote-debugging-pipe` and the standard flag set.
+ *
+ * Pipe FD convention (Chromium CDP pipe spec, matches Puppeteer / Playwright):
+ *   - FD 3 in the *child* is the read end. The parent writes commands to it.
+ *   - FD 4 in the *child* is the write end. The parent reads responses from it.
+ *
+ * Note: task brief 0011 has the FD direction labels reversed; we follow
+ * Chromium's actual convention here so the protocol works. Either way Bun's
+ * `stdio: ["pipe", "pipe", "pipe", "pipe", "pipe"]` allocates two extra pipes
+ * and gives us back numeric FDs at `proc.stdio[3]` and `proc.stdio[4]`.
+ */
+export async function spawnChromium(cfg: SpawnConfig): Promise<ChromiumProcess> {
+  const userDataDir = await mkdtemp(join(tmpdir(), "mochi-"));
+
+  const args = buildChromiumArgs(cfg, userDataDir);
 
   const proc = Bun.spawn([cfg.binary, ...args], {
     // stdin, stdout, stderr, then two extra pipes for CDP framing.
