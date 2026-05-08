@@ -15,6 +15,7 @@
       "!**/coverage",
       "!worktrees",
       "!packages/*/src/generated",
+      "!packages/profiles/data",
       "!schemas/probe-manifest.schema.json",
       "!tests/fixtures/probe-page.html"
     ]

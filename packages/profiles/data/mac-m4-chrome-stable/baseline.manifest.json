@@ -1,0 +1,741 @@
+{
+  "navigator": {
+    "secureContext": true,
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/147.0.0.0 Safari/537.36",
+    "platform": "MacIntel",
+    "vendor": "Google Inc.",
+    "vendorSub": "",
+    "product": "Gecko",
+    "productSub": "20030107",
+    "appVersion": "5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/147.0.0.0 Safari/537.36",
+    "appName": "Netscape",
+    "appCodeName": "Mozilla",
+    "language": "en-US",
+    "languages": [
+      "en-US",
+      "en"
+    ],
+    "cookieEnabled": true,
+    "doNotTrack": null,
+    "maxTouchPoints": 0,
+    "hardwareConcurrency": 14,
+    "deviceMemory": 32,
+    "pdfViewerEnabled": true,
+    "webdriver": true,
+    "connection": {
+      "effectiveType": "4g",
+      "downlink": 1.65,
+      "rtt": 100,
+      "saveData": false
+    },
+    "plugins": [
+      {
+        "name": "PDF Viewer",
+        "filename": "internal-pdf-viewer",
+        "description": "Portable Document Format"
+      },
+      {
+        "name": "Chrome PDF Viewer",
+        "filename": "internal-pdf-viewer",
+        "description": "Portable Document Format"
+      },
+      {
+        "name": "Chromium PDF Viewer",
+        "filename": "internal-pdf-viewer",
+        "description": "Portable Document Format"
+      },
+      {
+        "name": "Microsoft Edge PDF Viewer",
+        "filename": "internal-pdf-viewer",
+        "description": "Portable Document Format"
+      },
+      {
+        "name": "WebKit built-in PDF",
+        "filename": "internal-pdf-viewer",
+        "description": "Portable Document Format"
+      }
+    ],
+    "pluginCount": 5,
+    "mimeTypes": [
+      "application/pdf",
+      "text/pdf"
+    ],
+    "userAgentData": {
+      "brands": [
+        {
+          "brand": "Google Chrome",
+          "version": "147"
+        },
+        {
+          "brand": "Not.A/Brand",
+          "version": "8"
+        },
+        {
+          "brand": "Chromium",
+          "version": "147"
+        }
+      ],
+      "mobile": false,
+      "platform": "macOS"
+    },
+    "userAgentDataHighEntropy": {
+      "architecture": "arm",
+      "bitness": "64",
+      "brands": [
+        {
+          "brand": "Google Chrome",
+          "version": "147"
+        },
+        {
+          "brand": "Not.A/Brand",
+          "version": "8"
+        },
+        {
+          "brand": "Chromium",
+          "version": "147"
+        }
+      ],
+      "fullVersionList": [
+        {
+          "brand": "Google Chrome",
+          "version": "147.0.7727.138"
+        },
+        {
+          "brand": "Not.A/Brand",
+          "version": "8.0.0.0"
+        },
+        {
+          "brand": "Chromium",
+          "version": "147.0.7727.138"
+        }
+      ],
+      "mobile": false,
+      "model": "",
+      "platform": "macOS",
+      "platformVersion": "26.4.0",
+      "wow64": false
+    },
+    "permissions": {
+      "geolocation": "prompt",
+      "notifications": "prompt",
+      "camera": "prompt",
+      "microphone": "prompt",
+      "accelerometer": "granted",
+      "gyroscope": "granted",
+      "magnetometer": "granted",
+      "clipboard-read": "prompt",
+      "clipboard-write": "granted"
+    },
+    "storageEstimate": {
+      "quota": 596797550592,
+      "usage": 0
+    },
+    "bluetooth": true,
+    "usb": true,
+    "serial": true,
+    "hid": true,
+    "xr": true,
+    "gpu": true,
+    "ink": true,
+    "scheduling": true,
+    "windowControlsOverlay": true,
+    "virtualKeyboard": true
+  },
+  "screen": {
+    "width": 800,
+    "height": 600,
+    "availWidth": 800,
+    "availHeight": 600,
+    "colorDepth": 24,
+    "pixelDepth": 24,
+    "innerWidth": 756,
+    "innerHeight": 469,
+    "outerWidth": 756,
+    "outerHeight": 556,
+    "screenX": 22,
+    "screenY": 22,
+    "devicePixelRatio": 1,
+    "orientation": {
+      "type": "landscape-primary",
+      "angle": 0
+    },
+    "mediaQueries": {
+      "prefers-color-scheme": "light",
+      "prefers-reduced-motion": "reduce",
+      "prefers-contrast": "no-preference",
+      "forced-colors": "none",
+      "color-gamut": "srgb",
+      "pointer": "fine",
+      "hover": "hover",
+      "any-pointer": "fine",
+      "any-hover": "hover",
+      "display-mode": "browser",
+      "dynamic-range": "standard",
+      "update": "fast",
+      "min-resolution": "96dpi",
+      "monochrome": false
+    },
+    "visualViewport": {
+      "width": 756,
+      "height": 469,
+      "offsetLeft": 0,
+      "offsetTop": 0,
+      "pageLeft": 0,
+      "pageTop": 0,
+      "scale": 1
+    }
+  },
+  "canvas": {
+    "consistent": true,
+    "hash": "96152ABE",
+    "dataUrlLength": 24094,
+    "dataUrlPrefix": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwA",
+    "webpSupport": true,
+    "jpegHighLength": 25935,
+    "jpegLowLength": 2307
+  },
+  "webgl": {
+    "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+    "shadingLanguageVersion": "WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)",
+    "vendor": "WebKit",
+    "renderer": "WebKit WebGL",
+    "unmaskedVendor": "Google Inc. (Apple)",
+    "unmaskedRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+    "extensions": [
+      "EXT_clip_control",
+      "EXT_color_buffer_float",
+      "EXT_color_buffer_half_float",
+      "EXT_conservative_depth",
+      "EXT_depth_clamp",
+      "EXT_disjoint_timer_query_webgl2",
+      "EXT_float_blend",
+      "EXT_polygon_offset_clamp",
+      "EXT_render_snorm",
+      "EXT_texture_compression_bptc",
+      "EXT_texture_compression_rgtc",
+      "EXT_texture_filter_anisotropic",
+      "EXT_texture_mirror_clamp_to_edge",
+      "EXT_texture_norm16",
+      "KHR_parallel_shader_compile",
+      "NV_shader_noperspective_interpolation",
+      "OES_draw_buffers_indexed",
+      "OES_sample_variables",
+      "OES_shader_multisample_interpolation",
+      "OES_texture_float_linear",
+      "WEBGL_blend_func_extended",
+      "WEBGL_clip_cull_distance",
+      "WEBGL_compressed_texture_astc",
+      "WEBGL_compressed_texture_etc",
+      "WEBGL_compressed_texture_etc1",
+      "WEBGL_compressed_texture_pvrtc",
+      "WEBGL_compressed_texture_s3tc",
+      "WEBGL_compressed_texture_s3tc_srgb",
+      "WEBGL_debug_renderer_info",
+      "WEBGL_debug_shaders",
+      "WEBGL_lose_context",
+      "WEBGL_multi_draw",
+      "WEBGL_polygon_mode",
+      "WEBGL_provoking_vertex",
+      "WEBGL_render_shared_exponent",
+      "WEBGL_stencil_texturing"
+    ],
+    "extensionCount": 36,
+    "maxTextureSize": 16384,
+    "maxViewportDims": [
+      16384,
+      16384
+    ],
+    "maxRenderbufferSize": 16384,
+    "maxCombinedTextureImageUnits": 32,
+    "maxCubeMapTextureSize": 16384,
+    "maxFragmentUniformVectors": 1024,
+    "maxTextureImageUnits": 16,
+    "maxVertexAttribs": 16,
+    "maxVertexTextureImageUnits": 16,
+    "maxVertexUniformVectors": 1024,
+    "maxVaryingVectors": 30,
+    "aliasedLineWidthRange": [
+      1,
+      1
+    ],
+    "aliasedPointSizeRange": [
+      1,
+      511
+    ],
+    "maxColorAttachments": 8,
+    "maxAnisotropy": 16,
+    "precisionFormats": {
+      "vertex_lowFloat": {
+        "rangeMin": 127,
+        "rangeMax": 127,
+        "precision": 23
+      },
+      "vertex_medFloat": {
+        "rangeMin": 127,
+        "rangeMax": 127,
+        "precision": 23
+      },
+      "vertex_highFloat": {
+        "rangeMin": 127,
+        "rangeMax": 127,
+        "precision": 23
+      },
+      "vertex_lowInt": {
+        "rangeMin": 31,
+        "rangeMax": 30,
+        "precision": 0
+      },
+      "vertex_medInt": {
+        "rangeMin": 31,
+        "rangeMax": 30,
+        "precision": 0
+      },
+      "vertex_highInt": {
+        "rangeMin": 31,
+        "rangeMax": 30,
+        "precision": 0
+      },
+      "fragment_lowFloat": {
+        "rangeMin": 127,
+        "rangeMax": 127,
+        "precision": 23
+      },
+      "fragment_medFloat": {
+        "rangeMin": 127,
+        "rangeMax": 127,
+        "precision": 23
+      },
+      "fragment_highFloat": {
+        "rangeMin": 127,
+        "rangeMax": 127,
+        "precision": 23
+      },
+      "fragment_lowInt": {
+        "rangeMin": 31,
+        "rangeMax": 30,
+        "precision": 0
+      },
+      "fragment_medInt": {
+        "rangeMin": 31,
+        "rangeMax": 30,
+        "precision": 0
+      },
+      "fragment_highInt": {
+        "rangeMin": 31,
+        "rangeMax": 30,
+        "precision": 0
+      }
+    }
+  },
+  "webgpu": {
+    "supported": true,
+    "features": [
+      "depth32float-stencil8",
+      "rg11b10ufloat-renderable",
+      "texture-formats-tier1",
+      "bgra8unorm-storage",
+      "texture-compression-bc",
+      "dual-source-blending",
+      "core-features-and-limits",
+      "float32-filterable",
+      "indirect-first-instance",
+      "texture-compression-astc-sliced-3d",
+      "float32-blendable",
+      "texture-compression-astc",
+      "texture-compression-etc2",
+      "depth-clip-control",
+      "texture-compression-bc-sliced-3d",
+      "shader-f16",
+      "timestamp-query",
+      "clip-distances",
+      "texture-formats-tier2",
+      "primitive-index",
+      "texture-component-swizzle",
+      "subgroups"
+    ],
+    "info": {
+      "vendor": "apple",
+      "architecture": "metal-3",
+      "device": "",
+      "description": ""
+    }
+  },
+  "audio": {
+    "sampleRate": 48000,
+    "state": "suspended",
+    "baseLatency": 0.005333333333333333,
+    "outputLatency": 0,
+    "maxChannelCount": 2,
+    "numberOfInputs": 1,
+    "numberOfOutputs": 0,
+    "channelCount": 2,
+    "channelCountMode": "explicit",
+    "channelInterpretation": "speakers",
+    "audioHash": "124.04347624466754",
+    "sampleValues": [
+      -0.10808053612709045,
+      -0.3909117877483368,
+      -0.005692681297659874,
+      0.3892313539981842,
+      0.1189708411693573,
+      -0.3545846939086914,
+      -0.22215834259986877,
+      0.28990939259529114,
+      0.30651888251304626,
+      -0.20068734884262085
+    ]
+  },
+  "mediaDevices": {
+    "devices": [
+      {
+        "deviceId": "",
+        "kind": "audioinput",
+        "label": "",
+        "groupId": ""
+      },
+      {
+        "deviceId": "",
+        "kind": "videoinput",
+        "label": "",
+        "groupId": ""
+      },
+      {
+        "deviceId": "",
+        "kind": "audiooutput",
+        "label": "",
+        "groupId": ""
+      }
+    ],
+    "deviceCount": 3,
+    "audioinput": 1,
+    "audiooutput": 1,
+    "videoinput": 1,
+    "supportedConstraints": {
+      "aspectRatio": true,
+      "autoGainControl": true,
+      "brightness": true,
+      "channelCount": true,
+      "colorTemperature": true,
+      "contrast": true,
+      "deviceId": true,
+      "displaySurface": true,
+      "echoCancellation": true,
+      "exposureCompensation": true,
+      "exposureMode": true,
+      "exposureTime": true,
+      "facingMode": true,
+      "focusDistance": true,
+      "focusMode": true,
+      "frameRate": true,
+      "groupId": true,
+      "height": true,
+      "iso": true,
+      "latency": true,
+      "noiseSuppression": true,
+      "pan": true,
+      "pointsOfInterest": true,
+      "resizeMode": true,
+      "restrictOwnAudio": true,
+      "sampleRate": true,
+      "sampleSize": true,
+      "saturation": true,
+      "sharpness": true,
+      "suppressLocalAudioPlayback": true,
+      "tilt": true,
+      "torch": true,
+      "voiceIsolation": true,
+      "whiteBalanceMode": true,
+      "width": true,
+      "zoom": true
+    }
+  },
+  "speech": {
+    "voices": [],
+    "voiceCount": 0,
+    "localVoices": 0,
+    "remoteVoices": 0,
+    "languages": []
+  },
+  "fonts": {
+    "detected": [
+      "Arial",
+      "Arial Black",
+      "Arial Narrow",
+      "Comic Sans MS",
+      "Courier New",
+      "Georgia",
+      "Impact",
+      "Microsoft Sans Serif",
+      "Tahoma",
+      "Times New Roman",
+      "Trebuchet MS",
+      "Verdana",
+      "Webdings",
+      "Wingdings",
+      "American Typewriter",
+      "Andale Mono",
+      "Apple Chancery",
+      "Apple Color Emoji",
+      "Apple SD Gothic Neo",
+      "Avenir",
+      "Avenir Next",
+      "Baskerville",
+      "Big Caslon",
+      "Brush Script MT",
+      "Chalkboard",
+      "Chalkboard SE",
+      "Chalkduster",
+      "Cochin",
+      "Copperplate",
+      "Courier",
+      "Didot",
+      "Futura",
+      "Geneva",
+      "Gill Sans",
+      "Helvetica",
+      "Helvetica Neue",
+      "Herculanum",
+      "Hoefler Text",
+      "Iowan Old Style",
+      "Lucida Grande",
+      "Luminari",
+      "Marker Felt",
+      "Menlo",
+      "Monaco",
+      "Noteworthy",
+      "Optima",
+      "Palatino",
+      "Papyrus",
+      "Phosphate",
+      "Rockwell",
+      "Savoye LET",
+      "SignPainter",
+      "Skia",
+      "Snell Roundhand",
+      "STIXGeneral",
+      "Superclarendon",
+      "Symbol",
+      "System Font",
+      "Zapfino",
+      "Hiragino Sans",
+      "Hiragino Kaku Gothic Pro",
+      "Hiragino Mincho Pro",
+      "PT Sans"
+    ],
+    "count": 63,
+    "tested": 117,
+    "hash": "B8498456",
+    "fontsApiReady": true
+  },
+  "storage": {
+    "localStorage": true,
+    "localStorageKeys": 0,
+    "sessionStorage": true,
+    "sessionStorageKeys": 0,
+    "cookiesEnabled": true,
+    "cookiesWritable": false,
+    "cookieCount": 0,
+    "indexedDB": true,
+    "cacheStorage": true,
+    "serviceWorker": true,
+    "storageManager": true,
+    "fileSystemAccess": true,
+    "sharedArrayBuffer": false,
+    "sharedWorker": true,
+    "openDatabase": false,
+    "broadcastChannel": true,
+    "secureContext": true
+  },
+  "timing": {
+    "timezone": "Asia/Bangkok",
+    "timezoneOffset": -420,
+    "locale": "en-US",
+    "dateString": "Mon Jan 01 2024 12:00:00 GMT+0700 (Indochina Time)",
+    "localeString": "1/1/2024, 12:00:00 PM",
+    "localeDateString": "1/1/2024",
+    "numberFormat": {
+      "locale": "en-US",
+      "numberingSystem": "latn",
+      "style": "decimal",
+      "minimumIntegerDigits": 1,
+      "minimumFractionDigits": 0,
+      "maximumFractionDigits": 3,
+      "useGrouping": "auto",
+      "notation": "standard",
+      "signDisplay": "auto",
+      "roundingIncrement": 1,
+      "roundingMode": "halfExpand",
+      "roundingPriority": "auto",
+      "trailingZeroDisplay": "auto"
+    },
+    "dateTimeFormat": {
+      "locale": "en-US",
+      "calendar": "gregory",
+      "numberingSystem": "latn",
+      "timeZone": "Asia/Bangkok",
+      "year": "numeric",
+      "month": "numeric",
+      "day": "numeric"
+    },
+    "supportedCalendars": [
+      "buddhist",
+      "chinese",
+      "coptic",
+      "dangi",
+      "ethioaa",
+      "ethiopic",
+      "gregory",
+      "hebrew",
+      "indian",
+      "islamic",
+      "islamic-civil",
+      "islamic-rgsa",
+      "islamic-tbla",
+      "islamic-umalqura",
+      "iso8601",
+      "japanese",
+      "persian",
+      "roc"
+    ],
+    "supportedCurrencies": 159,
+    "supportedNumberingSystems": [
+      "adlm",
+      "ahom",
+      "arab",
+      "arabext",
+      "bali",
+      "beng",
+      "bhks",
+      "brah",
+      "cakm",
+      "cham",
+      "deva",
+      "diak",
+      "fullwide",
+      "gara",
+      "gong",
+      "gonm",
+      "gujr",
+      "gukh",
+      "guru",
+      "hanidec",
+      "hmng",
+      "hmnp",
+      "java",
+      "kali",
+      "kawi",
+      "khmr",
+      "knda",
+      "krai",
+      "lana",
+      "lanatham",
+      "laoo",
+      "latn",
+      "lepc",
+      "limb",
+      "mathbold",
+      "mathdbl",
+      "mathmono",
+      "mathsanb",
+      "mathsans",
+      "mlym",
+      "modi",
+      "mong",
+      "mroo",
+      "mtei",
+      "mymr",
+      "mymrepka",
+      "mymrpao",
+      "mymrshan",
+      "mymrtlng",
+      "nagm",
+      "newa",
+      "nkoo",
+      "olck",
+      "onao",
+      "orya",
+      "osma",
+      "outlined",
+      "rohg",
+      "saur",
+      "segment",
+      "shrd",
+      "sind",
+      "sinh",
+      "sora",
+      "sund",
+      "sunu",
+      "takr",
+      "talu",
+      "tamldec",
+      "telu",
+      "thai",
+      "tibt",
+      "tirh",
+      "tnsa",
+      "vaii",
+      "wara",
+      "wcho"
+    ],
+    "supportedTimeZones": 418,
+    "supportedUnits": 45,
+    "timerPrecision": null,
+    "mathFingerprint": {
+      "E": 2.718281828459045,
+      "LN2": 0.6931471805599453,
+      "LN10": 2.302585092994046,
+      "LOG2E": 1.4426950408889634,
+      "LOG10E": 0.4342944819032518,
+      "PI": 3.141592653589793,
+      "SQRT2": 1.4142135623730951,
+      "SQRT1_2": 0.7071067811865476,
+      "acos": 1.0471975511965979,
+      "acosh": 1.3169578969248166,
+      "asin": 0.5235987755982989,
+      "atan": 0.7853981633974483,
+      "atanh": 0.5493061443340548,
+      "cbrt": 1.2599210498948732,
+      "cosh": 1.5430806348152437,
+      "expm1": 1.718281828459045,
+      "log1p": 0.4054651081081644,
+      "sinh": 1.1752011936438014,
+      "tanh": 0.7615941559557649
+    }
+  },
+  "bot": {
+    "webdriver": true,
+    "webdriverType": "headless",
+    "headlessChrome": true,
+    "automationKeys": [],
+    "automationDetected": false,
+    "chromeRuntime": false,
+    "pluginCount": 5,
+    "pluginInconsistency": false,
+    "languageInconsistency": false,
+    "permissionsApi": true,
+    "screenDimensions": "800x600",
+    "suspiciousDimensions": false,
+    "maxTouchPoints": 0,
+    "touchEvent": false,
+    "touchInconsistency": false,
+    "notificationPermission": "default",
+    "userActivation": {
+      "hasBeenActive": false,
+      "isActive": false
+    },
+    "navigationTiming": {
+      "type": "navigate",
+      "redirectCount": 0,
+      "domComplete": 6,
+      "loadEventEnd": 6,
+      "domInteractive": 5
+    },
+    "stackDepthTest": 101
+  },
+  "__meta": {
+    "capturedAt": "2026-05-08T02:02:42.251Z",
+    "elapsedMs": 1246,
+    "href": "file:///Users/marcxavier/mochi/tests/fixtures/probe-page.html",
+    "readyState": "complete"
+  }
+}

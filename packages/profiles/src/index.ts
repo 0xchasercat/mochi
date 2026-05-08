@@ -19,8 +19,9 @@ export const VERSION = "0.0.1" as const;
 // of the type without duplicating the shape. See PLAN.md §5.6.
 export type { ProfileV1 } from "./generated/profile";
 
-/** ProfileV1 IDs that will ship in the v1 catalog. None are populated yet. */
+/** ProfileV1 IDs that ship in the v1 catalog. */
 export const KNOWN_PROFILE_IDS = [
+  "mac-m4-chrome-stable",
   "mac-m2-chrome-stable",
   "mac-m1-chrome-stable",
   "mac-intel-chrome-stable",
