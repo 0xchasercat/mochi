@@ -57,4 +57,28 @@ describeOrSkip("@mochi.js/core E2E (MOCHI_E2E=1)", () => {
     },
     TEST_TIMEOUT_MS,
   );
+
+  it(
+    "page.evaluate awaits page-side Promises (awaitPromise:true) — task 0263",
+    async () => {
+      // Closes the regression that left 0261 + 0262 live tests skipped: an
+      // `async () => …` page function used to round-trip its returned
+      // Promise as `undefined`. The `awaitPromise:true` flag on
+      // Runtime.callFunctionOn makes Chromium wait for the Promise and
+      // serialize the resolved value instead.
+      const session = await mochi.launch({ profile: "test", seed: "0263", headless: true });
+      try {
+        const page = await session.newPage();
+        await page.goto("data:text/html,<title>0263</title>");
+        const v = await page.evaluate(async () => {
+          await new Promise((r) => setTimeout(r, 10));
+          return 42;
+        });
+        expect(v).toBe(42);
+      } finally {
+        await session.close();
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
 });
