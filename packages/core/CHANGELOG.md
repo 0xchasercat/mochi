@@ -1,5 +1,94 @@
 # @mochi.js/core
 
+## 0.3.0
+
+### Minor Changes
+
+- 61ee52c: Add exit-IP / timezone / locale consistency probe + reconciler with
+  privacy-fallback default (task 0262).
+
+  Closes the cross-layer leak where `(matrix.timezone, matrix.locale)` and
+  the apparent **exit IP** disagree — a fingerprinter computing
+  `Date.getTimezoneOffset()` and cross-referencing against the IP's
+  geolocation sees a mismatch any time the matrix doesn't match the proxy
+  egress (US-West profile + EU residential proxy → -480min vs UTC+1, the
+  canonical bot signature).
+
+  At launch, `@mochi.js/core` now probes the apparent exit IP through wreq
+  (using the matrix's TLS preset, so the geo service sees the same JA4 /
+  headers as user traffic). 7-endpoint registry (`ip.decodo.com/json`,
+  `ipinfo.io/json`, `ipwho.is/`, `api.ip.sb/geoip`, `ifconfig.co/json`,
+  `api.iplocation.net/`, `ipapi.co/json/`), shuffled-sequential, 2s per
+  endpoint, 4-attempt cap. Per-endpoint adapter normalises to a shared
+  `ExitGeo` shape; schema mismatch returns `null` (no throw).
+
+  The reconciler cross-references the probed geo against the matrix's
+  `(timezone, locale)` and applies one of four
+  `LaunchOptions.geoConsistency` modes:
+
+  - `"privacy-fallback"` _(default)_ — override matrix to `UTC` + `en-US`
+    on mismatch (or probe failure). Fingerprints as a Tor / hardened-FF
+    user. Benign in most threat models.
+  - `"auto-correct"` — override matrix tz/locale with IP-derived values.
+  - `"strict"` — throw `GeoMismatchError` on mismatch.
+  - `"off"` — skip the probe entirely (offline tests).
+
+  Mismatch criteria use timezone OFFSET minutes (via
+  `Intl.DateTimeFormat({timeZoneName: "longOffset"})`), not zone names —
+  `America/New_York` and `America/Detroit` share an offset and fingerprint
+  identically. Locale region comes from `Intl.Locale(matrix.locale).region`.
+
+  JS-side timezone spoof delivered per-target via CDP
+  `Emulation.setTimezoneOverride` — drives both
+  `Intl.DateTimeFormat().resolvedOptions().timeZone` AND
+  `Date.getTimezoneOffset()` because Chromium's V8 reads from the same
+  internal source. Single CDP send, no `Network.enable` / `Emulation.enable`
+  required (so PLAN.md §8.2 invariants are unaffected).
+
+  Probe results are NOT cached across sessions — proxy IPs rotate; stale
+  cache is worse than no cache.
+
+  PLAN.md §9 amended with the new `9.6` subsection (cross-layer IP/TZ/Locale
+  consistency). `docs/content/docs/reference/limits.md` documents the
+  probe rate-limit handling, the privacy-fallback default rationale, and
+  the Tor-exit edge case.
+
+### Patch Changes
+
+- 92b8a57: Pass `userAgentMetadata` to `Network.setUserAgentOverride` (UA-CH parity).
+
+  Closes the cross-layer leak left open by 0255: the existing
+  `setUserAgentOverride` call passed `{ userAgent }` only, so the request
+  `Sec-CH-UA*` headers carried Chromium-for-Testing's binary defaults
+  instead of the matrix. A fingerprinter doing
+  `navigator.userAgentData.getHighEntropyValues({hints:[...]})` and
+  comparing against those headers saw a mismatch — direct PLAN.md I-5
+  violation.
+
+  `packages/core` now extends the call with the full `userAgentMetadata`
+  struct populated from `matrix.uaCh` + `matrix.os`. Five new consistency
+  rules in `@mochi.js/consistency` derive the previously-missing fields:
+
+  - R-042: `os.arch` → `uaCh.sec-ch-ua-arch`
+  - R-043: `os.arch` → `uaCh.sec-ch-ua-bitness` (string, NOT numeric per CDP enum)
+  - R-044: `os.name` → `uaCh.sec-ch-ua-mobile` (`?0` desktop / `?1` mobile)
+  - R-045: `os.name` → `uaCh.sec-ch-ua-model` (empty quoted string for desktop)
+  - R-046: `uaCh.ua-full-version-list` → `uaCh.ua-full-version` (branded entry)
+
+  `@mochi.js/inject`'s `client-hints.ts` reads the same matrix slots so the
+  two surfaces — the request-header path (CDP-driven) and the JS-API path
+  (`navigator.userAgentData`) — share a single source of truth and cannot
+  drift.
+
+  Note: `Network.setUserAgentOverride` is a per-target setter that does NOT
+  require `Network.enable`; PLAN.md §8.2's ban on `Network.enable` is
+  unaffected.
+
+- Updated dependencies [92b8a57]
+  - @mochi.js/consistency@0.1.2
+  - @mochi.js/inject@0.2.1
+  - @mochi.js/behavioral@0.1.3
+
 ## 0.2.2
 
 ### Patch Changes
