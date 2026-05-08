@@ -31,14 +31,20 @@ const fullTitle = title === siteName ? title : `${title} — ${siteName}`;
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="canonical" href={Astro.url.href} />
     <script is:inline>
-      // Theme bootstrap — runs before paint to avoid a flash. localStorage
-      // wins; otherwise the OS preference.
+      // Theme bootstrap — runs before paint to avoid a flash. The site
+      // is cream-by-default per the design system (the mockup only ever
+      // had a light variant). Stealth is opt-in via the docs theme
+      // toggle, which writes localStorage.mochi.theme = "stealth".
+      // We deliberately do NOT honor `prefers-color-scheme: dark` —
+      // doing so puts the landing page in stealth on dark-mode OSes,
+      // where the brand-navy headlines are illegible against the
+      // stealth-900 surface.
       (function () {
         try {
           const stored = localStorage.getItem("mochi.theme");
-          const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-          const theme = stored || (prefersDark ? "stealth" : "cream");
-          if (theme === "stealth") document.documentElement.setAttribute("data-theme", "stealth");
+          if (stored === "stealth") {
+            document.documentElement.setAttribute("data-theme", "stealth");
+          }
         } catch (_e) {
           /* localStorage may be disabled — fall through to cream. */
         }

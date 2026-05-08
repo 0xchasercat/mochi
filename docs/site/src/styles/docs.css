@@ -575,6 +575,11 @@ button { font: inherit; }
   padding-top: 12vh;
   animation: d-fade-in .12s var(--ease-out);
 }
+/* The `display: flex` above unconditionally overrides the user-agent
+   `[hidden] { display: none }` rule, which means `hidden` toggling from
+   JS would never actually hide the overlay. This rule restores the
+   normal hidden-attribute semantics. */
+.d-search-overlay[hidden] { display: none; }
 @keyframes d-fade-in { from { opacity: 0; } to { opacity: 1; } }
 .d-search-modal {
   width: min(640px, 92vw);
