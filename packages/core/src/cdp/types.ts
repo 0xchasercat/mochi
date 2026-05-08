@@ -68,6 +68,53 @@ export interface DomNode {
   nodeName: string;
 }
 
+/**
+ * Wider subset of `DOM.Node` used by the closed-shadow piercing locator
+ * (`Page.querySelectorPiercing`).
+ *
+ * Returned by `DOM.getDocument({ depth: -1, pierce: true })` — `pierce: true`
+ * yields shadow descendants under `shadowRoots[]` for *both* open and closed
+ * roots, and iframe descendants under `contentDocument`. Element-node fields
+ * (`localName`, `attributes`) drive selector matching in JS without round-
+ * tripping each candidate through `DOM.querySelector` (which would not pierce
+ * closed shadows even when called against the parent's document node).
+ *
+ * Reference: <https://chromedevtools.github.io/devtools-protocol/tot/DOM/#type-Node>
+ *
+ * @see PLAN.md §8.2 — `DOM.getDocument` and `DOM.resolveNode` are not on the
+ * forbidden list; both are fine to use.
+ * @see tasks/0253-closed-shadow-piercing-locator.md
+ */
+export interface PierceDomNode {
+  nodeId: number;
+  backendNodeId: number;
+  /** 1 = ELEMENT, 3 = TEXT, 9 = DOCUMENT, 11 = DOCUMENT_FRAGMENT, etc. */
+  nodeType: number;
+  /** Upper-case tag for element nodes (e.g. `"DIV"`); `"#document"` for the document. */
+  nodeName: string;
+  /** Lower-case tag (`"div"`) — only present on element nodes. */
+  localName?: string;
+  /** Flat `[name, value, name, value, ...]` array — only on element nodes. */
+  attributes?: string[];
+  /** Element / document children. */
+  children?: PierceDomNode[];
+  /**
+   * Shadow-root subtrees attached to this element. CDP yields BOTH open and
+   * closed shadows here when `pierce: true` is set; `shadowRootType` is
+   * `"open" | "closed" | "user-agent"`. The piercing walker traverses all of
+   * them — that's the whole point of this type vs. `DomNode`.
+   */
+  shadowRoots?: PierceDomNode[];
+  /** `"open" | "closed" | "user-agent"` — present on shadow-root nodes. */
+  shadowRootType?: "open" | "closed" | "user-agent";
+  /** iframe descendant tree. CDP yields it as a single-element array. */
+  contentDocument?: PierceDomNode;
+  /** Pseudo-element children (::before, ::after) — element nodes only. */
+  pseudoElements?: PierceDomNode[];
+  /** Template content fragment — present on `<template>` elements. */
+  templateContent?: PierceDomNode;
+}
+
 /** Subset of `Page.Frame`. */
 export interface PageFrame {
   id: string;

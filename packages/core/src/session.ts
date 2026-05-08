@@ -266,6 +266,30 @@ export class Session {
     // (only Runtime.enable is forbidden). We enable here so subsequent
     // addScriptToEvaluateOnNewDocument is honoured by the page domain.
     await this.router.send("Page.enable", undefined, { sessionId: attached.sessionId });
+    // Task 0255: defensive UA override at the network layer.
+    //
+    // The inject payload (Page.addScriptToEvaluateOnNewDocument) spoofs
+    // `navigator.userAgent` in the JS surface, but `Network.requestWillBeSent`
+    // events (and the request line itself) carry the BARE browser UA — which
+    // under `--headless=new` still contains the substring "HeadlessChrome".
+    // The inject can never reach those bytes because they're emitted before
+    // any document script runs.
+    //
+    // `Network.setUserAgentOverride` is a per-target setter that does NOT
+    // require `Network.enable` (it only stores override state); §8.2's ban
+    // on `Network.enable` is therefore unaffected. Sent immediately after
+    // attach and before any navigation so the very first request the page
+    // issues already carries the matrix UA.
+    //
+    // Skipped under `bypassInject:true` (PLAN.md §12.1) — capture flows must
+    // record the bare browser fingerprint, including its raw UA.
+    if (!this.bypassInject) {
+      await this.router.send(
+        "Network.setUserAgentOverride",
+        { userAgent: this.profile.userAgent },
+        { sessionId: attached.sessionId },
+      );
+    }
     // PLAN.md §12.1 / task 0040 — capture flow short-circuits inject so the
     // browser reports its bare fingerprint. Otherwise install the payload
     // main-world via §8.4. worldName MUST be the empty string.

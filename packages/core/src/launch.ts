@@ -130,11 +130,12 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
   const binary = await resolveBinary(opts.binary);
   const normalized = normalizeProxy(opts.proxy);
 
-  // Resolve the `MatrixV1` BEFORE spawning so the matrix-derived primary
-  // locale flows into the `--lang` flag. The matrix is otherwise read
-  // post-spawn for inject; deriving early is cheap (~µs, pure function) and
-  // lets us close the I-5 leak between Chromium's native `Accept-Language`
-  // header and the JS-layer `navigator.language(s)` spoof.
+  // Resolve the `MatrixV1` BEFORE spawning so matrix-derived values flow
+  // into both the `--lang` flag (task 0251) and `--window-size` flag
+  // (task 0252). The matrix is otherwise read post-spawn for inject;
+  // deriving early is cheap (~µs, pure function) and lets us close the
+  // I-5 leaks between Chromium's native network/OS-window state and the
+  // JS-layer spoof.
   //
   // Inline `ProfileV1` objects flow straight through; string profile ids
   // are resolved against a placeholder profile until `@mochi.js/profiles`
@@ -155,8 +156,19 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
     // multi-locale list still flows through `matrix.languages` to the
     // inject layer's `navigator.languages` spoof; Chromium derives the
     // q-weighted `Accept-Language` value from the single `--lang` primary
-    // automatically.
+    // automatically. Task 0251.
     locale: matrix.locale,
+    // Pin OS-level outer window from the matrix's display geometry so
+    // `window.outerWidth/outerHeight` (which reads from the OS window,
+    // NOT the JS-spoofed `screen.*`) matches the spoof. Closes the
+    // `fingerprint-scan.com` 800×600 leak under `--headless=new`.
+    // UDC fixes the same issue at `__init__.py:410-411`. Task 0252.
+    ...(Number.isInteger(matrix.display.width) &&
+    Number.isInteger(matrix.display.height) &&
+    matrix.display.width > 0 &&
+    matrix.display.height > 0
+      ? { windowSize: { width: matrix.display.width, height: matrix.display.height } }
+      : {}),
   });
 
   const session = new Session({

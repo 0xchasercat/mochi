@@ -1,0 +1,62 @@
+<!doctype html>
+<!--
+  Fixture for task 0253 (closed-shadow piercing locator). Defines a custom
+  element that attaches a CLOSED shadow root in its constructor and inserts
+  an iframe pointing at a Turnstile-shaped URL. Used by:
+
+    - The MOCHI_E2E + MOCHI_ONLINE conformance test for Turnstile auto-click
+      against a closed-shadow integration (`turnstile-auto-click.test.ts`).
+    - Local manual smoke testing — load the file directly in a browser, open
+      DevTools, run `document.querySelector('iframe')` (returns null) vs.
+      `mochi.page.querySelectorPiercing('iframe')` (returns the handle).
+
+  The iframe `src` is intentionally a real-looking Turnstile URL so the
+  detector's `isTurnstileSrc` substring match fires; for offline runs the
+  iframe simply fails to load and the test only asserts piercing visibility,
+  not click resolution.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>mochi closed-shadow fixture (task 0253)</title>
+  </head>
+  <body>
+    <h1>Closed-shadow Turnstile integration fixture</h1>
+    <p>
+      The element below attaches a <code>{ mode: "closed" }</code> shadow
+      root in its constructor; from page JS,
+      <code>cfHost.shadowRoot</code> returns <code>null</code> and
+      <code>document.querySelectorAll('iframe')</code> finds nothing, but
+      a host-side piercing locator that walks
+      <code>DOM.getDocument({ depth: -1, pierce: true })</code> will
+      surface the iframe.
+    </p>
+    <cf-host id="host"></cf-host>
+    <script>
+      (() => {
+        class CfHost extends HTMLElement {
+          constructor() {
+            super();
+            // mode: "closed" — the whole point of the fixture.
+            const root = this.attachShadow({ mode: "closed" });
+            const iframe = document.createElement("iframe");
+            iframe.src =
+              "https://challenges.cloudflare.com/turnstile/v0/api.html?fixture=1";
+            iframe.style.cssText =
+              "display:block;width:300px;height:65px;border:1px solid #ccc;";
+            root.appendChild(iframe);
+          }
+        }
+        customElements.define("cf-host", CfHost);
+        // Sanity check for manual debugging — log what page-side JS sees.
+        // (Closed shadows return null here; piercing happens host-side.)
+        const host = document.getElementById("host");
+        const reachable = !!host && !!host.shadowRoot;
+        console.debug({
+          __mochi_fixture: "closed-shadow",
+          page_side_can_see_shadow: reachable,
+        });
+      })();
+    </script>
+  </body>
+</html>

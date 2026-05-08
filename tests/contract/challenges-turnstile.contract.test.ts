@@ -136,6 +136,10 @@ function startResponder(written: RecordedFrame[], inject: (msg: object) => void)
       } else if (f.method === "Page.enable") {
         inject({ id: f.id, result: {} });
         tag.__responded = true;
+      } else if (f.method === "Network.setUserAgentOverride") {
+        // Task 0255 — defensive UA override at network layer.
+        inject({ id: f.id, result: {} });
+        tag.__responded = true;
       } else if (f.method === "Page.addScriptToEvaluateOnNewDocument") {
         inject({ id: f.id, result: { identifier: `scr-${++identifierCounter}` } });
         tag.__responded = true;
