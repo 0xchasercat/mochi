@@ -1,0 +1,89 @@
+{
+  "id": "linux-chrome-stable",
+  "version": "1.0.0",
+  "engine": "chromium",
+  "browser": {
+    "name": "chrome",
+    "channel": "stable",
+    "minVersion": "147",
+    "maxVersion": "147"
+  },
+  "os": {
+    "name": "linux",
+    "version": "22",
+    "arch": "x64"
+  },
+  "device": {
+    "vendor": "generic",
+    "model": "generic-x64",
+    "cpuFamily": "intel-core",
+    "cores": 32,
+    "memoryGB": 64
+  },
+  "display": {
+    "width": 1280,
+    "height": 800,
+    "dpr": 1,
+    "colorDepth": 24,
+    "pixelDepth": 24
+  },
+  "gpu": {
+    "vendor": "Google Inc.",
+    "renderer": "Generic Renderer",
+    "webglUnmaskedVendor": "Google Inc.",
+    "webglUnmaskedRenderer": "ANGLE (Generic)",
+    "webglMaxTextureSize": 16384,
+    "webglMaxColorAttachments": 8,
+    "webglExtensions": []
+  },
+  "audio": {
+    "contextSampleRate": 44100,
+    "audioWorkletLatency": 0.01,
+    "destinationMaxChannelCount": 2
+  },
+  "fonts": {
+    "family": "linux-system-pack",
+    "list": [
+      "Arial",
+      "Courier",
+      "Courier New",
+      "DejaVu Sans",
+      "DejaVu Sans Mono",
+      "DejaVu Serif",
+      "Helvetica",
+      "Liberation Mono",
+      "Liberation Sans",
+      "Liberation Serif",
+      "Times New Roman"
+    ]
+  },
+  "timezone": "UTC",
+  "locale": "en-US",
+  "languages": [
+    "en-US",
+    "en"
+  ],
+  "behavior": {
+    "hand": "right",
+    "tremor": 0.18,
+    "wpm": 60,
+    "scrollStyle": "smooth"
+  },
+  "wreqPreset": "chrome_147_linux",
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+  "uaCh": {
+    "sec-ch-ua": "\"Chromium\";v=\"147\", \"Not.A/Brand\";v=\"8\"",
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": "\"Linux\"",
+    "sec-ch-ua-platform-version": "\"22\"",
+    "sec-ch-ua-arch": "\"x86\"",
+    "sec-ch-ua-bitness": "\"64\"",
+    "sec-ch-ua-model": "\"\"",
+    "sec-ch-ua-full-version": "\"147\"",
+    "sec-ch-ua-os": "\"linux\""
+  },
+  "entropyBudget": {
+    "fixed": [],
+    "perSeed": []
+  }
+}

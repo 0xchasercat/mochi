@@ -29,7 +29,14 @@ export {
   resolveChromiumBinary,
 } from "./browsers/index";
 
-export const SUBCOMMANDS = ["browsers", "capture", "harness", "work", "version"] as const;
+export const SUBCOMMANDS = [
+  "browsers",
+  "capture",
+  "harness",
+  "profiles",
+  "work",
+  "version",
+] as const;
 export type Subcommand = (typeof SUBCOMMANDS)[number];
 
 /**
@@ -93,6 +100,10 @@ export async function main(argv: readonly string[]): Promise<number> {
   if (arg === "harness") {
     const { runHarnessCommand } = await import("./harness/subcommand");
     return runHarnessCommand(argv.slice(1));
+  }
+  if (arg === "profiles") {
+    const { runProfilesCommand } = await import("./profiles/subcommand");
+    return runProfilesCommand(argv.slice(1));
   }
   console.error(
     `mochi v${VERSION} (claim release)\n` +

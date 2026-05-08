@@ -28,6 +28,11 @@ export const KNOWN_PROFILE_IDS = [
   "win11-chrome-stable",
   "win11-edge-stable",
   "linux-chrome-stable",
+  // Imported from harvester corpus per task 0260.
+  "mac-chrome-stable",
+  "mac-chrome-beta",
+  "windows-chrome-stable",
+  "mac-brave-stable",
 ] as const satisfies readonly string[];
 
 export type ProfileId = (typeof KNOWN_PROFILE_IDS)[number];

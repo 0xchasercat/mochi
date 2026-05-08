@@ -1,0 +1,112 @@
+{
+  "id": "windows-chrome-stable",
+  "version": "1.0.0",
+  "engine": "chromium",
+  "browser": {
+    "name": "chrome",
+    "channel": "stable",
+    "minVersion": "146",
+    "maxVersion": "146"
+  },
+  "os": {
+    "name": "windows",
+    "version": "19.0.0",
+    "arch": "x64"
+  },
+  "device": {
+    "vendor": "generic",
+    "model": "PC",
+    "cpuFamily": "intel-core",
+    "cores": 8,
+    "memoryGB": 16
+  },
+  "display": {
+    "width": 1920,
+    "height": 1080,
+    "dpr": 1,
+    "colorDepth": 32,
+    "pixelDepth": 32
+  },
+  "gpu": {
+    "vendor": "NVIDIA Corporation",
+    "renderer": "NVIDIA GeForce RTX 3070 (0x00002484) Direct3D11 vs_5_0 ps_5_0",
+    "webglUnmaskedVendor": "Google Inc. (NVIDIA)",
+    "webglUnmaskedRenderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002484) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "webglMaxTextureSize": 16384,
+    "webglMaxColorAttachments": 8,
+    "webglExtensions": [
+      "EXT_clip_control",
+      "EXT_color_buffer_float",
+      "EXT_color_buffer_half_float",
+      "EXT_conservative_depth",
+      "EXT_depth_clamp",
+      "EXT_disjoint_timer_query_webgl2",
+      "EXT_float_blend",
+      "EXT_polygon_offset_clamp",
+      "EXT_render_snorm",
+      "EXT_texture_compression_bptc",
+      "EXT_texture_compression_rgtc",
+      "EXT_texture_filter_anisotropic",
+      "EXT_texture_mirror_clamp_to_edge",
+      "EXT_texture_norm16",
+      "KHR_parallel_shader_compile",
+      "NV_shader_noperspective_interpolation",
+      "OES_draw_buffers_indexed",
+      "OES_sample_variables",
+      "OES_shader_multisample_interpolation",
+      "OES_texture_float_linear",
+      "WEBGL_blend_func_extended",
+      "WEBGL_clip_cull_distance",
+      "WEBGL_compressed_texture_s3tc",
+      "WEBGL_compressed_texture_s3tc_srgb",
+      "WEBGL_debug_renderer_info",
+      "WEBGL_debug_shaders",
+      "WEBGL_lose_context",
+      "WEBGL_multi_draw",
+      "WEBGL_polygon_mode",
+      "WEBGL_provoking_vertex",
+      "WEBGL_stencil_texturing"
+    ]
+  },
+  "audio": {
+    "contextSampleRate": 48000,
+    "audioWorkletLatency": 0.042666666666666665,
+    "destinationMaxChannelCount": 2
+  },
+  "fonts": {
+    "family": "windows-system-pack",
+    "list": [
+      "Arial",
+      "Courier New",
+      "Times New Roman"
+    ]
+  },
+  "timezone": "America/Chicago",
+  "locale": "en-US",
+  "languages": [
+    "en-US"
+  ],
+  "behavior": {
+    "hand": "right",
+    "tremor": 0.18,
+    "wpm": 60,
+    "scrollStyle": "smooth"
+  },
+  "wreqPreset": "chrome_146_windows",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 chrome/chrome",
+  "uaCh": {
+    "sec-ch-ua": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"chrome\";v=\"146\"",
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": "\"Windows\"",
+    "sec-ch-ua-platform-version": "\"19.0.0\"",
+    "sec-ch-ua-arch": "\"x86\"",
+    "sec-ch-ua-bitness": "\"64\"",
+    "sec-ch-ua-model": "\"\"",
+    "sec-ch-ua-full-version": "\"146\"",
+    "sec-ch-ua-os": "\"windows\""
+  },
+  "entropyBudget": {
+    "fixed": [],
+    "perSeed": []
+  }
+}

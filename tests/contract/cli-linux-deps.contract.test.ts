@@ -48,7 +48,7 @@ describe("LINUX_RUNTIME_DEPS — shape + invariants", () => {
     expect(LINUX_RUNTIME_DEPS.length).toBeGreaterThan(20);
     for (const pkg of LINUX_RUNTIME_DEPS) {
       // apt package names are lowercase alphanumerics + dot/hyphen.
-      expect(pkg).toMatch(/^[a-z0-9][a-z0-9+.\-]*$/);
+      expect(pkg).toMatch(/^[a-z0-9][a-z0-9+.-]*$/);
     }
   });
 

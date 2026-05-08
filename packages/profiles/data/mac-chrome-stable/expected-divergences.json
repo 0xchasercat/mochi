@@ -1,0 +1,322 @@
+{
+  "version": "1",
+  "profile": "mac-chrome-stable",
+  "paths": [
+    {
+      "path": "audio.**",
+      "comment": "Audio fingerprint bytes (sampleValues, audioHash) require precomputed per-(profile, sample-rate) byte tables — task 0071. docs/limits.md \"Audio fingerprinting (OfflineAudioContext) is NOT spoofed at v0.3\" carried over to v0.7 phase split."
+    },
+    {
+      "path": "canvas.**",
+      "comment": "Canvas hash + dataUrl spoofing requires precomputed hash maps for the standard probe payloads + per-pixel noise injection — task 0071. docs/limits.md \"Canvas fingerprinting (HTMLCanvasElement.toDataURL) is NOT spoofed at v0.3\" carried over to v0.7 phase split."
+    },
+    {
+      "path": "speech.**",
+      "comment": "speechSynthesis.getVoices() returns the host's installed system voices on real Chrome (typically 200+ entries on macOS, 20+ on Linux/Win). Chromium-for-Testing ships with no voice tables, so mochi spoofs voices=[]. Restoring real-device voice lists is a phase 0.7 deliverable (precomputed voice tables per-OS) tracked alongside audio/canvas. PLAN.md §13.6."
+    },
+    {
+      "path": "navigator.userAgentData.brands",
+      "comment": "Brand-list length varies (Linux Chrome emits 2 brands, macOS/Win emit 3). Same root cause as the per-entry comment below."
+    },
+    {
+      "path": "navigator.userAgentData.brands[*]",
+      "comment": "Per-entry full-object mismatch when length differs."
+    },
+    {
+      "path": "navigator.userAgentData.brands[*].**",
+      "comment": "Sec-CH-UA brand-list ordering and GREASE label vary between Chrome/Edge majors and even between Chrome point releases (e.g. 146 emits `Not-A.Brand;v=24` while 147 emits `Not.A/Brand;v=8`). mochi pins a single GREASE label per major (consistency/rules/lookups/browser.ts) for determinism — see tasks/0051-consistency-stack-fixes.md (Group B). Per-major GREASE shuffle is a phase 0.7 deliverable."
+    },
+    {
+      "path": "navigator.userAgentDataHighEntropy.brands",
+      "comment": "Same as userAgentData.brands."
+    },
+    {
+      "path": "navigator.userAgentDataHighEntropy.brands[*]",
+      "comment": "Per-entry full-object mismatch when length differs."
+    },
+    {
+      "path": "navigator.userAgentDataHighEntropy.brands[*].**",
+      "comment": "Same as navigator.userAgentData.brands — pinned for determinism."
+    },
+    {
+      "path": "navigator.userAgentDataHighEntropy.fullVersionList",
+      "comment": "Same as userAgentData.brands — length varies by OS."
+    },
+    {
+      "path": "navigator.userAgentDataHighEntropy.fullVersionList[*]",
+      "comment": "Per-entry full-object mismatch when length differs."
+    },
+    {
+      "path": "navigator.userAgentDataHighEntropy.fullVersionList[*].**",
+      "comment": "Patch-level Chrome version (e.g. 146.0.7680.165) varies with the local Chrome install vs the BROWSER_TIP_FULL_VERSION table. mochi uses the table tip when the major matches; harvested values may differ by a few patch numbers. Refresh the table per Chrome major."
+    },
+    {
+      "path": "navigator.userAgent",
+      "comment": "Full UA string includes the patch version (see fullVersionList comment). Spoofed value matches BROWSER_TIP_FULL_VERSION; harvested value reflects the user's exact Chrome point release."
+    },
+    {
+      "path": "navigator.appVersion",
+      "comment": "Same patch-version drift as navigator.userAgent."
+    },
+    {
+      "path": "screen.mediaQueries.**",
+      "comment": "matchMedia() result strings depend on the host's actual OS/display state (min-resolution from real DPR, prefers-color-scheme from Dark Mode, etc.). mochi spoofs a deterministic baseline; the harvested values reflect the user's session at capture time. Per-profile media-query lock is phase 0.7."
+    },
+    {
+      "path": "screen.pageXOffset",
+      "comment": "Window-frame chrome. Sentinelized by normalize.ts in most paths but the raw harvested value may differ from the harness window's idle offset."
+    },
+    {
+      "path": "screen.pageYOffset",
+      "comment": "Window-frame chrome — same as pageXOffset."
+    },
+    {
+      "path": "timing.dateString",
+      "comment": "Date.toString() includes the host's wall-clock time, which differs every run. The probe normalises to a fixed 2024-01-01 anchor; harvested values reflect the user's actual capture time."
+    },
+    {
+      "path": "timing.performanceTiming",
+      "comment": "performance.timing.* fields vary per session (load durations, redirect counts). normalize.ts sentinelizes the bot.navigationTiming sub-block; the timing.performanceTiming block is harvester-specific and not currently sentinelized."
+    },
+    {
+      "path": "timing.supportedNumberingSystems[*]",
+      "comment": "Intl.supportedValuesOf('numberingSystem') grows between V8 majors (e.g. Chrome 149 added 'tols'). The harvested list reflects the user's V8; the harness uses Chromium-for-Testing's V8. List drift is expected as BROWSER_TIP_FULL_VERSION advances."
+    },
+    {
+      "path": "webgl.aliasedLineWidthRange[*]",
+      "comment": "WebGL aliasedLineWidthRange/PointSizeRange/maxViewportDims values vary with the GPU driver version on the host. mochi locks GPU vendor/renderer via the matrix; per-driver-version locking is phase 0.7."
+    },
+    {
+      "path": "webgl.aliasedPointSizeRange[*]",
+      "comment": "See webgl.aliasedLineWidthRange."
+    },
+    {
+      "path": "webgl.maxColorAttachments",
+      "comment": "GPU-driver dependent; see webgl.aliasedLineWidthRange."
+    },
+    {
+      "path": "webgl.maxViewportDims[*]",
+      "comment": "GPU-driver dependent; see webgl.aliasedLineWidthRange."
+    },
+    {
+      "path": "webgpu.features",
+      "comment": "Block absent on hosts without a WebGPU adapter."
+    },
+    {
+      "path": "webgpu.features[*]",
+      "comment": "WebGPU feature list grows between Chromium majors. The harvested list reflects the user's Chrome version; the harness uses Chromium-for-Testing."
+    },
+    {
+      "path": "webgpu.info",
+      "comment": "Block absent on hosts without a WebGPU adapter."
+    },
+    {
+      "path": "webgpu.limits.**",
+      "comment": "WebGPU adapter limits depend on the GPU driver. Per-driver locking is phase 0.7 alongside WebGL."
+    },
+    {
+      "path": "bot.chromeRuntime",
+      "comment": "Real Chrome exposes window.chrome.runtime; Chromium-for-Testing does not. Restoring chrome.runtime polyfill is task 0140 (stealth conformance) — tracked separately."
+    },
+    {
+      "path": "storage.cookieCount",
+      "comment": "Cookie state varies per session — the harvester's user had cookies, the harness session is fresh."
+    },
+    {
+      "path": "storage.cookiesWritable",
+      "comment": "Depends on the document context (file:// fixture vs http:// origin). Harvester captured at http(s) origin; harness uses file:// fixture."
+    },
+    {
+      "path": "storage.localStorageKeys",
+      "comment": "localStorage state varies per session — fresh harness session has no keys."
+    },
+    {
+      "path": "mouseEvent",
+      "comment": "The probe-page emits a mouseEvent block when the relational-lock scaffolding fires. Harvested snapshots predate this probe and so omit it; spoofed sessions emit it. Cosmetic — the lock-result block is the spoof's own diagnostic, not a fingerprint surface."
+    },
+    {
+      "path": "fonts.**",
+      "comment": "The font enumeration probe enumerates whatever the host has installed. Spoofing the per-profile font intersection is a phase 0.7 task (FontFace API stub + per-profile font allowlist). Running e.g. windows-chrome-stable on a Mac host will surface every macOS system font as material — that's a known gap, not a profile defect."
+    },
+    {
+      "path": "webgl.extensions",
+      "comment": "Whole array absent on no-WebGL hosts (see webgl.error)."
+    },
+    {
+      "path": "webgl.extensions[*]",
+      "comment": "WebGL extension list depends on the host GPU + driver. mochi locks GPU vendor/renderer strings but does NOT enumerate-list-spoof extensions per-profile yet. Phase 0.7 deliverable. Cross-host validation surfaces the host's actual extension set."
+    },
+    {
+      "path": "webgl.precisionFormats",
+      "comment": "Block absent on no-WebGL hosts."
+    },
+    {
+      "path": "webgl.extensionCount",
+      "comment": "See webgl.extensions[*] — count varies with host extensions."
+    },
+    {
+      "path": "webgl.unmaskedVendor",
+      "comment": "Unmasked WebGL vendor/renderer requires GPU spoofing at the ANGLE layer (or a polyfilled WEBGL_debug_renderer_info getter). mochi's getter spoof is host-OS-aware; cross-host tests surface the underlying device."
+    },
+    {
+      "path": "webgl.unmaskedRenderer",
+      "comment": "See webgl.unmaskedVendor."
+    },
+    {
+      "path": "webgpu.info.**",
+      "comment": "WebGPU adapter info comes from the host driver. Cross-host validation shows the host's adapter; same root cause as webgl.unmaskedRenderer."
+    },
+    {
+      "path": "mediaDevices.devices[*]",
+      "comment": "Per-entry full-object mismatch when device-array length differs."
+    },
+    {
+      "path": "mediaDevices.devices[*].**",
+      "comment": "navigator.mediaDevices.enumerateDevices() returns whatever audio/video devices the host has. The harness fixture runs in a fresh permission state so labels are empty (matches baseline) but the device count + kind ratio depends on the host. Per-profile media-devices spoofing is phase 0.7."
+    },
+    {
+      "path": "mediaDevices.deviceCount",
+      "comment": "See mediaDevices.devices[*]."
+    },
+    {
+      "path": "mediaDevices.audioinput",
+      "comment": "See mediaDevices.devices[*]."
+    },
+    {
+      "path": "mediaDevices.audiooutput",
+      "comment": "See mediaDevices.devices[*]."
+    },
+    {
+      "path": "mediaDevices.videoinput",
+      "comment": "See mediaDevices.devices[*]."
+    },
+    {
+      "path": "navigator.connection.effectiveType",
+      "comment": "NetworkInformation.effectiveType reads from the host network stack. downlink/rtt are sentinelized by normalize.ts but effectiveType isn't."
+    },
+    {
+      "path": "timing.timezoneOffset",
+      "comment": "timezoneOffset depends on whether the captured profile's tz observes DST at the harness's wall-clock time vs at capture time. The IANA timezone is spoofed correctly; the offset is a derived value with seasonal drift."
+    },
+    {
+      "path": "bot.userActivation.**",
+      "comment": "navigator.userActivation.hasBeenActive flips to true when the harness drives mouse/keyboard events. The harvested snapshot was captured before any user gesture, so hasBeenActive=false. The spoof doesn't lie about this — it's a true reflection of the harness's interaction sequence."
+    },
+    {
+      "path": "navigator.deviceMemory",
+      "comment": "navigator.deviceMemory is spec-capped at 8 on real Chrome, but some configurations (older Chrome, non-Chromium derivatives) leak the real GiB count. mochi enforces the spec cap deterministically; the harvested value may be higher (16/32/64) and the spoof correctly clamps to 8."
+    },
+    {
+      "path": "navigator.bluetooth",
+      "comment": "navigator.bluetooth presence depends on the host's Web Bluetooth flag. Linux Chrome typically has it disabled by default; mochi exposes it. Per-profile API allowlist is phase 0.7."
+    },
+    {
+      "path": "storage.fileSystemAccess",
+      "comment": "FileSystemAccess API can be hardened off (Brave) or off-by-default (Linux Chrome). mochi exposes the API by default. Per-profile feature gating is phase 0.7."
+    },
+    {
+      "path": "storage.sessionStorageKeys",
+      "comment": "The probe page writes one sessionStorage key during its self-test; harvested baselines that ran before that probe instrumentation report 0. New captures will normalize to 1 once re-imported."
+    },
+    {
+      "path": "timing.timerPrecision",
+      "comment": "Brave coarsens performance.now() precision; harvested Brave snapshots report null. mochi does NOT coarsen — restoring Brave's precision-coarsen behavior is a phase 0.7 deliverable."
+    },
+    {
+      "path": "navigator.userAgentDataHighEntropy.platformVersion",
+      "comment": "platformVersion is empty on Linux Chrome (X11 has no notion of OS marketing version). The spoof emits a synthesised value; on Linux imports we accept the empty-string baseline as the source of truth."
+    },
+    {
+      "path": "navigator.connection",
+      "comment": "Brave hardens NetworkInformation and returns an undefined connection block. mochi exposes the API. Per-profile NetworkInformation hardening is a phase 0.7 deliverable."
+    },
+    {
+      "path": "webgl.error",
+      "comment": "Some captured devices (headless Linux, lock-screened Windows) report no WebGL context. mochi always presents a WebGL surface. Per-profile no-WebGL mode is phase 0.7."
+    },
+    {
+      "path": "webgl.version",
+      "comment": "Empty on no-WebGL hosts (see webgl.error)."
+    },
+    {
+      "path": "webgl.shadingLanguageVersion",
+      "comment": "Empty on no-WebGL hosts (see webgl.error)."
+    },
+    {
+      "path": "webgl.vendor",
+      "comment": "Empty on no-WebGL hosts (see webgl.error)."
+    },
+    {
+      "path": "webgl.renderer",
+      "comment": "Empty on no-WebGL hosts (see webgl.error)."
+    },
+    {
+      "path": "webgl.aliasedLineWidthRange",
+      "comment": "Absent on no-WebGL hosts."
+    },
+    {
+      "path": "webgl.aliasedPointSizeRange",
+      "comment": "Absent on no-WebGL hosts."
+    },
+    {
+      "path": "webgl.maxAnisotropy",
+      "comment": "Absent on no-WebGL hosts."
+    },
+    {
+      "path": "webgl.maxColorAttachments",
+      "comment": "Absent on no-WebGL hosts."
+    },
+    {
+      "path": "webgl.maxCombinedTextureImageUnits",
+      "comment": "Absent on no-WebGL hosts."
+    },
+    {
+      "path": "webgl.maxCubeMapTextureSize",
+      "comment": "Absent on no-WebGL hosts."
+    },
+    {
+      "path": "webgl.maxFragmentUniformVectors",
+      "comment": "Absent on no-WebGL hosts."
+    },
+    {
+      "path": "webgl.maxRenderbufferSize",
+      "comment": "Absent on no-WebGL hosts."
+    },
+    {
+      "path": "webgl.maxTextureImageUnits",
+      "comment": "Absent on no-WebGL hosts."
+    },
+    {
+      "path": "webgl.maxTextureSize",
+      "comment": "Absent on no-WebGL hosts."
+    },
+    {
+      "path": "webgl.maxVaryingVectors",
+      "comment": "Absent on no-WebGL hosts."
+    },
+    {
+      "path": "webgl.maxVertexAttribs",
+      "comment": "Absent on no-WebGL hosts."
+    },
+    {
+      "path": "webgl.maxVertexTextureImageUnits",
+      "comment": "Absent on no-WebGL hosts."
+    },
+    {
+      "path": "webgl.maxVertexUniformVectors",
+      "comment": "Absent on no-WebGL hosts."
+    },
+    {
+      "path": "webgl.maxViewportDims",
+      "comment": "Absent on no-WebGL hosts."
+    },
+    {
+      "path": "webgl.precisionFormats.**",
+      "comment": "Absent on no-WebGL hosts."
+    },
+    {
+      "path": "mediaDevices.devices",
+      "comment": "Device array length varies with the host's installed devices. Per-profile media-devices spoofing is phase 0.7."
+    }
+  ]
+}
