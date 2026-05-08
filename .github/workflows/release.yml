@@ -43,6 +43,22 @@ jobs:
         with:
           bun-version: 1.3.9
 
+      # Set up Node + npm to a version that handles sigstore signing under
+      # OpenSSL 3 cleanly. Without this, `changeset publish` fails with
+      # ERR_OSSL_NO_DEFAULT_DIGEST during provenance signing — npm <10.5 hit
+      # OpenSSL 3's strict-default-digest path. The 'npm install -g npm@latest'
+      # ensures we're on a version where @sigstore/sign was rewritten to load
+      # the legacy provider explicitly. Bun stays the runtime for everything
+      # else; npm is only invoked transitively by `changeset publish` to do
+      # the actual `npm publish` HTTP upload.
+      - name: Setup Node + pinned npm for sigstore-compatible publish
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Pin npm to a sigstore-compatible version
+        run: npm install -g npm@latest
+
       - name: Install
         run: bun install --frozen-lockfile
 
