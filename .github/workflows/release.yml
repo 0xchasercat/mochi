@@ -41,6 +41,15 @@ jobs:
     # defense-in-depth in case the trigger surface ever expands.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, Linux, X64]
+    env:
+      # changesets/action invokes setup-git-credentials, which writes
+      # `${HOME}/.netrc`. On the chaser-runner systemd service HOME isn't
+      # propagated to the action subprocess, so the path resolves to
+      # `undefined/.netrc` and the step fails with ENOENT. Pinning HOME
+      # at the job level ensures every action sees a real path. The
+      # runner is installed under /root/actions-runner/mochi-runner per
+      # the workflow logs.
+      HOME: /root
     steps:
       - name: Checkout
         uses: actions/checkout@v4
