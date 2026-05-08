@@ -145,5 +145,18 @@ jobs:
           title: "chore(repo): version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # NPM_TOKEN intentionally NOT set — the @mochi.js org requires
+          # Trusted Publishing (OIDC). When NPM_TOKEN is absent, changesets/
+          # action skips writing it to .npmrc, and npm CLI 11.x auto-detects
+          # the GH OIDC env vars (ACTIONS_ID_TOKEN_REQUEST_URL +
+          # ACTIONS_ID_TOKEN_REQUEST_TOKEN, populated by `id-token: write`
+          # at the workflow level) and exchanges them for a short-lived
+          # registry credential. The exchange is only accepted when npmjs.com
+          # has a Trusted Publisher rule registered for this exact
+          # (org, repo, workflow_file, environment) tuple.
+          #
+          # If publish 404s here, the most likely cause is a missing or
+          # mismatched Trusted Publisher entry on npm — verify each package's
+          # Trusted Publisher rule names workflow `release.yml` (NOT
+          # `Release`) and the correct GitHub owner/repo.
           NPM_CONFIG_PROVENANCE: "true"
