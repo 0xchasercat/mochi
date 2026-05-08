@@ -6,7 +6,7 @@
  * creds, empty password).
  *
  * `installProxyAuth`: drives a fake CDP router. Verifies:
- *   - `Fetch.enable` is sent with `handleAuthRequests: true, patterns: []`.
+ *   - `Fetch.enable` is sent with `handleAuthRequests: true, patterns: [{ urlPattern: "*" }]`.
  *   - `Fetch.authRequired` events trigger `Fetch.continueWithAuth` carrying
  *     the configured creds.
  *   - The defensive `Fetch.requestPaused` handler issues `Fetch.continueRequest`.
@@ -193,7 +193,7 @@ describe("installProxyAuth", () => {
     const handle = await installProxyAuth(f.router, { username: "u", password: "p" });
     const enable = f.written.find((c) => c.method === "Fetch.enable");
     expect(enable).toBeDefined();
-    expect(enable?.params).toEqual({ handleAuthRequests: true, patterns: [] });
+    expect(enable?.params).toEqual({ handleAuthRequests: true, patterns: [{ urlPattern: "*" }] });
     await handle.dispose();
     await f.router.close();
   });
