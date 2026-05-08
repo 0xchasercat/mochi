@@ -93,7 +93,15 @@ describeOrSkip(
             // Override` call covers both. We pin both surfaces here.
             // `getTimezoneOffset` returns minutes-WEST-of-UTC, so we
             // negate to get the conventional positive-east-of-UTC value.
-            const pageOffsetMin = await evalExpr<number>(page, "-(new Date().getTimezoneOffset())");
+            //
+            // NOTE: write `0 - x` rather than `-x` to avoid the `-0` /
+            // `+0` distinction. `bun:test` `expect(...).toBe(0)` uses
+            // `Object.is` semantics; `Object.is(-0, 0) === false`. Under
+            // privacy-fallback (matrix.timezone === "UTC") the offset is
+            // 0; without this rewrite the test fails on the negation
+            // even though the runtime value is numerically correct.
+            // Brief 0263 documented this as the canonical workaround.
+            const pageOffsetMin = await evalExpr<number>(page, "0 - new Date().getTimezoneOffset()");
 
             // Step 4 — passes if the matrix is UTC (privacy-fallback
             // already kicked in). The session's reconciled matrix is
