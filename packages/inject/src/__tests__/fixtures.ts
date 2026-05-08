@@ -78,6 +78,11 @@ export const FIXTURE_MATRIX: MatrixV1 = {
       outerWidth: 1728,
       outerHeight: 1092,
     }),
+    "mouseEvent-screen-formula": JSON.stringify({
+      screenX: "clientX + window.screenX",
+      screenY: "clientY + window.screenY",
+      rule: "R-041",
+    }),
   },
   entropyBudget: { fixed: [], perSeed: [] },
   seed: "fixture-seed",

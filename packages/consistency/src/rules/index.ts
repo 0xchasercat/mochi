@@ -19,6 +19,7 @@ import type { Rule } from "../rule";
 import { EXTRAS_RULES } from "./extras";
 import { GPU_RULES } from "./gpu";
 import { LOCALE_RULES } from "./locale";
+import { MOUSE_EVENT_RULES } from "./mouseEvent";
 import { NAVIGATOR_RULES } from "./navigator";
 import { SCREEN_RULES } from "./screen";
 import { USER_AGENT_RULES } from "./userAgent";
@@ -39,6 +40,8 @@ import { WEBGPU_RULES } from "./webgpu";
  *   - WEBGPU_RULES      R-032, R-033
  *   - EXTRAS_RULES      R-034..R-040 (mediaDevices / permissions / network /
  *                       screen.orientation / matchMedia / storage)
+ *   - MOUSE_EVENT_RULES R-041 (MouseEvent.screenX/screenY relational lock —
+ *                       PLAN.md I-5 / CDP-dispatch leak; task 0250)
  */
 export const RULES: readonly Rule[] = [
   ...GPU_RULES,
@@ -48,4 +51,5 @@ export const RULES: readonly Rule[] = [
   ...LOCALE_RULES,
   ...WEBGPU_RULES,
   ...EXTRAS_RULES,
+  ...MOUSE_EVENT_RULES,
 ];

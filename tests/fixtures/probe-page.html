@@ -724,6 +724,45 @@
       return result;
     }
 
+    // ---- mouseEvent probe (task 0250 — R-041) ------------------------------
+    // Synthesize a MouseEvent with known clientX/Y, read back screenX/Y, and
+    // capture the descriptor's getter shape. The harness asserts that the
+    // patched getter satisfies the R-041 lock:
+    //   `event.screenX === event.clientX + window.screenX` (and Y).
+    function probeMouseEvent() {
+      var result = {};
+      try {
+        var CX = 100, CY = 200;
+        var ev = new MouseEvent("test", { clientX: CX, clientY: CY });
+        result.clientX = ev.clientX;
+        result.clientY = ev.clientY;
+        result.screenX = ev.screenX;
+        result.screenY = ev.screenY;
+        result.windowScreenX = window.screenX;
+        result.windowScreenY = window.screenY;
+        result.expectedScreenX = CX + window.screenX;
+        result.expectedScreenY = CY + window.screenY;
+        result.relationalLockHolds =
+          ev.screenX === (CX + window.screenX) &&
+          ev.screenY === (CY + window.screenY);
+      } catch (e) { result.synthesisError = String((e && e.message) || e); }
+      try {
+        var dx = Object.getOwnPropertyDescriptor(MouseEvent.prototype, "screenX");
+        var dy = Object.getOwnPropertyDescriptor(MouseEvent.prototype, "screenY");
+        result.descriptorX = dx ? {
+          configurable: dx.configurable,
+          enumerable: dx.enumerable,
+          getterToString: dx.get ? Function.prototype.toString.call(dx.get) : null
+        } : null;
+        result.descriptorY = dy ? {
+          configurable: dy.configurable,
+          enumerable: dy.enumerable,
+          getterToString: dy.get ? Function.prototype.toString.call(dy.get) : null
+        } : null;
+      } catch (e) { result.descriptorError = String((e && e.message) || e); }
+      return result;
+    }
+
     // ---- driver -----------------------------------------------------------
     async function runAll() {
       var t0 = Date.now();
@@ -740,6 +779,7 @@
       probes.storage      = safeSync(probeStorage);
       probes.timing       = safeSync(probeTiming);
       probes.bot          = safeSync(probeBot);
+      probes.mouseEvent   = safeSync(probeMouseEvent);
       probes.__meta = {
         capturedAt: new Date().toISOString(),
         elapsedMs: Date.now() - t0,

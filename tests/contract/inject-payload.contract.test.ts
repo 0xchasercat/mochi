@@ -72,16 +72,22 @@ const CANONICAL_SEED = "contract-pin-seed";
  * fail the test. Update this hash AND the harness baselines together when
  * the payload's bytes intentionally change.
  *
- * Last updated 2026-05-08 alongside tasks/0140-stealth-conformance.md
+ * Last updated 2026-05-09 alongside tasks/0250-mouseevent-screen-coords.md
+ * (R-041: MouseEvent.screenX/screenY prototype patch — closes the I-5
+ * relational leak on CDP-dispatched mouse events. PRB-cited prototype
+ * getter patch installed in a new `mouse-event-screen` inject module;
+ * payload now carries 15 spoof modules (was 14). The patch is a no-op
+ * tell in the descriptor cloak and only changes runtime semantics for
+ * dispatched events — Zero-Diff gate is unchanged on real Chrome.app
+ * because real mouse events already satisfy the patched identity).
+ *
+ * Previously last updated 2026-05-08 alongside tasks/0140-stealth-conformance.md
  * (CloakBrowser-surfaced stealth conformance — adds two defensive shim
  * modules: window-chrome (mirrors Chrome's window.chrome shape only when
  * absent) and plugins (curated 5-plugin PluginArray only when underlying
- * browser reports an empty list). The payload now carries 14 spoof
- * modules (was 12). Both shims are no-ops on real Chrome.app, where the
- * surfaces are native, so the existing harness Zero-Diff gate is
- * unchanged at runtime — only the build-time payload bytes shift.
+ * browser reports an empty list).
  */
-const PINNED_SHA256 = "f9376ce481f5cfdbd0659daa9ed40744201213ab40b26fe031127ec2128752de";
+const PINNED_SHA256 = "ec63d2987b678356d9048567cd98374743fdd2129358d49215a2c0e04612750f";
 
 describe("contract: @mochi.js/inject buildPayload sha256 is byte-stable per (profile, seed)", () => {
   it("buildPayload(deriveMatrix(profile, seed)) is deterministic", () => {
