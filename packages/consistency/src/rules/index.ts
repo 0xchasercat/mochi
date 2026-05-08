@@ -32,7 +32,10 @@ import { WEBGPU_RULES } from "./webgpu";
  *
  * Rule families:
  *   - GPU_RULES         R-001..R-003, R-024, R-025
- *   - USER_AGENT_RULES  R-004..R-007, R-023, R-026, R-031
+ *   - USER_AGENT_RULES  R-004..R-007, R-023, R-026, R-031,
+ *                       R-042..R-046 (UA-CH metadata struct; task 0261 —
+ *                       sec-ch-ua-arch / -bitness / -mobile / -model and
+ *                       single-string ua-full-version derived from R-031)
  *   - NAVIGATOR_RULES   R-008..R-009, R-015..R-018, R-020, R-022, R-027,
  *                       R-028, R-030
  *   - SCREEN_RULES      R-010..R-012, R-021, R-029

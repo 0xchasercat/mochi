@@ -1,10 +1,20 @@
 /**
- * User-Agent + UA-CH rules. Cover R-004, R-005, R-006, R-007, R-023, R-026.
+ * User-Agent + UA-CH rules. Cover R-004, R-005, R-006, R-007, R-023, R-026,
+ * R-031, R-042, R-043, R-044, R-045, R-046.
  *
  * R-023 produces a seed-derived build-hash that R-004 consumes — that's the
  * v0.2 chain that gives the rule DAG real (non-trivial) edges.
  *
+ * R-042..R-046 (task 0261) close the UA-CH cross-layer gap exposed by 0255:
+ * `Network.setUserAgentOverride` accepts a structured `userAgentMetadata`
+ * shape from which Chromium derives every `Sec-CH-UA*` request header. Core
+ * needs to pass that struct, and the values for `architecture`, `bitness`,
+ * `mobile`, `model`, and the single-string `ua-full-version` were not yet
+ * in the matrix. These rules add them so core + inject can both read from
+ * the same source of truth (PLAN.md I-5).
+ *
  * @see PLAN.md §9.2
+ * @see tasks/0261-uach-network-metadata.md
  */
 
 import type { ProfileV1 } from "../generated/profile";
@@ -18,6 +28,7 @@ import {
 import { SEC_CH_UA_PLATFORM_BY_OS } from "./lookups/os";
 
 type OsName = ProfileV1["os"]["name"];
+type OsArch = ProfileV1["os"]["arch"];
 type BrowserName = ProfileV1["browser"]["name"];
 
 /**
@@ -182,4 +193,160 @@ function brandLabel(browser: BrowserName): string {
   }
 }
 
-export const USER_AGENT_RULES: readonly Rule[] = [R023, R004, R005, R006, R007, R026, R031];
+/**
+ * R-042 — `os.arch` → `uaCh.sec-ch-ua-arch`.
+ *
+ * Quoted on the wire (`'"arm"'` / `'"x86"'`) — matches the on-the-wire
+ * shape Chrome emits for `Sec-CH-UA-Arch`. The corresponding
+ * `userAgentMetadata.architecture` CDP enum is the unquoted form
+ * (`"arm" | "x86" | ""`); `Session` strips the quotes when it builds the
+ * metadata struct.
+ *
+ * macOS Apple Silicon → `"arm"`, Intel → `"x86"`. Linux/Windows mirror the
+ * profile arch directly. Per Chromium source, the enum is `"arm"`/`"x86"`
+ * even on 64-bit (the bit-width lives in `bitness`, R-043).
+ */
+export const R042: Rule = defineRule<readonly [OsArch], string>({
+  id: "R-042",
+  description: "Sec-CH-UA-Arch — quoted CPU family (arm | x86)",
+  inputs: ["os.arch"],
+  output: "uaCh.sec-ch-ua-arch",
+  derive([arch]) {
+    return arch === "arm64" ? '"arm"' : '"x86"';
+  },
+});
+
+/**
+ * R-043 — `os.arch` → `uaCh.sec-ch-ua-bitness`.
+ *
+ * Quoted on the wire (`'"64"'` / `'"32"'`). Per CDP source the
+ * corresponding `userAgentMetadata.bitness` enum is a STRING (`"64" | "32"
+ * | ""`) — never numeric, even though the value is digits-only. `Session`
+ * unquotes when populating the metadata struct.
+ */
+export const R043: Rule = defineRule<readonly [OsArch], string>({
+  id: "R-043",
+  description: "Sec-CH-UA-Bitness — quoted bit-width string",
+  inputs: ["os.arch"],
+  output: "uaCh.sec-ch-ua-bitness",
+  derive([arch]) {
+    // arm64 + x64 → 64-bit; x86 → 32-bit. Captured-baseline parity with
+    // packages/cli/src/capture/derive-profile.ts (the live capture path).
+    return arch === "x86" ? '"32"' : '"64"';
+  },
+});
+
+/**
+ * R-044 — `os.name` → `uaCh.sec-ch-ua-mobile`.
+ *
+ * Wire shape is `"?0"` (desktop) or `"?1"` (mobile) — Structured-Headers
+ * boolean. v1 schema's OS enum is `"macos" | "windows" | "linux"` (all
+ * desktop), so this rule always emits `"?0"`. Future Android/iOS profiles
+ * (v2) will flip the mapping; the rule is shaped to receive `os.name`
+ * directly so the change is one switch-arm wide.
+ */
+export const R044: Rule = defineRule<readonly [OsName], string>({
+  id: "R-044",
+  description: "Sec-CH-UA-Mobile — Structured-Headers boolean (?0 desktop, ?1 mobile)",
+  inputs: ["os.name"],
+  output: "uaCh.sec-ch-ua-mobile",
+  derive([osName]) {
+    // v1 enum is desktop-only; the explicit switch keeps the v2 add-mobile
+    // path obvious. (Per Chromium source the only mobile platforms that
+    // populate Sec-CH-UA-Mobile=?1 are Android + iOS — desktop Linux on a
+    // touchscreen still emits ?0.)
+    switch (osName) {
+      case "macos":
+      case "windows":
+      case "linux":
+        return "?0";
+    }
+  },
+});
+
+/**
+ * R-045 — `os.name` → `uaCh.sec-ch-ua-model`.
+ *
+ * Per spec, desktop platforms always emit an empty string for
+ * `Sec-CH-UA-Model` regardless of the actual hardware (`device.model` is
+ * read elsewhere in the matrix but Chromium does NOT plumb it to this
+ * header for desktop OSes — only Android/iOS Chrome populates the field
+ * with the device marketing name, e.g. `"Pixel 7"`). v1's OS enum is
+ * desktop-only so the wire value is always `'""'` (the empty quoted
+ * string).
+ *
+ * Captured-baseline parity: real desktop Chrome emits the header as
+ * `Sec-CH-UA-Model: ""`, NOT as the absence of the header.
+ */
+export const R045: Rule = defineRule<readonly [OsName], string>({
+  id: "R-045",
+  description: "Sec-CH-UA-Model — empty quoted string for desktop OSes",
+  inputs: ["os.name"],
+  output: "uaCh.sec-ch-ua-model",
+  derive([osName]) {
+    switch (osName) {
+      case "macos":
+      case "windows":
+      case "linux":
+        return '""';
+    }
+  },
+});
+
+/**
+ * R-046 — `uaCh.ua-full-version-list` → `uaCh.ua-full-version`.
+ *
+ * The single-string `ua-full-version` form (legacy `Sec-CH-UA-Full-Version`,
+ * deprecated in favour of the list form but still emitted by Chrome and
+ * still surfaced by `userAgentData.getHighEntropyValues({hints:["uaFullVersion"]})`)
+ * is the FIRST brand entry's version in the list — i.e. the BRANDED entry
+ * (Google Chrome / Microsoft Edge / etc.), NOT the GREASE entry and NOT
+ * the Chromium entry.
+ *
+ * The list shape is locked by R-031 to `[Branded, GREASE, Chromium]`, so
+ * `[0].version` is always the right answer.
+ *
+ * Inject (`client-hints.ts`) reads the same value via `SPOOF_FULL_VERSION_LIST[0].version`;
+ * the network metadata path reads it via `matrix.uaCh["ua-full-version"]`.
+ * Single source of truth = the list.
+ */
+export const R046: Rule = defineRule<readonly [string], string>({
+  id: "R-046",
+  description: "ua-full-version — branded-entry version from the full-version-list",
+  inputs: ["uaCh.ua-full-version-list"],
+  output: "uaCh.ua-full-version",
+  derive([fullVersionListJson]) {
+    // R-031 always emits a JSON array with at least the branded entry at
+    // index 0. Defensive parse: if the JSON is malformed for any reason we
+    // throw rather than silently degrade — silent fallback would mask a
+    // real upstream bug, which 0051 (Group A) already taught us about.
+    const parsed = JSON.parse(fullVersionListJson) as unknown;
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      throw new Error(
+        `[mochi/consistency] R-046: uaCh.ua-full-version-list is not a non-empty JSON array (got ${fullVersionListJson})`,
+      );
+    }
+    const first = parsed[0] as { brand?: unknown; version?: unknown };
+    if (typeof first.version !== "string" || first.version.length === 0) {
+      throw new Error(
+        `[mochi/consistency] R-046: uaCh.ua-full-version-list[0] has no string 'version' field (got ${JSON.stringify(first)})`,
+      );
+    }
+    return first.version;
+  },
+});
+
+export const USER_AGENT_RULES: readonly Rule[] = [
+  R023,
+  R004,
+  R005,
+  R006,
+  R007,
+  R026,
+  R031,
+  R042,
+  R043,
+  R044,
+  R045,
+  R046,
+];

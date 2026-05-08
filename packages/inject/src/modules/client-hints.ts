@@ -5,10 +5,18 @@
  *   - `matrix.uaCh["sec-ch-ua"]`                  → brands list (R-005)
  *   - `matrix.uaCh["sec-ch-ua-platform"]`         → platform   (R-006)
  *   - `matrix.uaCh["sec-ch-ua-platform-version"]` → platformVersion (R-007)
- *   - `matrix.uaCh["sec-ch-ua-arch"]`             → arch (optional)
- *   - `matrix.uaCh["sec-ch-ua-bitness"]`          → bitness (optional)
- *   - `matrix.uaCh["sec-ch-ua-model"]`            → model (optional)
- *   - `matrix.uaCh["sec-ch-ua-mobile"]`           → mobile (optional, "?0"/"?1")
+ *   - `matrix.uaCh["sec-ch-ua-arch"]`             → arch (R-042)
+ *   - `matrix.uaCh["sec-ch-ua-bitness"]`          → bitness (R-043)
+ *   - `matrix.uaCh["sec-ch-ua-model"]`            → model (R-045)
+ *   - `matrix.uaCh["sec-ch-ua-mobile"]`           → mobile (R-044, "?0"/"?1")
+ *   - `matrix.uaCh["ua-full-version-list"]`       → fullVersionList (R-031)
+ *   - `matrix.uaCh["ua-full-version"]`            → uaFullVersion (R-046)
+ *
+ * The same `sec-ch-ua*` and `ua-full-version*` fields drive
+ * `Network.setUserAgentOverride.userAgentMetadata` in `@mochi.js/core`
+ * (task 0261). Single source of truth — the JS-side spoof and the
+ * request-header spoof read the same matrix slots so they cannot drift
+ * (PLAN.md I-5).
  *
  * Sec-CH-UA values arrive on the wire as quoted (e.g. `'"macOS"'`,
  * `'"Google Chrome";v="131", "Not.A/Brand";v="8", "Chromium";v="131"'`).
@@ -136,6 +144,18 @@ export function emitClientHintsModule(matrix: MatrixV1): string {
     }
   }
 
+  // Single-string `Sec-CH-UA-Full-Version` (legacy hint, still surfaced via
+  // `getHighEntropyValues({hints:["uaFullVersion"]})`). R-046 derives this
+  // from the branded entry of `ua-full-version-list`. Falls back to the
+  // first entry when the matrix doesn't carry the explicit field — keeps
+  // the byte-for-byte parity guarantee with `Network.setUserAgentOverride`'s
+  // `userAgentMetadata.fullVersion` (which has the same fallback).
+  const uaFullVersionRaw = ua["ua-full-version"];
+  const uaFullVersion =
+    typeof uaFullVersionRaw === "string" && uaFullVersionRaw.length > 0
+      ? uaFullVersionRaw
+      : (fullVersionList[0]?.version ?? "");
+
   const brandsLiteral = JSON.stringify(brands);
   const fullVersionListLiteral = JSON.stringify(fullVersionList);
 
@@ -151,7 +171,7 @@ export function emitClientHintsModule(matrix: MatrixV1): string {
   var SPOOF_BITNESS = ${JSON.stringify(bitness)};
   var SPOOF_MODEL = ${JSON.stringify(model)};
   var SPOOF_MOBILE = ${mobile ? "true" : "false"};
-  var SPOOF_UA_FULL_VERSION = (SPOOF_FULL_VERSION_LIST[0] && SPOOF_FULL_VERSION_LIST[0].version) || "";
+  var SPOOF_UA_FULL_VERSION = ${JSON.stringify(uaFullVersion)};
 
   // Re-freeze brand entries on every read (Chrome returns frozen objects).
   function freezeBrands(arr) {

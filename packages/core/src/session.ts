@@ -296,24 +296,40 @@ export class Session {
     // Task 0255: defensive UA override at the network layer.
     //
     // The inject payload (Page.addScriptToEvaluateOnNewDocument) spoofs
-    // `navigator.userAgent` in the JS surface, but `Network.requestWillBeSent`
-    // events (and the request line itself) carry the BARE browser UA — which
-    // under `--headless=new` still contains the substring "HeadlessChrome".
-    // The inject can never reach those bytes because they're emitted before
-    // any document script runs.
+    // `navigator.userAgent` and `navigator.userAgentData` in the JS
+    // surface, but `Network.requestWillBeSent` events (and the request
+    // line itself) carry the BARE browser UA — which under `--headless=new`
+    // still contains the substring "HeadlessChrome" — AND the bare
+    // `Sec-CH-UA*` request-header set. The inject can never reach those
+    // bytes because they're emitted before any document script runs.
+    //
+    // 0255 plumbed `userAgent`. 0261 closes the cross-layer leak that left
+    // open: without `userAgentMetadata`, the request `Sec-CH-UA*` headers
+    // carry CfT defaults instead of the matrix, so a fingerprinter doing
+    // `getHighEntropyValues()` and comparing against the request headers
+    // sees a mismatch (direct PLAN.md I-5 violation). The metadata struct
+    // is the CDP-canonical UA-CH descriptor; Chromium derives every
+    // `Sec-CH-UA*` header from it. Both surfaces (this network call and
+    // the inject's `client-hints.ts` getHighEntropyValues) read the SAME
+    // matrix fields, so they cannot drift.
     //
     // `Network.setUserAgentOverride` is a per-target setter that does NOT
     // require `Network.enable` (it only stores override state); §8.2's ban
-    // on `Network.enable` is therefore unaffected. Sent immediately after
-    // attach and before any navigation so the very first request the page
-    // issues already carries the matrix UA.
+    // on `Network.enable` is therefore unaffected, with or without the
+    // metadata payload. Sent immediately after attach and before any
+    // navigation so the very first request the page issues already carries
+    // the matrix UA + UA-CH headers.
     //
     // Skipped under `bypassInject:true` (PLAN.md §12.1) — capture flows must
-    // record the bare browser fingerprint, including its raw UA.
+    // record the bare browser fingerprint, including its raw UA AND raw
+    // `Sec-CH-UA*` headers.
     if (!this.bypassInject) {
       await this.router.send(
         "Network.setUserAgentOverride",
-        { userAgent: this.profile.userAgent },
+        {
+          userAgent: this.profile.userAgent,
+          userAgentMetadata: buildUserAgentMetadata(this.profile),
+        },
         { sessionId: attached.sessionId },
       );
     }
@@ -790,4 +806,179 @@ export class Session {
       throw new Error("[mochi] session is closed");
     }
   }
+}
+
+// ---- UA-CH metadata helpers (task 0261) -------------------------------------
+
+/**
+ * Single brand entry as accepted by `Network.setUserAgentOverride`'s
+ * `userAgentMetadata.brands` / `fullVersionList`.
+ *
+ * @internal
+ */
+interface UaMetadataBrand {
+  brand: string;
+  version: string;
+}
+
+/**
+ * Strip surrounding ASCII double-quotes (the on-the-wire form for several
+ * `Sec-CH-UA*` headers — `'"macOS"'`, `'"14.0.0"'`, `'"arm"'`, `'"64"'`).
+ * The CDP `userAgentMetadata` enums consume the unquoted form.
+ */
+function unquoteUaCh(s: string): string {
+  if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) {
+    return s.slice(1, -1);
+  }
+  return s;
+}
+
+/**
+ * Parse a Sec-CH-UA-style header value
+ * (`'"Brand A";v="123", "Not.A/Brand";v="8", "Brand B";v="456"'`) into the
+ * `[{brand, version}, ...]` shape `userAgentMetadata.brands` expects.
+ *
+ * Hand-written state machine — Sec-CH-UA is RFC 8941 Structured Headers
+ * with quoted strings, so a regex split on `,` would break on
+ * `"Brand,with,commas"`. Mirrors `parseSecChUa` in
+ * `@mochi.js/inject/src/modules/client-hints.ts` byte-for-byte: same
+ * source field (`matrix.uaCh["sec-ch-ua"]`), same output shape, so the
+ * network surface and the JS surface cannot drift.
+ *
+ * @internal
+ */
+function parseSecChUaBrandList(s: string): UaMetadataBrand[] {
+  const out: UaMetadataBrand[] = [];
+  // Split on `,` outside quoted segments. `depth` toggles inside `"…"`.
+  const parts: string[] = [];
+  let depth = 0;
+  let cur = "";
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i] as string;
+    if (c === '"') {
+      depth = depth === 0 ? 1 : 0;
+      cur += c;
+    } else if (c === "," && depth === 0) {
+      parts.push(cur);
+      cur = "";
+    } else {
+      cur += c;
+    }
+  }
+  if (cur.length > 0) parts.push(cur);
+  for (const raw of parts) {
+    const piece = raw.trim();
+    if (piece.length === 0) continue;
+    const semi = piece.indexOf(";");
+    if (semi === -1) {
+      out.push({ brand: unquoteUaCh(piece), version: "" });
+      continue;
+    }
+    const brandPart = piece.slice(0, semi).trim();
+    const rest = piece.slice(semi + 1).trim();
+    let version = "";
+    if (rest.startsWith("v=")) {
+      version = unquoteUaCh(rest.slice(2).trim());
+    }
+    out.push({ brand: unquoteUaCh(brandPart), version });
+  }
+  return out;
+}
+
+/**
+ * Parse the JSON-encoded `uaCh.ua-full-version-list` (R-031) into the
+ * `[{brand, version}]` shape. Falls through to the brand-list parser if
+ * the matrix doesn't carry the field — every shipped profile does, so
+ * the fallback is purely defensive.
+ *
+ * @internal
+ */
+function parseFullVersionList(matrix: MatrixV1): UaMetadataBrand[] {
+  const raw = matrix.uaCh["ua-full-version-list"];
+  if (typeof raw === "string" && raw.length > 0) {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter(
+            (e): e is UaMetadataBrand =>
+              typeof e === "object" &&
+              e !== null &&
+              typeof (e as { brand?: unknown }).brand === "string" &&
+              typeof (e as { version?: unknown }).version === "string",
+          )
+          .map((e) => ({ brand: e.brand, version: e.version }));
+      }
+    } catch {
+      // Fall through.
+    }
+  }
+  // Fallback: reuse the brand-list majors. Matches the inject side's same
+  // fallback in client-hints.ts.
+  const secChUa = matrix.uaCh["sec-ch-ua"] ?? "";
+  return parseSecChUaBrandList(secChUa);
+}
+
+/**
+ * Build the `userAgentMetadata` parameter for `Network.setUserAgentOverride`
+ * from a derived MatrixV1. Single source of truth = the matrix; the inject
+ * `client-hints.ts` module reads the same fields, so the JS-API surface
+ * (`navigator.userAgentData.getHighEntropyValues`) and the request-header
+ * surface (`Sec-CH-UA*`) cannot drift.
+ *
+ * Field shape per CDP spec:
+ *   - `brands`             — `[{brand, version}]`, brand-list majors.
+ *   - `fullVersionList`    — `[{brand, version}]`, tip-locked full versions.
+ *   - `fullVersion`        — string, branded entry's version (R-046).
+ *   - `platform`           — unquoted Sec-CH-UA-Platform value.
+ *   - `platformVersion`    — unquoted Sec-CH-UA-Platform-Version.
+ *   - `architecture`       — `"arm" | "x86" | ""` (R-042 unquoted).
+ *   - `model`              — free-form string, empty for desktop (R-045).
+ *   - `mobile`             — boolean (R-044 → `?1` mapped to true).
+ *   - `bitness`            — STRING `"64" | "32" | ""` (R-043 unquoted),
+ *                            never numeric.
+ *   - `wow64`              — boolean; matrix doesn't model nested-WOW64,
+ *                            we always emit false (task 0261 out-of-scope).
+ *
+ * @internal
+ */
+export function buildUserAgentMetadata(matrix: MatrixV1): {
+  brands: UaMetadataBrand[];
+  fullVersionList: UaMetadataBrand[];
+  fullVersion: string;
+  platform: string;
+  platformVersion: string;
+  architecture: string;
+  model: string;
+  mobile: boolean;
+  bitness: string;
+  wow64: boolean;
+} {
+  const ua = matrix.uaCh;
+  const brandsRaw = ua["sec-ch-ua"] ?? "";
+  const brands = parseSecChUaBrandList(brandsRaw);
+  const fullVersionList = parseFullVersionList(matrix);
+  const fullVersion =
+    typeof ua["ua-full-version"] === "string" && ua["ua-full-version"].length > 0
+      ? ua["ua-full-version"]
+      : (fullVersionList[0]?.version ?? "");
+  const platform = unquoteUaCh(ua["sec-ch-ua-platform"] ?? "");
+  const platformVersion = unquoteUaCh(ua["sec-ch-ua-platform-version"] ?? "");
+  const architecture = unquoteUaCh(ua["sec-ch-ua-arch"] ?? "");
+  const bitness = unquoteUaCh(ua["sec-ch-ua-bitness"] ?? "");
+  const model = unquoteUaCh(ua["sec-ch-ua-model"] ?? "");
+  // Sec-CH-UA-Mobile wire form is "?0" / "?1" (Structured-Headers boolean).
+  const mobile = ua["sec-ch-ua-mobile"] === "?1";
+  return {
+    brands,
+    fullVersionList,
+    fullVersion,
+    platform,
+    platformVersion,
+    architecture,
+    model,
+    mobile,
+    bitness,
+    wow64: false,
+  };
 }
