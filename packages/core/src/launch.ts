@@ -41,6 +41,9 @@ export interface ProxyConfig {
  *   - `args`: appended after the default flag set.
  *   - `out.traceDir`: not yet honored at v0.1.
  *   - `timeout`: per-CDP-request default; defaults to 30000ms.
+ *   - `bypassInject`: short-circuits the inject payload entirely (see field
+ *     JSDoc). Intended for `mochi capture` and similar baseline-collection
+ *     flows — never enable in production.
  */
 export interface LaunchOptions {
   profile: ProfileId | ProfileV1;
@@ -51,6 +54,22 @@ export interface LaunchOptions {
   args?: string[];
   out?: { traceDir?: string };
   timeout?: number;
+  /**
+   * When `true`, the {@link Session} skips both `buildPayload` (no payload
+   * is compiled) and `Page.addScriptToEvaluateOnNewDocument` on every new
+   * page. Auto-attached worker / service-worker / audio-worklet targets
+   * are likewise NOT injected — the browser reports its bare, un-spoofed
+   * fingerprints.
+   *
+   * Intended for `mochi capture` and similar baseline-collection flows;
+   * **do not enable in production**. The whole point of mochi is the
+   * inject pipeline; bypassing it produces a session that will be
+   * trivially fingerprinted as Chromium-for-Testing.
+   *
+   * Defaults to `false`. PLAN.md §12.1 (capture must run against bare
+   * Chromium); task 0040.
+   */
+  bypassInject?: boolean;
 }
 
 /**
@@ -80,6 +99,7 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
     matrix,
     seed: opts.seed,
     ...(opts.timeout !== undefined ? { defaultTimeoutMs: opts.timeout } : {}),
+    ...(opts.bypassInject === true ? { bypassInject: true } : {}),
   });
   return session;
 }

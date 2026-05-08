@@ -57,4 +57,14 @@ describe("@mochi.js/cli (claim release)", () => {
     const code = await main(["browsers", "unknown-action-xyz"]);
     expect(code).not.toBe(0);
   });
+
+  it("main(['capture', '--help']) returns 0", async () => {
+    const code = await main(["capture", "--help"]);
+    expect(code).toBe(0);
+  });
+
+  it("main(['capture']) returns nonzero (missing --profile-id)", async () => {
+    const code = await main(["capture"]);
+    expect(code).not.toBe(0);
+  });
 });

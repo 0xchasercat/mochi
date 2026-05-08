@@ -1,0 +1,765 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>mochi probe page</title>
+  <!--
+    tests/fixtures/probe-page.html — the canonical mochi probe page.
+
+    Self-contained, inline JS only, no network. Runs every probe family
+    vendored from chaser-recon's `src/lib/fingerprint/*` and emits the
+    aggregated result as JSON in `<pre id="probes">`. The `mochi capture`
+    tool (phase 0.4) and the `@mochi.js/harness` runner (phase 0.5) both
+    consume this fixture.
+
+    Sentinel:    `window.__probesReady === true` once the result element
+                 has been populated.
+    Output:      `<pre id="probes">` text content is `JSON.stringify(probes)`.
+    Budget:      < 5 seconds against bare Chromium-for-Testing.
+    Provenance:  PLAN.md §13.1; tasks/0040-mochi-capture.md.
+  -->
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 1rem; }
+    pre { white-space: pre-wrap; word-break: break-all; max-width: 100%; }
+    #status { color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>mochi probe page</h1>
+  <p id="status">running probes…</p>
+  <pre id="probes"></pre>
+
+  <script>
+  /* eslint-disable */
+  (function () {
+    "use strict";
+
+    // ---- helpers -----------------------------------------------------------
+    function safeSync(fn) {
+      try { return fn(); } catch (e) { return { __error: String((e && e.message) || e) }; }
+    }
+    async function safeAsync(fn) {
+      try { return await fn(); } catch (e) { return { __error: String((e && e.message) || e) }; }
+    }
+    function hashString(str) {
+      var hash = 0;
+      for (var i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash |= 0;
+      }
+      return (hash >>> 0).toString(16).toUpperCase().padStart(8, "0");
+    }
+
+    // ---- navigator probe (chaser-recon/navigator-probe.ts) ----------------
+    async function probeNavigator() {
+      var nav = navigator;
+      var result = {};
+      var basicProps = [
+        "userAgent", "platform", "vendor", "vendorSub", "product", "productSub",
+        "appVersion", "appName", "appCodeName", "language", "languages",
+        "cookieEnabled", "doNotTrack", "maxTouchPoints", "hardwareConcurrency",
+        "deviceMemory", "pdfViewerEnabled", "webdriver"
+      ];
+      var secure = window.isSecureContext === true;
+      result.secureContext = secure;
+      for (var i = 0; i < basicProps.length; i++) {
+        var prop = basicProps[i];
+        try {
+          var val = nav[prop];
+          if (prop === "languages" && val && val.slice) val = val.slice();
+          result[prop] = (val === undefined ? null : val);
+        } catch (e) { result[prop] = "error"; }
+      }
+      try {
+        var conn = nav.connection;
+        if (conn) {
+          result.connection = {
+            effectiveType: conn.effectiveType,
+            downlink: conn.downlink,
+            rtt: conn.rtt,
+            saveData: conn.saveData,
+            type: conn.type
+          };
+        }
+      } catch (e) { result.connection = "error"; }
+      try {
+        var plugins = [];
+        for (var j = 0; j < nav.plugins.length; j++) {
+          var p = nav.plugins[j];
+          plugins.push({ name: p.name, filename: p.filename, description: p.description });
+        }
+        result.plugins = plugins;
+        result.pluginCount = plugins.length;
+      } catch (e) { result.plugins = "error"; }
+      try {
+        var mimes = [];
+        for (var k = 0; k < nav.mimeTypes.length; k++) mimes.push(nav.mimeTypes[k].type);
+        result.mimeTypes = mimes;
+      } catch (e) { result.mimeTypes = "error"; }
+      try {
+        var uaData = nav.userAgentData;
+        if (uaData) {
+          result.userAgentData = {
+            brands: uaData.brands,
+            mobile: uaData.mobile,
+            platform: uaData.platform
+          };
+          try {
+            var hi = await uaData.getHighEntropyValues([
+              "architecture", "bitness", "model", "platformVersion",
+              "fullVersionList", "wow64", "formFactor"
+            ]);
+            result.userAgentDataHighEntropy = hi;
+          } catch (e) { result.userAgentDataHighEntropy = "denied"; }
+        }
+      } catch (e) { result.userAgentData = "error"; }
+      try {
+        var permNames = ["geolocation", "notifications", "camera", "microphone",
+          "accelerometer", "gyroscope", "magnetometer", "clipboard-read", "clipboard-write"];
+        var perms = {};
+        for (var pi = 0; pi < permNames.length; pi++) {
+          var name = permNames[pi];
+          try {
+            var status = await nav.permissions.query({ name: name });
+            perms[name] = status.state;
+          } catch (e) { perms[name] = "unsupported"; }
+        }
+        result.permissions = perms;
+      } catch (e) { result.permissions = "error"; }
+      try {
+        if (nav.storage && nav.storage.estimate) {
+          var est = await nav.storage.estimate();
+          result.storageEstimate = { quota: est.quota, usage: est.usage };
+        }
+      } catch (e) { result.storageEstimate = "error"; }
+      result.bluetooth = "bluetooth" in nav;
+      result.usb = "usb" in nav;
+      result.serial = "serial" in nav;
+      result.hid = "hid" in nav;
+      result.xr = "xr" in nav;
+      result.gpu = "gpu" in nav;
+      result.ink = "ink" in nav;
+      result.scheduling = "scheduling" in nav;
+      result.windowControlsOverlay = "windowControlsOverlay" in nav;
+      result.virtualKeyboard = "virtualKeyboard" in nav;
+      return result;
+    }
+
+    // ---- screen probe (chaser-recon/screen-probe.ts) -----------------------
+    function probeScreen() {
+      var result = {};
+      result.width = screen.width;
+      result.height = screen.height;
+      result.availWidth = screen.availWidth;
+      result.availHeight = screen.availHeight;
+      result.colorDepth = screen.colorDepth;
+      result.pixelDepth = screen.pixelDepth;
+      result.innerWidth = window.innerWidth;
+      result.innerHeight = window.innerHeight;
+      result.outerWidth = window.outerWidth;
+      result.outerHeight = window.outerHeight;
+      result.screenX = window.screenX;
+      result.screenY = window.screenY;
+      result.devicePixelRatio = window.devicePixelRatio;
+      try {
+        result.orientation = {
+          type: screen.orientation && screen.orientation.type,
+          angle: screen.orientation && screen.orientation.angle
+        };
+      } catch (e) { result.orientation = "error"; }
+      var mq = {};
+      var mqTests = [
+        ["prefers-color-scheme", ["dark", "light"]],
+        ["prefers-reduced-motion", ["reduce", "no-preference"]],
+        ["prefers-contrast", ["more", "less", "custom", "no-preference"]],
+        ["forced-colors", ["active", "none"]],
+        ["color-gamut", ["srgb", "p3", "rec2020"]],
+        ["pointer", ["none", "coarse", "fine"]],
+        ["hover", ["none", "hover"]],
+        ["any-pointer", ["none", "coarse", "fine"]],
+        ["any-hover", ["none", "hover"]],
+        ["display-mode", ["fullscreen", "standalone", "minimal-ui", "browser"]],
+        ["dynamic-range", ["standard", "high"]],
+        ["update", ["none", "slow", "fast"]]
+      ];
+      for (var i = 0; i < mqTests.length; i++) {
+        var feature = mqTests[i][0];
+        var values = mqTests[i][1];
+        for (var v = 0; v < values.length; v++) {
+          if (window.matchMedia("(" + feature + ": " + values[v] + ")").matches) {
+            mq[feature] = values[v];
+            break;
+          }
+        }
+      }
+      var dpiBreaks = [96, 120, 144, 192, 288, 384];
+      for (var d = 0; d < dpiBreaks.length; d++) {
+        if (window.matchMedia("(min-resolution: " + dpiBreaks[d] + "dpi)").matches) {
+          mq["min-resolution"] = dpiBreaks[d] + "dpi";
+        }
+      }
+      mq["monochrome"] = window.matchMedia("(monochrome)").matches;
+      result.mediaQueries = mq;
+      try {
+        var vv = window.visualViewport;
+        if (vv) {
+          result.visualViewport = {
+            width: vv.width, height: vv.height,
+            offsetLeft: vv.offsetLeft, offsetTop: vv.offsetTop,
+            pageLeft: vv.pageLeft, pageTop: vv.pageTop, scale: vv.scale
+          };
+        }
+      } catch (e) { result.visualViewport = "error"; }
+      return result;
+    }
+
+    // ---- canvas probe (chaser-recon/canvas-probe.ts) -----------------------
+    function probeCanvas() {
+      var result = {};
+      try {
+        var canvas = document.createElement("canvas");
+        canvas.width = 300; canvas.height = 150;
+        var ctx = canvas.getContext("2d");
+        if (!ctx) return { error: "no 2d context" };
+        ctx.fillStyle = "#f60"; ctx.fillRect(125, 1, 62, 20);
+        ctx.fillStyle = "#069"; ctx.font = "14px Arial, sans-serif";
+        ctx.fillText("mochi probe ⛬", 2, 15);
+        ctx.fillStyle = "rgba(102, 204, 0, 0.7)"; ctx.fillRect(0, 0, 50, 50);
+        ctx.beginPath(); ctx.arc(50, 50, 30, 0, Math.PI * 2, true); ctx.closePath();
+        ctx.fillStyle = "#8B008B"; ctx.fill();
+        var grad = ctx.createLinearGradient(0, 0, 200, 0);
+        grad.addColorStop(0, "red"); grad.addColorStop(0.5, "green"); grad.addColorStop(1, "blue");
+        ctx.fillStyle = grad; ctx.fillRect(100, 50, 150, 80);
+        ctx.shadowColor = "rgba(0,0,0,0.5)"; ctx.shadowBlur = 10;
+        ctx.shadowOffsetX = 5; ctx.shadowOffsetY = 5;
+        ctx.fillStyle = "#FF6347"; ctx.fillRect(20, 80, 60, 40);
+        ctx.beginPath(); ctx.moveTo(170, 130);
+        ctx.bezierCurveTo(170, 100, 250, 100, 250, 130);
+        ctx.strokeStyle = "#4B0082"; ctx.lineWidth = 3; ctx.stroke();
+        var d1 = canvas.toDataURL("image/png");
+        var d2 = canvas.toDataURL("image/png");
+        var d3 = canvas.toDataURL("image/png");
+        result.consistent = (d1 === d2 && d2 === d3);
+        result.hash = hashString(d1);
+        result.dataUrlLength = d1.length;
+        result.dataUrlPrefix = d1.substring(0, 50);
+        try {
+          var w = canvas.toDataURL("image/webp");
+          result.webpSupport = w.indexOf("data:image/webp") === 0;
+        } catch (e) { result.webpSupport = false; }
+        try {
+          result.jpegHighLength = canvas.toDataURL("image/jpeg", 1.0).length;
+          result.jpegLowLength = canvas.toDataURL("image/jpeg", 0.1).length;
+        } catch (e) { /* ignore */ }
+      } catch (e) {
+        result.error = String(e);
+      }
+      return result;
+    }
+
+    // ---- webgl probe (chaser-recon/webgl-probe.ts) -------------------------
+    function probeWebGL() {
+      var result = {};
+      try {
+        var canvas = document.createElement("canvas");
+        var gl = canvas.getContext("webgl2") ||
+                 canvas.getContext("webgl") ||
+                 canvas.getContext("experimental-webgl");
+        if (!gl) return { error: "no webgl context" };
+        result.version = gl.getParameter(gl.VERSION);
+        result.shadingLanguageVersion = gl.getParameter(gl.SHADING_LANGUAGE_VERSION);
+        result.vendor = gl.getParameter(gl.VENDOR);
+        result.renderer = gl.getParameter(gl.RENDERER);
+        var ext = gl.getExtension("WEBGL_debug_renderer_info");
+        if (ext) {
+          result.unmaskedVendor = gl.getParameter(ext.UNMASKED_VENDOR_WEBGL);
+          result.unmaskedRenderer = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL);
+        }
+        result.extensions = gl.getSupportedExtensions();
+        result.extensionCount = (result.extensions && result.extensions.length) || 0;
+        result.maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+        result.maxViewportDims = Array.from(gl.getParameter(gl.MAX_VIEWPORT_DIMS));
+        result.maxRenderbufferSize = gl.getParameter(gl.MAX_RENDERBUFFER_SIZE);
+        result.maxCombinedTextureImageUnits = gl.getParameter(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS);
+        result.maxCubeMapTextureSize = gl.getParameter(gl.MAX_CUBE_MAP_TEXTURE_SIZE);
+        result.maxFragmentUniformVectors = gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS);
+        result.maxTextureImageUnits = gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS);
+        result.maxVertexAttribs = gl.getParameter(gl.MAX_VERTEX_ATTRIBS);
+        result.maxVertexTextureImageUnits = gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS);
+        result.maxVertexUniformVectors = gl.getParameter(gl.MAX_VERTEX_UNIFORM_VECTORS);
+        result.maxVaryingVectors = gl.getParameter(gl.MAX_VARYING_VECTORS);
+        result.aliasedLineWidthRange = Array.from(gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE));
+        result.aliasedPointSizeRange = Array.from(gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE));
+        // max color attachments — webgl2 only
+        try {
+          if (gl.MAX_COLOR_ATTACHMENTS) {
+            result.maxColorAttachments = gl.getParameter(gl.MAX_COLOR_ATTACHMENTS);
+          }
+        } catch (e) { /* ignore */ }
+        try {
+          var anisoExt = gl.getExtension("EXT_texture_filter_anisotropic");
+          result.maxAnisotropy = anisoExt
+            ? gl.getParameter(anisoExt.MAX_TEXTURE_MAX_ANISOTROPY_EXT)
+            : null;
+        } catch (e) { result.maxAnisotropy = null; }
+
+        // Precision formats
+        var pf = {};
+        var stages = [[gl.VERTEX_SHADER, "vertex"], [gl.FRAGMENT_SHADER, "fragment"]];
+        var precisions = [
+          [gl.LOW_FLOAT, "lowFloat"], [gl.MEDIUM_FLOAT, "medFloat"], [gl.HIGH_FLOAT, "highFloat"],
+          [gl.LOW_INT, "lowInt"], [gl.MEDIUM_INT, "medInt"], [gl.HIGH_INT, "highInt"]
+        ];
+        for (var s = 0; s < stages.length; s++) {
+          for (var pp = 0; pp < precisions.length; pp++) {
+            var f = gl.getShaderPrecisionFormat(stages[s][0], precisions[pp][0]);
+            if (f) {
+              pf[stages[s][1] + "_" + precisions[pp][1]] = {
+                rangeMin: f.rangeMin, rangeMax: f.rangeMax, precision: f.precision
+              };
+            }
+          }
+        }
+        result.precisionFormats = pf;
+
+        // Render-hash on a tiny scene so we get a reproducible fingerprint
+        canvas.width = 64; canvas.height = 64;
+        var gl2 = canvas.getContext("webgl");
+        if (gl2) {
+          var vs = gl2.createShader(gl2.VERTEX_SHADER);
+          gl2.shaderSource(vs, "attribute vec2 position; void main(){gl_Position=vec4(position,0.0,1.0);}");
+          gl2.compileShader(vs);
+          var fs = gl2.createShader(gl2.FRAGMENT_SHADER);
+          gl2.shaderSource(fs, "precision mediump float; void main(){gl_FragColor=vec4(0.86,0.44,0.26,1.0);}");
+          gl2.compileShader(fs);
+          var prog = gl2.createProgram();
+          gl2.attachShader(prog, vs); gl2.attachShader(prog, fs);
+          gl2.linkProgram(prog); gl2.useProgram(prog);
+          var buf = gl2.createBuffer();
+          gl2.bindBuffer(gl2.ARRAY_BUFFER, buf);
+          gl2.bufferData(gl2.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl2.STATIC_DRAW);
+          var posAttr = gl2.getAttribLocation(prog, "position");
+          gl2.enableVertexAttribArray(posAttr);
+          gl2.vertexAttribPointer(posAttr, 2, gl2.FLOAT, false, 0, 0);
+          gl2.drawArrays(gl2.TRIANGLE_STRIP, 0, 4);
+          var pixels = new Uint8Array(64 * 64 * 4);
+          gl2.readPixels(0, 0, 64, 64, gl2.RGBA, gl2.UNSIGNED_BYTE, pixels);
+          var h = 0;
+          for (var pi = 0; pi < pixels.length; pi++) {
+            h = ((h << 5) - h) + pixels[pi]; h |= 0;
+          }
+          result.renderHash = (h >>> 0).toString(16).toUpperCase().padStart(8, "0");
+        }
+      } catch (e) {
+        result.error = String(e);
+      }
+      return result;
+    }
+
+    // ---- webgpu probe (chaser-recon/webgl-probe.ts probeWebGPU) ------------
+    async function probeWebGPU() {
+      var result = {};
+      try {
+        var gpu = navigator.gpu;
+        if (!gpu) return { supported: false };
+        result.supported = true;
+        var adapter = await gpu.requestAdapter();
+        if (adapter) {
+          try { result.features = Array.from(adapter.features); } catch (e) {}
+          try {
+            result.info = {
+              vendor: adapter.info && adapter.info.vendor,
+              architecture: adapter.info && adapter.info.architecture,
+              device: adapter.info && adapter.info.device,
+              description: adapter.info && adapter.info.description
+            };
+          } catch (e) {}
+          try { result.isFallbackAdapter = adapter.isFallbackAdapter; } catch (e) {}
+        }
+      } catch (e) {
+        result.error = String(e);
+      }
+      return result;
+    }
+
+    // ---- audio probe (chaser-recon/audio-probe.ts) -------------------------
+    async function probeAudio() {
+      var result = {};
+      try {
+        var AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return { error: "no AudioContext" };
+        var ctx = new AudioCtx();
+        result.sampleRate = ctx.sampleRate;
+        result.state = ctx.state;
+        result.baseLatency = ctx.baseLatency;
+        result.outputLatency = ctx.outputLatency;
+        result.maxChannelCount = ctx.destination.maxChannelCount;
+        result.numberOfInputs = ctx.destination.numberOfInputs;
+        result.numberOfOutputs = ctx.destination.numberOfOutputs;
+        result.channelCount = ctx.destination.channelCount;
+        result.channelCountMode = ctx.destination.channelCountMode;
+        result.channelInterpretation = ctx.destination.channelInterpretation;
+        var off = new OfflineAudioContext(1, 44100, 44100);
+        var osc = off.createOscillator();
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(10000, off.currentTime);
+        var comp = off.createDynamicsCompressor();
+        comp.threshold.setValueAtTime(-50, off.currentTime);
+        comp.knee.setValueAtTime(40, off.currentTime);
+        comp.ratio.setValueAtTime(12, off.currentTime);
+        comp.attack.setValueAtTime(0, off.currentTime);
+        comp.release.setValueAtTime(0.25, off.currentTime);
+        osc.connect(comp); comp.connect(off.destination); osc.start(0);
+        var rendered = await off.startRendering();
+        var data = rendered.getChannelData(0);
+        var hash = 0;
+        for (var i = 4500; i < 5000; i++) hash += Math.abs(data[i]);
+        result.audioHash = hash.toString();
+        // First 10 sample bytes — enough to detect GPU/driver variance
+        result.sampleValues = Array.prototype.slice.call(data, 4500, 4510);
+        try { ctx.close(); } catch (e) {}
+      } catch (e) {
+        result.error = String(e);
+      }
+      return result;
+    }
+
+    // ---- media-devices probe (chaser-recon/media-probe.ts) -----------------
+    async function probeMediaDevices() {
+      var result = {};
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+          if (!window.isSecureContext) {
+            return {
+              error: "requires HTTPS (secure context)",
+              secureContextRequired: true,
+              deviceCount: null
+            };
+          }
+          return { error: "mediaDevices API not available" };
+        }
+        var devices = await navigator.mediaDevices.enumerateDevices();
+        result.devices = devices.map(function (d) {
+          return { deviceId: d.deviceId, kind: d.kind, label: d.label, groupId: d.groupId };
+        });
+        result.deviceCount = devices.length;
+        result.audioinput = devices.filter(function (d) { return d.kind === "audioinput"; }).length;
+        result.audiooutput = devices.filter(function (d) { return d.kind === "audiooutput"; }).length;
+        result.videoinput = devices.filter(function (d) { return d.kind === "videoinput"; }).length;
+        try {
+          result.supportedConstraints = navigator.mediaDevices.getSupportedConstraints();
+        } catch (e) { result.supportedConstraints = "error"; }
+      } catch (e) {
+        result.error = String(e);
+      }
+      return result;
+    }
+
+    // ---- speech-synthesis probe (chaser-recon/media-probe.ts) --------------
+    function probeSpeech() {
+      return new Promise(function (resolve) {
+        try {
+          if (!window.speechSynthesis) {
+            resolve({ error: "speechSynthesis not available" });
+            return;
+          }
+          var done = false;
+          var emit = function () {
+            if (done) return;
+            done = true;
+            var voices = window.speechSynthesis.getVoices();
+            var result = {
+              voices: voices.map(function (v) {
+                return {
+                  name: v.name, lang: v.lang, localService: v.localService,
+                  default: v.default, voiceURI: v.voiceURI
+                };
+              }),
+              voiceCount: voices.length,
+              localVoices: voices.filter(function (v) { return v.localService; }).length,
+              remoteVoices: voices.filter(function (v) { return !v.localService; }).length,
+              languages: Array.from(new Set(voices.map(function (v) { return v.lang; })))
+            };
+            resolve(result);
+          };
+          var initial = window.speechSynthesis.getVoices();
+          if (initial.length > 0) emit();
+          else {
+            window.speechSynthesis.onvoiceschanged = emit;
+            // fallback timeout — bare Chromium never fires voiceschanged in some builds
+            setTimeout(emit, 500);
+          }
+        } catch (e) {
+          resolve({ error: String(e) });
+        }
+      });
+    }
+
+    // ---- font probe (chaser-recon/font-probe.ts) ---------------------------
+    var FONT_LIST = [
+      // Windows
+      "Arial", "Arial Black", "Arial Narrow", "Calibri", "Cambria", "Cambria Math",
+      "Comic Sans MS", "Consolas", "Constantia", "Corbel", "Courier New",
+      "Franklin Gothic Medium", "Georgia", "Impact", "Lucida Console", "Lucida Sans Unicode",
+      "Microsoft Sans Serif", "Palatino Linotype", "Segoe Print", "Segoe Script",
+      "Segoe UI", "Segoe UI Symbol", "Tahoma", "Times New Roman", "Trebuchet MS",
+      "Verdana", "Webdings", "Wingdings",
+      // Mac
+      "American Typewriter", "Andale Mono", "Apple Chancery", "Apple Color Emoji",
+      "Apple SD Gothic Neo", "Avenir", "Avenir Next", "Baskerville",
+      "Big Caslon", "Brush Script MT", "Chalkboard", "Chalkboard SE",
+      "Chalkduster", "Cochin", "Copperplate", "Courier", "Didot", "Futura",
+      "Geneva", "Gill Sans", "Helvetica", "Helvetica Neue", "Herculanum",
+      "Hoefler Text", "Iowan Old Style", "Lucida Grande", "Luminari",
+      "Marker Felt", "Menlo", "Monaco", "Noteworthy", "Optima", "Osaka",
+      "Palatino", "Papyrus", "Phosphate", "Rockwell", "San Francisco",
+      "Savoye LET", "SignPainter", "Skia", "Snell Roundhand", "STIXGeneral",
+      "Superclarendon", "Symbol", "System Font", "Zapfino",
+      // Linux
+      "Cantarell", "DejaVu Sans", "DejaVu Sans Mono", "DejaVu Serif",
+      "Droid Sans", "Droid Sans Mono", "Droid Serif", "FreeMono", "FreeSans",
+      "FreeSerif", "Liberation Mono", "Liberation Sans", "Liberation Serif",
+      "Noto Sans", "Noto Serif", "Ubuntu", "Ubuntu Mono",
+      // CJK
+      "Microsoft YaHei", "Microsoft JhengHei", "SimHei", "SimSun", "NSimSun",
+      "PMingLiU", "MingLiU", "MS Gothic", "MS PGothic", "MS Mincho",
+      "Meiryo", "Yu Gothic", "Yu Mincho", "Hiragino Sans",
+      "Hiragino Kaku Gothic Pro", "Hiragino Mincho Pro",
+      // Web
+      "Roboto", "Open Sans", "Lato", "Montserrat", "Source Sans Pro",
+      "Raleway", "PT Sans", "Noto Sans JP", "Inter"
+    ];
+    function probeFonts() {
+      var result = {};
+      try {
+        var baseFonts = ["monospace", "sans-serif", "serif"];
+        var testString = "mmmmmmmmmmlli";
+        var testSize = "72px";
+        var span = document.createElement("span");
+        span.style.position = "absolute";
+        span.style.left = "-9999px";
+        span.style.fontSize = testSize;
+        span.style.lineHeight = "normal";
+        span.textContent = testString;
+        document.body.appendChild(span);
+        var baseW = {}; var baseH = {};
+        for (var i = 0; i < baseFonts.length; i++) {
+          span.style.fontFamily = baseFonts[i];
+          baseW[baseFonts[i]] = span.offsetWidth;
+          baseH[baseFonts[i]] = span.offsetHeight;
+        }
+        var detected = [];
+        for (var f = 0; f < FONT_LIST.length; f++) {
+          var found = false;
+          for (var b = 0; b < baseFonts.length; b++) {
+            span.style.fontFamily = "'" + FONT_LIST[f] + "', " + baseFonts[b];
+            if (span.offsetWidth !== baseW[baseFonts[b]] ||
+                span.offsetHeight !== baseH[baseFonts[b]]) {
+              found = true;
+              break;
+            }
+          }
+          if (found) detected.push(FONT_LIST[f]);
+        }
+        document.body.removeChild(span);
+        result.detected = detected;
+        result.count = detected.length;
+        result.tested = FONT_LIST.length;
+        result.hash = hashString(detected.join(","));
+        if ("fonts" in document) {
+          result.fontsApiReady = document.fonts.ready !== undefined;
+        }
+      } catch (e) {
+        result.error = String(e);
+      }
+      return result;
+    }
+
+    // ---- storage probe (chaser-recon/storage-probe.ts) ---------------------
+    function probeStorage() {
+      var result = {};
+      var secure = window.isSecureContext === true;
+      try {
+        var ls = window.localStorage;
+        ls.setItem("__mochi_test", "1"); ls.removeItem("__mochi_test");
+        result.localStorage = true; result.localStorageKeys = ls.length;
+      } catch (e) { result.localStorage = false; }
+      try {
+        var ss = window.sessionStorage;
+        ss.setItem("__mochi_test", "1"); ss.removeItem("__mochi_test");
+        result.sessionStorage = true; result.sessionStorageKeys = ss.length;
+      } catch (e) { result.sessionStorage = false; }
+      result.cookiesEnabled = navigator.cookieEnabled;
+      try {
+        document.cookie = "__mochi_test=1; SameSite=Strict";
+        result.cookiesWritable = document.cookie.indexOf("__mochi_test") !== -1;
+        document.cookie = "__mochi_test=; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+        result.cookieCount = document.cookie.split(";").filter(function (c) { return c.trim(); }).length;
+      } catch (e) { result.cookiesWritable = false; }
+      try { result.indexedDB = !!window.indexedDB; } catch (e) { result.indexedDB = false; }
+      if (secure) {
+        result.cacheStorage = "caches" in window;
+        result.serviceWorker = "serviceWorker" in navigator;
+        result.storageManager = "storage" in navigator;
+        result.fileSystemAccess = "showOpenFilePicker" in window;
+        result.sharedArrayBuffer = "SharedArrayBuffer" in window;
+      } else {
+        result.cacheStorage = "requires HTTPS";
+        result.serviceWorker = "requires HTTPS";
+        result.storageManager = "requires HTTPS";
+        result.fileSystemAccess = "requires HTTPS";
+        result.sharedArrayBuffer = "requires HTTPS";
+      }
+      result.sharedWorker = "SharedWorker" in window;
+      result.openDatabase = "openDatabase" in window;
+      result.broadcastChannel = "BroadcastChannel" in window;
+      result.secureContext = secure;
+      return result;
+    }
+
+    // ---- timing probe (chaser-recon/timing-probe.ts) -----------------------
+    function probeTiming() {
+      var result = {};
+      result.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      result.timezoneOffset = new Date().getTimezoneOffset();
+      result.locale = Intl.DateTimeFormat().resolvedOptions().locale;
+      var d = new Date(2024, 0, 1, 12, 0, 0);
+      result.dateString = d.toString();
+      result.localeString = d.toLocaleString();
+      result.localeDateString = d.toLocaleDateString();
+      try {
+        result.numberFormat = new Intl.NumberFormat().resolvedOptions();
+        result.dateTimeFormat = Intl.DateTimeFormat().resolvedOptions();
+        result.supportedCalendars = Intl.supportedValuesOf
+          ? Intl.supportedValuesOf("calendar") : "unsupported";
+        result.supportedCurrencies = Intl.supportedValuesOf
+          ? Intl.supportedValuesOf("currency").length : 0;
+        result.supportedNumberingSystems = Intl.supportedValuesOf
+          ? Intl.supportedValuesOf("numberingSystem") : "unsupported";
+        result.supportedTimeZones = Intl.supportedValuesOf
+          ? Intl.supportedValuesOf("timeZone").length : 0;
+        result.supportedUnits = Intl.supportedValuesOf
+          ? Intl.supportedValuesOf("unit").length : 0;
+      } catch (e) { result.intlError = true; }
+      try {
+        var times = [];
+        for (var i = 0; i < 20; i++) {
+          var t1 = performance.now(); var t2 = performance.now();
+          if (t2 > t1) times.push(t2 - t1);
+        }
+        result.timerPrecision = times.length ? Math.min.apply(null, times) : null;
+      } catch (e) { result.timerPrecision = "error"; }
+      result.mathFingerprint = {
+        E: Math.E, LN2: Math.LN2, LN10: Math.LN10,
+        LOG2E: Math.LOG2E, LOG10E: Math.LOG10E,
+        PI: Math.PI, SQRT2: Math.SQRT2, SQRT1_2: Math.SQRT1_2,
+        acos: Math.acos(0.5), acosh: Math.acosh(2),
+        asin: Math.asin(0.5), atan: Math.atan(1),
+        atanh: Math.atanh(0.5), cbrt: Math.cbrt(2),
+        cosh: Math.cosh(1), expm1: Math.expm1(1),
+        log1p: Math.log1p(0.5), sinh: Math.sinh(1),
+        tanh: Math.tanh(1)
+      };
+      return result;
+    }
+
+    // ---- bot-detection probe (chaser-recon/bot-detection.ts) ---------------
+    function probeBot() {
+      var result = {};
+      var wd = navigator.webdriver;
+      result.webdriver = wd;
+      result.webdriverType = wd === true ? "headless" : wd === false ? "normal" : "absent/tampered";
+      result.headlessChrome = /HeadlessChrome/.test(navigator.userAgent);
+      var automationKeys = [
+        "__webdriver_evaluate", "__selenium_evaluate", "__webdriver_script_function",
+        "__webdriver_script_func", "__webdriver_script_fn", "__fxdriver_evaluate",
+        "__driver_unwrapped", "__webdriver_unwrapped", "__driver_evaluate",
+        "__selenium_unwrapped", "__fxdriver_unwrapped",
+        "_selenium", "_Selenium_IDE_Recorder",
+        "callSelenium", "_phantom", "__nightmare",
+        "domAutomation", "domAutomationController",
+        "cdc_adoQpoasnfa76pfcZLmcfl_Array",
+        "cdc_adoQpoasnfa76pfcZLmcfl_Promise",
+        "cdc_adoQpoasnfa76pfcZLmcfl_Symbol"
+      ];
+      var detected = [];
+      for (var i = 0; i < automationKeys.length; i++) {
+        var k = automationKeys[i];
+        if (k in window || k in document) detected.push(k);
+      }
+      result.automationKeys = detected;
+      result.automationDetected = detected.length > 0;
+      result.chromeRuntime = !!(window.chrome && window.chrome.runtime);
+      result.pluginCount = navigator.plugins.length;
+      result.pluginInconsistency = navigator.plugins.length === 0 && !/Firefox/.test(navigator.userAgent);
+      result.languageInconsistency = !navigator.language || navigator.languages.length === 0;
+      result.permissionsApi = "permissions" in navigator;
+      result.screenDimensions = screen.width + "x" + screen.height;
+      result.suspiciousDimensions = screen.width === 0 || screen.height === 0;
+      result.maxTouchPoints = navigator.maxTouchPoints;
+      result.touchEvent = "ontouchstart" in window;
+      result.touchInconsistency = navigator.maxTouchPoints > 0 &&
+        !("ontouchstart" in window) && !/mobile/i.test(navigator.userAgent);
+      try { result.notificationPermission = Notification.permission; } catch (e) { result.notificationPermission = "error"; }
+      result.userActivation = navigator.userActivation ? {
+        hasBeenActive: navigator.userActivation.hasBeenActive,
+        isActive: navigator.userActivation.isActive
+      } : null;
+      try {
+        var nav = performance.getEntriesByType("navigation")[0];
+        if (nav) {
+          result.navigationTiming = {
+            type: nav.type, redirectCount: nav.redirectCount,
+            domComplete: Math.round(nav.domComplete),
+            loadEventEnd: Math.round(nav.loadEventEnd),
+            domInteractive: Math.round(nav.domInteractive)
+          };
+        }
+      } catch (e) { result.navigationTiming = "error"; }
+      try {
+        var depth = 0;
+        function recurse() { depth++; if (depth > 100) return depth; return recurse(); }
+        result.stackDepthTest = recurse();
+      } catch (e) { result.stackDepthTest = "limited"; }
+      return result;
+    }
+
+    // ---- driver -----------------------------------------------------------
+    async function runAll() {
+      var t0 = Date.now();
+      var probes = {};
+      probes.navigator    = await safeAsync(probeNavigator);
+      probes.screen       = safeSync(probeScreen);
+      probes.canvas       = safeSync(probeCanvas);
+      probes.webgl        = safeSync(probeWebGL);
+      probes.webgpu       = await safeAsync(probeWebGPU);
+      probes.audio        = await safeAsync(probeAudio);
+      probes.mediaDevices = await safeAsync(probeMediaDevices);
+      probes.speech       = await safeAsync(probeSpeech);
+      probes.fonts        = safeSync(probeFonts);
+      probes.storage      = safeSync(probeStorage);
+      probes.timing       = safeSync(probeTiming);
+      probes.bot          = safeSync(probeBot);
+      probes.__meta = {
+        capturedAt: new Date().toISOString(),
+        elapsedMs: Date.now() - t0,
+        href: location.href,
+        readyState: document.readyState
+      };
+      var pre = document.getElementById("probes");
+      pre.textContent = JSON.stringify(probes);
+      var status = document.getElementById("status");
+      if (status) status.textContent = "probes complete (" + (Date.now() - t0) + "ms)";
+      // Sentinel — set LAST so capture tools can poll until true.
+      window.__probesReady = true;
+    }
+
+    if (document.readyState === "complete" || document.readyState === "interactive") {
+      runAll();
+    } else {
+      window.addEventListener("DOMContentLoaded", runAll);
+    }
+  })();
+  </script>
+</body>
+</html>

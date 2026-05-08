@@ -15,7 +15,8 @@
       "!**/coverage",
       "!worktrees",
       "!packages/*/src/generated",
-      "!schemas/probe-manifest.schema.json"
+      "!schemas/probe-manifest.schema.json",
+      "!tests/fixtures/probe-page.html"
     ]
   },
   "formatter": {

@@ -27,6 +27,13 @@ export interface SessionInit {
   seed: string;
   /** Optional overrides for the underlying message-router timeout. */
   defaultTimeoutMs?: number;
+  /**
+   * When true, skip {@link buildPayload} AND skip
+   * `Page.addScriptToEvaluateOnNewDocument` on every new page; worker
+   * targets receive no inject either. Intended for `mochi capture` and
+   * similar baseline-collection flows. PLAN.md §12.1, task 0040.
+   */
+  bypassInject?: boolean;
 }
 
 /** Public Cookie shape (re-exported from page.ts). */
@@ -58,15 +65,30 @@ export class Session {
    * from the resolved {@link MatrixV1}; reused across every new page and
    * every auto-attached worker target. PLAN.md §5.3 / §8.4.
    *
+   * `null` when {@link SessionInit.bypassInject} is `true` (PLAN.md §12.1):
+   * the capture flow needs the bare browser fingerprint, so we skip both
+   * the build and the per-page install.
+   *
    * @internal — exposed via {@link _internalPayload} for tests/diagnostics.
    */
-  private readonly _payload: PayloadResult;
+  private readonly _payload: PayloadResult | null;
+  /**
+   * Whether this session bypasses the inject pipeline (no `buildPayload`,
+   * no `Page.addScriptToEvaluateOnNewDocument`, no worker injection).
+   * Set from {@link SessionInit.bypassInject}. PLAN.md §12.1, task 0040.
+   *
+   * @internal
+   */
+  private readonly bypassInject: boolean;
 
   constructor(init: SessionInit) {
     this.proc = init.proc;
     this.profile = init.matrix;
     this.seed = init.seed;
-    this._payload = buildPayload(init.matrix);
+    this.bypassInject = init.bypassInject === true;
+    // Skip payload compilation entirely when bypassed — capture flows must
+    // not pay the build cost AND must not see the matrix-derived bytes.
+    this._payload = this.bypassInject ? null : buildPayload(init.matrix);
     this.router = new MessageRouter(this.proc.reader, this.proc.writer, {
       defaultTimeoutMs: init.defaultTimeoutMs,
     });
@@ -104,23 +126,29 @@ export class Session {
     // (only Runtime.enable is forbidden). We enable here so subsequent
     // addScriptToEvaluateOnNewDocument is honoured by the page domain.
     await this.router.send("Page.enable", undefined, { sessionId: attached.sessionId });
-    // PLAN.md §8.4 — main-world inject. worldName MUST be the empty string.
-    const installed = await this.router.send<{ identifier: string }>(
-      "Page.addScriptToEvaluateOnNewDocument",
-      {
-        source: this._payload.code,
-        runImmediately: true,
-        worldName: "",
-        // includeCommandLineAPI defaults to false; we don't set it.
-      },
-      { sessionId: attached.sessionId },
-    );
+    // PLAN.md §12.1 / task 0040 — capture flow short-circuits inject so the
+    // browser reports its bare fingerprint. Otherwise install the payload
+    // main-world via §8.4. worldName MUST be the empty string.
+    let injectScriptIdentifier: string | undefined;
+    if (!this.bypassInject && this._payload !== null) {
+      const installed = await this.router.send<{ identifier: string }>(
+        "Page.addScriptToEvaluateOnNewDocument",
+        {
+          source: this._payload.code,
+          runImmediately: true,
+          worldName: "",
+          // includeCommandLineAPI defaults to false; we don't set it.
+        },
+        { sessionId: attached.sessionId },
+      );
+      injectScriptIdentifier = installed.identifier;
+    }
     const page = new Page({
       router: this.router,
       targetId: created.targetId,
       sessionId: attached.sessionId,
       initialUrl: "about:blank",
-      injectScriptIdentifier: installed.identifier,
+      ...(injectScriptIdentifier !== undefined ? { injectScriptIdentifier } : {}),
     });
     this._pages.push(page);
     return page;
@@ -216,10 +244,24 @@ export class Session {
    * Internal access to the compiled inject payload (sha256 + code).
    * Used by the contract test to pin the payload bytes per matrix.
    *
+   * Returns `null` when the session was constructed with
+   * `bypassInject: true` — capture-style sessions never compile a payload
+   * (PLAN.md §12.1, task 0040).
+   *
    * @internal
    */
-  _internalPayload(): PayloadResult {
+  _internalPayload(): PayloadResult | null {
     return this._payload;
+  }
+
+  /**
+   * Whether this session has the inject pipeline disabled. True when
+   * constructed with `bypassInject: true` (e.g. `mochi capture`).
+   *
+   * @internal
+   */
+  _internalBypassInject(): boolean {
+    return this.bypassInject;
   }
 
   /**
@@ -280,7 +322,8 @@ export class Session {
       targetType === "shared_worker" ||
       targetType === "audio_worklet";
 
-    if (isWorkerLike) {
+    // PLAN.md §12.1 / task 0040 — capture flow skips worker injection too.
+    if (isWorkerLike && !this.bypassInject && this._payload !== null) {
       try {
         await this.router.send(
           "Runtime.evaluate",

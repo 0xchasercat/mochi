@@ -39,6 +39,10 @@
     "lint": "biome check src/",
     "build": "echo 'no build step yet'"
   },
+  "dependencies": {
+    "@mochi.js/consistency": "workspace:*",
+    "@mochi.js/core": "workspace:*"
+  },
   "publishConfig": {
     "access": "public"
   }

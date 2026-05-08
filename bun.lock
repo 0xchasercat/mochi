@@ -24,6 +24,10 @@
       "bin": {
         "mochi": "./src/bin.ts",
       },
+      "dependencies": {
+        "@mochi.js/consistency": "workspace:*",
+        "@mochi.js/core": "workspace:*",
+      },
     },
     "packages/consistency": {
       "name": "@mochi.js/consistency",

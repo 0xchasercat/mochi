@@ -86,6 +86,10 @@ export async function main(argv: readonly string[]): Promise<number> {
     const { runBrowsers } = await import("./browsers/subcommand");
     return runBrowsers(argv.slice(1));
   }
+  if (arg === "capture") {
+    const { runCaptureCommand } = await import("./capture/subcommand");
+    return runCaptureCommand(argv.slice(1));
+  }
   console.error(
     `mochi v${VERSION} (claim release)\n` +
       `subcommands not yet implemented; see https://github.com/0xchasercat/mochi`,
