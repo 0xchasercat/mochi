@@ -25,10 +25,63 @@ The default is `"privacy-fallback"` because UTC+en-US is the failure-mode-of-lea
 ### Probe service
 
 - [ ] New `packages/core/src/geo-probe.ts` (or `packages/net/src/geo-probe.ts` — pick the layer that has cleanest access to wreq + matrix). Single function `probeExitGeo(opts: { proxy?: string; matrix: MatrixV1 }): Promise<ExitGeo | null>`.
-- [ ] Probe target: a small set of known-stable, free-tier geolocation endpoints. Prefer `https://ipinfo.io/json` or `https://ipapi.co/json/` (both have generous free tiers, no auth required for low volume). Document why each was chosen; rotate to fall back if one is rate-limited.
+- [ ] **Probe endpoint registry** (verified working 2026-05-09 from a residential IP):
+
+    | Endpoint | Auth | Notes |
+    |---|---|---|
+    | `https://ip.decodo.com/json` | none | clean schema, includes `proxy.ip`, ISP, city.time_zone |
+    | `https://ipinfo.io/json` | none (free tier) | flat shape: `country` (code), `timezone`, `loc` |
+    | `https://ipwho.is/` | none | rich shape: `country_code`, `timezone.id`, lat/lng |
+    | `https://api.ip.sb/geoip` | none | secondary fallback |
+    | `https://ifconfig.co/json` | none | secondary, simple |
+    | `https://api.iplocation.net/` | none | last resort, country-only |
+    | `https://ipapi.co/json/` | rate-limited from many IPs | KEEP in chain but expect frequent failures |
+
+  Each endpoint has a per-adapter normalizer to `ExitGeo`:
+  ```ts
+  type ExitGeo = {
+    ip: string;
+    country: string;        // ISO-3166-1 alpha-2, e.g. "TH"
+    region?: string;
+    city?: string;
+    timezone: string;       // IANA zone, e.g. "Asia/Bangkok"
+    postalCode?: string;
+    lat?: number;
+    lng?: number;
+    source: string;         // which endpoint answered
+  };
+  ```
+  Per-endpoint adapter (sketch):
+  ```ts
+  const ADAPTERS: { url: string; parse: (j: any) => ExitGeo | null }[] = [
+    { url: "https://ip.decodo.com/json",
+      parse: j => ({ ip: j.proxy?.ip, country: j.country?.code, city: j.city?.name,
+                     region: j.city?.state, timezone: j.city?.time_zone,
+                     postalCode: j.city?.zip_code, lat: j.city?.latitude,
+                     lng: j.city?.longitude, source: "decodo" }) },
+    { url: "https://ipinfo.io/json",
+      parse: j => ({ ip: j.ip, country: j.country, city: j.city, region: j.region,
+                     timezone: j.timezone, postalCode: j.postal,
+                     ...(j.loc?.split(",").length === 2
+                       ? { lat: +j.loc.split(",")[0], lng: +j.loc.split(",")[1] }
+                       : {}),
+                     source: "ipinfo" }) },
+    { url: "https://ipwho.is/",
+      parse: j => j.success === false ? null : ({ ip: j.ip, country: j.country_code,
+                     city: j.city, region: j.region, timezone: j.timezone?.id,
+                     postalCode: j.postal, lat: j.latitude, lng: j.longitude,
+                     source: "ipwhois" }) },
+    // ... more
+  ];
+  ```
+  Adapter MUST return `null` (not throw) on schema mismatch — schemas drift over time and the caller falls through to the next endpoint.
+- [ ] **Strategy**: shuffled-sequential with per-endpoint timeout + total cap.
+  - Shuffle ADAPTERS at probe time (so we don't always hammer the first one).
+  - For each adapter in order: 2s timeout per request. On success, return the parsed `ExitGeo`. On timeout / non-2xx / `null` from parser → continue to next.
+  - Cap total attempts at 4 (don't burn through every endpoint serially on a really bad network — 4×2s = 8s max wall time).
+  - If all 4 attempts fail, return `null` and let the caller fall through to `privacy-fallback` (which is the right behavior — when in doubt, pretend to be a privacy user).
 - [ ] Probe makes the request through the **same** wreq preset the session would use for user traffic (so the geolocation service sees the same JA4 / headers as the actual page). This ensures the probe doesn't itself become detectable.
-- [ ] `ExitGeo` shape: `{ ip, country, region, city, timezone, postalCode, lat, lng }`.
-- [ ] **Probe failure** (network error, rate limit, malformed response): return `null`. Caller then decides per `geoConsistency`.
+- [ ] **Probe failure** (network error, rate limit, malformed response, all 4 endpoints fail): return `null`. Caller then decides per `geoConsistency`.
 
 ### Cross-reference + override
 
