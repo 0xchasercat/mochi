@@ -189,7 +189,7 @@ Stands on the shoulders of:
 - [nodriver](https://github.com/ultrafunkamsterdam/nodriver) — the no-`Runtime.enable` philosophy.
 - [rebrowser-patches](https://github.com/rebrowser/rebrowser-patches) — leak vector documentation.
 - [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright) — prior art on CDP-level stealth.
-- [Peekaboo](https://github.com/CloakHQ/peekaboo) — the Probe Manifest schema.
+- **Peekaboo** (private upstream) — the Probe Manifest schema, vendored verbatim. Sync notes in [`PLAN.md` §6.3](PLAN.md).
 - [wreq](https://github.com/0x676e67/wreq) — Rust HTTP impersonation backend.
 - [CloakBrowser](https://github.com/CloakHQ/CloakBrowser) — stealth conformance test bar.
 
