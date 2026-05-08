@@ -92,6 +92,16 @@ export interface LaunchOptions {
   out?: { traceDir?: string };
   timeout?: number;
   /**
+   * Opt out of mochi's "auto-add `--no-sandbox` when running as root on
+   * Linux" fallback. Default `false` (the fallback is on). When `true`,
+   * mochi will NOT inject `--no-sandbox` even under root + Linux — useful
+   * if you've configured a SUID `chrome-sandbox` helper and want to keep
+   * the user-namespace sandbox active. The launch will crash with EPIPE
+   * if the SUID setup is wrong, but you keep stealth posture intact
+   * (`--no-sandbox` is a fingerprint leak per PLAN.md §8.6).
+   */
+  allowRootWithSandbox?: boolean;
+  /**
    * When `true`, the {@link Session} skips both `buildPayload` (no payload
    * is compiled) and `Page.addScriptToEvaluateOnNewDocument` on every new
    * page. Auto-attached worker / service-worker / audio-worklet targets
@@ -148,6 +158,9 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
     binary,
     extraArgs: opts.args,
     headless: opts.headless ?? false,
+    // Opt-out for the auto-no-sandbox-as-root fallback (default: fallback
+    // is on so first-run on a Linux server box doesn't crash).
+    ...(opts.allowRootWithSandbox === true ? { allowRootWithSandbox: true } : {}),
     // Chromium rejects inline auth on `--proxy-server`; pass the
     // auth-stripped server URL.
     ...(normalized !== undefined ? { proxy: normalized.server } : {}),

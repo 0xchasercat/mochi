@@ -8,11 +8,15 @@ Five minutes from zero to a spoofed Chrome session driving a page.
 - ~400 MB free for the bundled Chromium-for-Testing download (cached after the first install).
 - macOS, Linux, or Windows on x64 / arm64. Stock Chrome is not used; mochi pins its own CfT build.
 
-> **Linux gotcha — Chromium and root.** Chromium refuses to start as root unless its user-namespace sandbox is disabled or replaced. If `mochi.launch()` dies with `EPIPE: broken pipe` immediately after spawn, you're hitting this. Fixes, in order of preference:
+> **Linux gotcha — Chromium and root.** Chromium refuses to start as root unless its user-namespace sandbox is disabled or replaced. **mochi auto-handles this** as of v0.1.5: if `mochi.launch()` detects `process.platform === "linux" && process.getuid() === 0` and `--no-sandbox` isn't already set, it injects the flag with a one-line warning naming the fingerprint trade-off (`--no-sandbox` is a fingerprint leak per PLAN §8.6). The launch then succeeds.
+>
+> If you'd rather keep the sandbox under root (e.g. you've configured the SUID `chrome-sandbox` helper), pass `allowRootWithSandbox: true` to `mochi.launch()` to opt out. The launch will crash with `EPIPE` if the SUID setup is wrong, but you keep stealth posture intact.
+>
+> Best-practice ranking:
 >
 > 1. **Run as a non-root user** — what every production setup should do anyway.
-> 2. **`chmod 4755 chrome-sandbox`** on the SUID helper next to the CfT binary. Lets root-launched Chromium use the sandbox properly. Distro-dependent.
-> 3. **Pass `args: ["--no-sandbox"]` to `mochi.launch()`** — fastest dev workaround, but `--no-sandbox` is a fingerprint leak (PLAN §8.6 explicitly omits it from defaults). Acceptable for testing, not for stealth-critical production. Set via env: `MOCHI_EXTRA_ARGS=--no-sandbox`.
+> 2. **`chmod 4755 chrome-sandbox`** on the SUID helper next to the CfT binary, plus `allowRootWithSandbox: true`. Lets root-launched Chromium use the sandbox properly. Distro-dependent.
+> 3. **Default behavior** — accept the auto-injected `--no-sandbox` (mochi warns; the flag is logged). Fast for dev / CI / first-run; not for stealth-critical production.
 
 ## 1. Install
 

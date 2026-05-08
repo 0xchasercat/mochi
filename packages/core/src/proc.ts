@@ -49,6 +49,17 @@ export interface SpawnConfig {
   /** Optional proxy server, e.g. "http://host:port" or "socks5://host:port". */
   proxy?: string;
   /**
+   * Opt out of mochi's "auto-add `--no-sandbox` when running as root on Linux"
+   * fallback. Chromium refuses to launch as root with the user-namespace
+   * sandbox enabled; mochi normally injects `--no-sandbox` (with a warning)
+   * so the launch succeeds. Set to `true` if you have a working
+   * `chrome-sandbox` SUID helper and want to keep the sandbox under root —
+   * the launch will then crash with the original `EPIPE` if the SUID setup
+   * is wrong. PLAN.md §8.6 + `docs/quickstart.md` "Linux gotcha — Chromium
+   * and root".
+   */
+  allowRootWithSandbox?: boolean;
+  /**
    * Primary BCP-47 locale for the spawned Chromium. Passed as `--lang=<value>`
    * so Chromium's network stack derives an `Accept-Language` header that
    * agrees with the JS-layer `navigator.language(s)` spoof. Without this,
@@ -130,7 +141,38 @@ export interface ChromiumProcess {
  */
 export async function spawnChromium(cfg: SpawnConfig): Promise<ChromiumProcess> {
   const userDataDir = await mkdtemp(join(tmpdir(), "mochi-"));
-  const args = buildChromiumArgs(cfg, userDataDir, process.env.MOCHI_EXTRA_ARGS);
+  const envExtra = process.env.MOCHI_EXTRA_ARGS;
+  const args = buildChromiumArgs(cfg, userDataDir, envExtra);
+
+  // Linux + uid 0 (root) + no `--no-sandbox` anywhere → Chromium will refuse
+  // to start with the user-namespace sandbox. We auto-inject `--no-sandbox`
+  // (with a one-line warning naming the fingerprint trade-off) instead of
+  // letting `spawnChromium` crash with `EPIPE`. Users who explicitly want
+  // the sandbox under root can either run as a non-root user, `chmod 4755`
+  // the chrome-sandbox SUID helper, or pass their own `--no-sandbox` (which
+  // we'd see in args and skip this branch).
+  //
+  // We DO NOT add `--no-sandbox` to DEFAULT_CHROMIUM_FLAGS (PLAN.md §8.6
+  // explicitly omits it as a fingerprint leak). This is a runtime fallback,
+  // not a default — only fires under the specific environment that would
+  // otherwise crash. The fingerprint-leak risk is documented in
+  // docs/quickstart.md "Linux gotcha — Chromium and root".
+  if (
+    process.platform === "linux" &&
+    process.getuid?.() === 0 &&
+    !args.some((a) => a === "--no-sandbox" || a.startsWith("--no-sandbox=")) &&
+    !cfg.allowRootWithSandbox
+  ) {
+    console.warn(
+      "[mochi] Detected root + Linux + missing --no-sandbox. " +
+        "Auto-adding --no-sandbox so Chromium can launch. " +
+        "This is a fingerprint leak per PLAN.md §8.6 — run as non-root or " +
+        "use the chrome-sandbox SUID helper for stealth-critical workloads. " +
+        "See docs/quickstart.md 'Linux gotcha — Chromium and root'. " +
+        "Pass `allowRootWithSandbox: true` to mochi.launch() to opt out of this fallback.",
+    );
+    args.push("--no-sandbox");
+  }
 
   const proc = Bun.spawn([cfg.binary, ...args], {
     // stdin, stdout, stderr, then two extra pipes for CDP framing.
