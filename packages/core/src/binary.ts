@@ -33,10 +33,30 @@ export class ChromiumNotFoundError extends Error {
 }
 
 /**
- * The shape we expect from `@mochi.js/cli`'s `resolveChromiumBinary`. Defined
- * inline so we don't take a hard dep on the cli package's type surface.
+ * The shape `@mochi.js/cli`'s `resolveChromiumBinary` returns (per task 0010).
+ * Defined inline so we don't take a hard dep on the cli package's type surface.
+ *
+ * The function returns `{ path, channel, version, platform }` on success; it
+ * THROWS when no install is found (with a friendly "run `mochi browsers
+ * install`" message). We wrap in try/catch and treat both throw + missing
+ * symbol as "not resolvable from cli", letting the caller surface the
+ * canonical {@link ChromiumNotFoundError}.
+ *
+ * Earlier versions of this binding incorrectly typed the return as
+ * `string | null` and discarded the resolved object — the integration broke
+ * silently on every host where MOCHI_CHROMIUM_PATH wasn't set (local M4 with
+ * the env var set masked it; CI without it caught it). Pinned by
+ * `tests/contract/core-cli-binary-resolution.contract.test.ts`.
  */
-type CliResolveFn = () => Promise<string | null> | string | null;
+type CliResolveResult = {
+  readonly path: string;
+  readonly channel?: string;
+  readonly version?: string;
+  readonly platform?: string;
+};
+type CliResolveFn = (
+  opts?: Record<string, unknown>,
+) => Promise<CliResolveResult> | CliResolveResult;
 
 async function tryCliResolve(): Promise<string | null> {
   try {
@@ -47,13 +67,23 @@ async function tryCliResolve(): Promise<string | null> {
     // @ts-expect-error — optional peer; resolved at runtime if present.
     const mod = (await import("@mochi.js/cli")) as Record<string, unknown>;
     const fn = mod.resolveChromiumBinary;
-    if (typeof fn === "function") {
-      const result = await (fn as CliResolveFn)();
-      return typeof result === "string" && result.length > 0 ? result : null;
+    if (typeof fn !== "function") return null;
+    const result = await (fn as CliResolveFn)();
+    if (
+      result !== null &&
+      typeof result === "object" &&
+      typeof result.path === "string" &&
+      result.path.length > 0
+    ) {
+      return result.path;
     }
     return null;
   } catch {
-    // cli not installed, or doesn't export the symbol yet — both fine.
+    // cli not installed, the symbol's not exported yet, OR resolveChromiumBinary
+    // threw because no install is registered — all flow to the canonical
+    // ChromiumNotFoundError below. The thrown error from the cli is
+    // intentionally NOT propagated — the core's error message is more
+    // actionable in this layer.
     return null;
   }
 }
