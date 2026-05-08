@@ -11,7 +11,7 @@
  *   - `matrix.uaCh["sec-ch-ua-mobile"]`           → mobile (optional, "?0"/"?1")
  *
  * Sec-CH-UA values arrive on the wire as quoted (e.g. `'"macOS"'`,
- * `'"Chromium";v="131", "Google Chrome";v="131", "Not_A Brand";v="24"'`).
+ * `'"Google Chrome";v="131", "Not.A/Brand";v="8", "Chromium";v="131"'`).
  * The spoofed `userAgentData` API exposes parsed shapes:
  *   - `brands`: array of `{ brand, version }`
  *   - `platform`: unquoted string
@@ -40,7 +40,7 @@ function unquote(s: string): string {
 
 /**
  * Parse a Sec-CH-UA header value into brand entries. Format:
- *   `"Brand A";v="123", "Brand B";v="456", "Not_A Brand";v="24"`
+ *   `"Brand A";v="123", "Not.A/Brand";v="8", "Brand B";v="456"`
  */
 function parseSecChUa(s: string): BrandEntry[] {
   const out: BrandEntry[] = [];
@@ -160,7 +160,7 @@ export function emitClientHintsModule(matrix: MatrixV1): string {
           else if (h === "uaFullVersion" && SPOOF_UA_FULL_VERSION) out.uaFullVersion = SPOOF_UA_FULL_VERSION;
           else if (h === "fullVersionList") out.fullVersionList = freezeBrands(SPOOF_FULL_VERSION_LIST);
           else if (h === "wow64") out.wow64 = false;
-          else if (h === "formFactor") out.formFactor = SPOOF_MOBILE ? ["Mobile"] : [];
+          else if (h === "formFactor" && SPOOF_MOBILE) out.formFactor = ["Mobile"];
         }
       }
       resolve(out);

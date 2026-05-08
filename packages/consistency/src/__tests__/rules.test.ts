@@ -40,12 +40,12 @@ describe("rules — v0.2 ruleset (golden lock)", () => {
     expect(winMatrix.userAgent).toMatch(/Edg\/131\.0\.\d+\.\d+/);
   });
 
-  it("R-005: sec-ch-ua brand list", () => {
+  it("R-005: sec-ch-ua brand list — branded, GREASE (pinned v=8), Chromium", () => {
     expect(macMatrix.uaCh["sec-ch-ua"]).toBe(
-      '"Chromium";v="131", "Google Chrome";v="131", "Not_A Brand";v="131"',
+      '"Google Chrome";v="131", "Not.A/Brand";v="8", "Chromium";v="131"',
     );
     expect(winMatrix.uaCh["sec-ch-ua"]).toBe(
-      '"Chromium";v="131", "Microsoft Edge";v="131", "Not_A Brand";v="131"',
+      '"Microsoft Edge";v="131", "Not.A/Brand";v="8", "Chromium";v="131"',
     );
   });
 
@@ -59,9 +59,9 @@ describe("rules — v0.2 ruleset (golden lock)", () => {
     expect(winMatrix.uaCh["sec-ch-ua-platform-version"]).toBe('"11"');
   });
 
-  it("R-008: device.cores derives from CPU family", () => {
+  it("R-008: device.cores passthrough — mirrors profile.device.cores exactly", () => {
     expect(macMatrix.device.cores).toBe(8);
-    expect(winMatrix.device.cores).toBe(12); // intel-core-i7 → 12
+    expect(winMatrix.device.cores).toBe(16);
   });
 
   it("R-009: device.memoryGB caps at 8 (Chrome quantization)", () => {

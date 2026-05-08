@@ -12,3 +12,13 @@ must carry verifiable provenance.
 | mochi cli version | 0.0.1 |
 | captured at (UTC) | 2026-05-08T02:02:42.379Z |
 
+## Hand-corrections
+
+- 2026-05-08, task 0051: `uaCh.sec-ch-ua-model` corrected from `"\"Mac\""`
+  to `"\"\""` (empty quoted string). Real Chrome 147 desktop reports
+  `model: ""` from `getHighEntropyValues`; the v0.4 capture incorrectly
+  stamped the `device.model` fallback ("Mac") into the uaCh slot. The
+  capture-time derivation (`packages/cli/src/capture/derive-profile.ts`,
+  `buildUaCh`) was fixed in the same task so future captures preserve the
+  real (empty) value verbatim.
+

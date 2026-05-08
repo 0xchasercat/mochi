@@ -167,7 +167,7 @@
     "sec-ch-ua-platform-version": "\"26.4.0\"",
     "sec-ch-ua-arch": "\"arm\"",
     "sec-ch-ua-bitness": "\"64\"",
-    "sec-ch-ua-model": "\"Mac\"",
+    "sec-ch-ua-model": "\"\"",
     "sec-ch-ua-full-version": "\"147\"",
     "sec-ch-ua-os": "\"macos\""
   },

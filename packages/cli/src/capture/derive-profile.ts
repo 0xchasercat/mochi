@@ -128,7 +128,12 @@ export function deriveProfile(probes: CapturedProbes, opts: DeriveOptions): Prof
   const languages: [string, ...string[]] =
     langs.length > 0 ? (langs as [string, ...string[]]) : [localeFromNav];
 
-  const uaCh = buildUaCh(navigator, browserMeta, osName, osVersion, arch, deviceModel);
+  // For uaCh.sec-ch-ua-model we pass the *captured* model string verbatim —
+  // real Chrome desktop reports "" (empty) for `model`, and stuffing the
+  // device.model fallback ("Mac"/"PC"/"MacIntel") into the uaCh slot would
+  // contradict the live header. tasks/0051-consistency-stack-fixes.md (D).
+  const uadModel = typeof uadHigh.model === "string" ? uadHigh.model : "";
+  const uaCh = buildUaCh(navigator, browserMeta, osName, osVersion, arch, uadModel);
 
   const wreqPreset = `${browserMeta.name}_${browserVersionMajor}_${osName}`;
 

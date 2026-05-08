@@ -27,21 +27,36 @@ export const VENDOR_BY_BROWSER: Readonly<Record<BrowserKey, string>> = {
 };
 
 /**
- * The brand list each browser inserts into Sec-CH-UA after the GREASE entry.
- * Order is significant — fingerprint surfaces compare the full ordered list.
+ * The brand list each browser inserts into Sec-CH-UA. Order is significant —
+ * fingerprint surfaces compare the full ordered list verbatim.
  *
- * Sec-CH-UA standard mandates a GREASE entry, the engine's "Chromium" entry,
- * and the branded-browser entry (when not Chrome itself). v0.2 uses a fixed
- * GREASE entry to stay deterministic; the real browser shuffles GREASE per
- * boot — that level of fidelity is a phase 0.7 concern.
+ * Real Chrome 110+ emits brands in `[Branded, GREASE, Chromium]` order with
+ * a pinned GREASE label (`Not.A/Brand`) and a pinned GREASE major (`8`).
+ * The previous ordering (`[Chromium, Branded, GREASE]`) and GREASE label
+ * (`Not_A Brand`) were the harness-surfaced bug captured in
+ * tasks/0051-consistency-stack-fixes.md (Group B).
  */
 export const SEC_CH_UA_BRANDS_BY_BROWSER: Readonly<Record<BrowserKey, readonly string[]>> = {
-  chrome: ["Chromium", "Google Chrome", "Not_A Brand"],
-  edge: ["Chromium", "Microsoft Edge", "Not_A Brand"],
-  brave: ["Chromium", "Brave", "Not_A Brand"],
-  arc: ["Chromium", "Arc", "Not_A Brand"],
-  opera: ["Chromium", "Opera", "Not_A Brand"],
+  chrome: ["Google Chrome", "Not.A/Brand", "Chromium"],
+  edge: ["Microsoft Edge", "Not.A/Brand", "Chromium"],
+  brave: ["Brave", "Not.A/Brand", "Chromium"],
+  arc: ["Arc", "Not.A/Brand", "Chromium"],
+  opera: ["Opera", "Not.A/Brand", "Chromium"],
 };
+
+/**
+ * The pinned GREASE label Chrome 110+ emits. Real Chrome shuffles GREASE
+ * per boot for spec compliance; v0.2 keeps a fixed value for determinism.
+ * Phase 0.7 may revisit per-boot shuffle.
+ */
+const GREASE_BRAND = "Not.A/Brand";
+
+/**
+ * The pinned GREASE major. Chrome 110+ emits `"Not.A/Brand";v="8"` regardless
+ * of the real browser major, by design — the GREASE entry's purpose is to
+ * exercise downstream parsers with an unfamiliar value, not to track Chrome.
+ */
+const GREASE_VERSION = "8";
 
 /** Format a single brand entry as it appears in Sec-CH-UA: `"<brand>";v="<major>"`. */
 function formatBrand(brand: string, major: string): string {
@@ -52,11 +67,12 @@ function formatBrand(brand: string, major: string): string {
 
 /**
  * Compose the full Sec-CH-UA header value. Stable, deterministic, depends
- * only on browser identity + major version.
+ * only on browser identity + major version. The GREASE entry uses its own
+ * pinned version (`8`), not the browser major.
  */
 export function deriveSecChUa(browser: BrowserKey, major: string): string {
   const brands = SEC_CH_UA_BRANDS_BY_BROWSER[browser];
-  return brands.map((b) => formatBrand(b, major)).join(", ");
+  return brands.map((b) => formatBrand(b, b === GREASE_BRAND ? GREASE_VERSION : major)).join(", ");
 }
 
 /**

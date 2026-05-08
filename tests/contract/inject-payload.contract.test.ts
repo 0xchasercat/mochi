@@ -72,9 +72,12 @@ const CANONICAL_SEED = "contract-pin-seed";
  * fail the test. Update this hash AND the harness baselines together when
  * the payload's bytes intentionally change.
  *
- * Recorded with the v0.3 inject implementation on 2026-05-08.
+ * Last updated 2026-05-08 alongside tasks/0051-consistency-stack-fixes.md
+ * (Group C — formFactor omitted on desktop, [] only when SPOOF_MOBILE).
+ * The conditional shape of the `getHighEntropyValues` template literal
+ * changes, so the payload bytes flip again on top of the Group B re-pin.
  */
-const PINNED_SHA256 = "2962ed91c484cd8c77de539d131c143c47ef29e2a29d233cb10cf94b44b81ac9";
+const PINNED_SHA256 = "4fd7a00d182d07793f3c69bcb8adf92e9d023ffb4224341899b782bbfa035a33";
 
 describe("contract: @mochi.js/inject buildPayload sha256 is byte-stable per (profile, seed)", () => {
   it("buildPayload(deriveMatrix(profile, seed)) is deterministic", () => {

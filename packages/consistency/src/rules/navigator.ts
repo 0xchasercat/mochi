@@ -22,23 +22,24 @@ type OsName = ProfileV1["os"]["name"];
 type BrowserName = ProfileV1["browser"]["name"];
 
 /**
- * R-008 — `[device.cpuFamily]` → `device.cores`.
+ * R-008 — `[device.cores]` → `device.cores` (passthrough).
  *
- * The brief lists `device.cpuFamily` as the input and "navigator.hardware
- * Concurrency" as the conceptual output. The matrix's slot for hardware
- * concurrency is `device.cores`. We treat `cpuFamily` as the lock-input —
- * the relationship "this CPU family always reports N cores" is what the
- * rule encodes — and look up cores from a small table. Unknown families
- * fall back to a sensible default (8) that matches the bulk of the v1
- * desktop catalog.
+ * Per PLAN.md §9.2 / §6.1 the profile is the source of truth (I-5). This
+ * rule asserts the lock that `navigator.hardwareConcurrency` mirrors
+ * `device.cores` exactly — no transformation, no coarse cpu-family lookup
+ * that would overwrite the real device's logical-core count. v0.5 surfaced
+ * the original derive-from-cpuFamily implementation as a bug for M-series
+ * Pro/Max parts (e.g. M4 Max ships 14 cores; the table emitted 10 and
+ * clobbered the profile). See tasks/0051-consistency-stack-fixes.md
+ * (Group A).
  */
-export const R008: Rule = defineRule<readonly [string], number>({
+export const R008: Rule = defineRule<readonly [number], number>({
   id: "R-008",
-  description: "navigator.hardwareConcurrency from CPU family",
-  inputs: ["device.cpuFamily"],
+  description: "navigator.hardwareConcurrency — passthrough of profile.device.cores",
+  inputs: ["device.cores"],
   output: "device.cores",
-  derive([cpuFamily]) {
-    return inferCoresFromCpuFamily(cpuFamily);
+  derive([cores]) {
+    return cores;
   },
 });
 
@@ -176,27 +177,3 @@ export const NAVIGATOR_RULES: readonly Rule[] = [
   R028,
   R030,
 ];
-
-// ---- helpers ----------------------------------------------------------------
-
-/**
- * Map a coarse CPU family string to a logical-core count. Unknown families
- * fall back to 8 — the most common value for the v1 desktop catalog.
- */
-function inferCoresFromCpuFamily(cpuFamily: string): number {
-  const f = cpuFamily.toLowerCase();
-  if (f.includes("apple-silicon-m1")) return 8;
-  if (f.includes("apple-silicon-m2")) return 8;
-  if (f.includes("apple-silicon-m3")) return 8;
-  if (f.includes("apple-silicon-m4")) return 10;
-  if (f.includes("apple-silicon")) return 8;
-  if (f.includes("intel-core-i3")) return 4;
-  if (f.includes("intel-core-i5")) return 8;
-  if (f.includes("intel-core-i7")) return 12;
-  if (f.includes("intel-core-i9")) return 16;
-  if (f.includes("amd-ryzen-3")) return 8;
-  if (f.includes("amd-ryzen-5")) return 12;
-  if (f.includes("amd-ryzen-7")) return 16;
-  if (f.includes("amd-ryzen-9")) return 24;
-  return 8;
-}

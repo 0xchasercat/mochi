@@ -23,30 +23,6 @@
       "comment": "Chrome's published deviceMemory is capped at 8; the baseline shows 32 (from a non-Chrome JS path or device override). The consistency engine emits the canonical capped value via R-008. v0.7 polish."
     },
     {
-      "path": "navigator.hardwareConcurrency",
-      "comment": "Bug surfaced by the harness: R-008 in @mochi.js/consistency derives device.cores from a coarse cpuFamily lookup that returns 10 for `apple-silicon-m4`, OVERWRITING the profile's declared `device.cores: 14`. PLAN.md §9.2 documents this rule as a passthrough; the implementation drifted. Tracked in tasks/0051-consistency-stack-fixes.md (Group A)."
-    },
-    {
-      "path": "navigator.userAgentData.brands[*].**",
-      "comment": "Bug surfaced by the harness: `SEC_CH_UA_BRANDS_BY_BROWSER` in @mochi.js/consistency emits brands in the wrong order (`Chromium, Google Chrome, Not_A Brand`) with the wrong GREASE label (`Not_A Brand` vs Chrome's `Not.A/Brand`) and the wrong GREASE version (uses the major instead of pinned `8`). Real Chrome 147 emits `Google Chrome:147, Not.A/Brand:8, Chromium:147`. Tracked in tasks/0051-consistency-stack-fixes.md (Group B)."
-    },
-    {
-      "path": "navigator.userAgentDataHighEntropy.brands[*].**",
-      "comment": "Same root cause as navigator.userAgentData.brands — Group B in tasks/0051-consistency-stack-fixes.md."
-    },
-    {
-      "path": "navigator.userAgentDataHighEntropy.fullVersionList[*].**",
-      "comment": "Same root cause as navigator.userAgentData.brands (the inject module reuses the brand list for fullVersionList) — Group B in tasks/0051-consistency-stack-fixes.md."
-    },
-    {
-      "path": "navigator.userAgentDataHighEntropy.formFactor",
-      "comment": "Bug surfaced by the harness: client-hints inject module returns `[]` on desktop where real Chrome returns `null`. tasks/0051-consistency-stack-fixes.md (Group C)."
-    },
-    {
-      "path": "navigator.userAgentDataHighEntropy.model",
-      "comment": "Bug surfaced by the harness: profile.json has `uaCh.sec-ch-ua-model: \"Mac\"`, but real Chrome 147 desktop returns the empty string. The capture-side derivation (mochi capture) incorrectly stamps the device.model into the model uaCh slot. tasks/0051-consistency-stack-fixes.md (Group D)."
-    },
-    {
       "path": "navigator.permissions.**",
       "comment": "Permissions API state is not yet covered (PLAN.md §9.6 — known limit; docs/limits.md \"Notification.permission and Permissions.query\"). v0.7 polish."
     },

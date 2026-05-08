@@ -50,7 +50,7 @@ export const FIXTURE_MATRIX: MatrixV1 = {
   userAgent:
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.6778.86 Safari/537.36",
   uaCh: {
-    "sec-ch-ua": '"Chromium";v="131", "Google Chrome";v="131", "Not_A Brand";v="24"',
+    "sec-ch-ua": '"Google Chrome";v="131", "Not.A/Brand";v="8", "Chromium";v="131"',
     "sec-ch-ua-platform": '"macOS"',
     "sec-ch-ua-platform-version": '"14.0.0"',
     "sec-ch-ua-arch": '"arm"',
