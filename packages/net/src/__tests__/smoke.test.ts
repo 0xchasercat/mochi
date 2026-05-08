@@ -70,17 +70,32 @@ describe("@mochi.js/net public surface", () => {
     const prev = process.env.MOCHI_NET_DYLIB;
     process.env.MOCHI_NET_DYLIB = "/tmp/definitely-does-not-exist-mochi-net.dylib";
     try {
-      // We can't easily stub existsSync here without mocking modules, so we
-      // just check that *some* path-not-found shape is thrown when the
-      // override is bogus AND no real build exists. If a real release build
-      // happens to exist, this test still passes via the workspace path —
-      // we then assert the resolved path includes libmochi_net.
+      // Two valid outcomes depending on whether a real artifact happens to
+      // be present in this checkout:
+      //   (a) postinstall has materialized a prebuilt at
+      //       packages/net-rs/native/mochi_net-<platform>.<ext> (CI on main
+      //       after v0.1.0 published with prebuilts attached), OR
+      //   (b) cargo-built artifact exists at target/release/libmochi_net.<ext>
+      //       (local dev with `cargo build --release`), OR
+      //   (c) neither — `resolveDylibPath()` throws the helpful
+      //       ChromiumNotFoundError-shaped error.
+      //
+      // We catch ONLY the resolveDylibPath call (NOT the inner expect), then
+      // branch on which path produced the result. Collapsing them into a
+      // single try/catch swallows assertion failures into the catch handler
+      // and asserts on the assertion's own error message, which is how this
+      // test originally regressed.
+      let resolved: string | undefined;
+      let thrown: Error | undefined;
       try {
-        const p = net.resolveDylibPath();
-        expect(p).toMatch(/(libmochi_net|mochi_net-)\./);
+        resolved = net.resolveDylibPath();
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        expect(msg).toMatch(/no @mochi\.js\/net-rs binary found/);
+        thrown = e instanceof Error ? e : new Error(String(e));
+      }
+      if (resolved !== undefined) {
+        expect(resolved).toMatch(/(libmochi_net|mochi_net-)/);
+      } else {
+        expect(thrown?.message).toMatch(/no @mochi\.js\/net-rs binary found/);
       }
     } finally {
       if (prev === undefined) delete process.env.MOCHI_NET_DYLIB;
