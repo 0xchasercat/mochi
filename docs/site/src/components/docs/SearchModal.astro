@@ -1,0 +1,135 @@
+---
+import { getCollection } from "astro:content";
+import { CATEGORY_LABELS, type DocCategory } from "../../content.config.ts";
+
+const all = await getCollection("docs", ({ data }) => !data.hidden);
+const index = all.map((entry) => ({
+  id: entry.id,
+  title: entry.data.title,
+  description: entry.data.description ?? "",
+  category: entry.data.category,
+  categoryLabel: CATEGORY_LABELS[entry.data.category as DocCategory],
+}));
+const indexJson = JSON.stringify(index);
+---
+<div class="d-search-overlay" data-search-overlay hidden>
+  <div class="d-search-modal" role="dialog" aria-modal="true" aria-label="Search docs">
+    <div class="d-search-input-row">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color: var(--fg-muted)"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input class="d-search-input" placeholder="Search docs, API, guides…" data-search-input type="search" aria-label="Search query" />
+      <span class="d-kbd">esc</span>
+    </div>
+    <div class="d-search-results" data-search-results></div>
+    <div class="d-search-foot">
+      <span><span class="d-kbd">↑</span> <span class="d-kbd">↓</span> navigate</span>
+      <span><span class="d-kbd">↵</span> open</span>
+      <span><span class="d-kbd">esc</span> close</span>
+    </div>
+  </div>
+</div>
+
+<script is:inline define:vars={{ indexJson }}>
+  // Lightweight client-side search. Filters the prebuilt index by
+  // case-insensitive substring on title + description + category.
+  // Pagefind production tuning is deferred — this covers the v0.1 surface
+  // where every doc has a unique, descriptive title.
+  window.__mochiDocsIndex = JSON.parse(indexJson);
+</script>
+<script>
+  type Entry = {
+    id: string;
+    title: string;
+    description: string;
+    category: string;
+    categoryLabel: string;
+  };
+  const overlay = document.querySelector<HTMLElement>("[data-search-overlay]");
+  const input = document.querySelector<HTMLInputElement>("[data-search-input]");
+  const results = document.querySelector<HTMLElement>("[data-search-results]");
+  const triggers = document.querySelectorAll<HTMLButtonElement>("[data-search-open]");
+  // biome-ignore lint/suspicious/noExplicitAny: window-shimmed search index
+  const data: Entry[] = (window as any).__mochiDocsIndex ?? [];
+  let active = 0;
+  let filtered: Entry[] = data;
+
+  function render() {
+    if (!results) return;
+    if (filtered.length === 0) {
+      results.innerHTML = `<div style="padding: 40px 20px; text-align: center; color: var(--fg-muted); font-size: 14px"><div style="font-size: 28px; margin-bottom: 8px">🍡</div>No crumbs match.</div>`;
+      return;
+    }
+    const groups = new Map<string, Entry[]>();
+    for (const e of filtered) {
+      const list = groups.get(e.categoryLabel) ?? [];
+      list.push(e);
+      groups.set(e.categoryLabel, list);
+    }
+    let idx = 0;
+    let html = "";
+    for (const [label, items] of groups) {
+      html += `<div><div class="d-search-section-h">${label}</div>`;
+      for (const e of items) {
+        const cls = idx === active ? " is-active" : "";
+        html += `<a class="d-search-result${cls}" href="/docs/${e.id}" data-i="${idx}">
+          <span class="d-search-result-ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+          <div><div class="d-search-result-title">${escapeHtml(e.title)}</div><div class="d-search-result-sub">${escapeHtml(e.description)}</div></div>
+          <span class="d-search-result-kbd">↵</span>
+        </a>`;
+        idx += 1;
+      }
+      html += `</div>`;
+    }
+    results.innerHTML = html;
+  }
+  function escapeHtml(s: string) {
+    return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
+  }
+  function filter(q: string) {
+    const term = q.trim().toLowerCase();
+    if (!term) {
+      filtered = data;
+    } else {
+      filtered = data.filter((e) =>
+        e.title.toLowerCase().includes(term) ||
+        e.description.toLowerCase().includes(term) ||
+        e.categoryLabel.toLowerCase().includes(term)
+      );
+    }
+    active = 0;
+    render();
+  }
+  function open() {
+    if (!overlay) return;
+    overlay.hidden = false;
+    filter("");
+    setTimeout(() => input?.focus(), 30);
+  }
+  function close() {
+    if (!overlay) return;
+    overlay.hidden = true;
+    if (input) input.value = "";
+  }
+  triggers.forEach((t) => t.addEventListener("click", open));
+  overlay?.addEventListener("click", (e) => {
+    if (e.target === overlay) close();
+  });
+  input?.addEventListener("input", (e) => filter((e.target as HTMLInputElement).value));
+  input?.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); active = Math.min(filtered.length - 1, active + 1); render(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); active = Math.max(0, active - 1); render(); }
+    else if (e.key === "Enter") {
+      e.preventDefault();
+      const target = filtered[active];
+      if (target) window.location.href = `/docs/${target.id}`;
+    }
+    else if (e.key === "Escape") close();
+  });
+  document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      open();
+    } else if (e.key === "Escape" && overlay && !overlay.hidden) {
+      close();
+    }
+  });
+</script>

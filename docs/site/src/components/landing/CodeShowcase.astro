@@ -1,0 +1,141 @@
+---
+// Code showcase — three runnable mochi snippets, rendered through Astro's
+// shiki integration so the dual-theme palette stays in sync. Tabs are
+// vanilla JS — see the inline <script> at the bottom.
+//
+// Snippets target the v0.1.2 API surface:
+//   • mochi.launch()  — shipped
+//   • Page.goto()     — shipped
+//   • LaunchOptions.challenges.turnstile.autoClick — v0.1.2
+//   • Page.addInitScript / removeInitScript — v0.1.2
+//
+// Anything not yet shipped (humanClick, session.fetch wreq path) is in
+// the API-shape narrative but rendered with `// shipped via …` comments.
+
+import { Code } from "astro:components";
+
+const launch = `import { mochi } from "@mochi.js/core";
+
+// boot a stealth browser in three lines
+const session = await mochi.launch({
+  profile: "linux-chrome-stable",
+  seed: "user-12345",
+});
+
+const page = await session.newPage();
+await page.goto("https://target.example/checkout");
+
+console.log("UA:", session.profile.userAgent);
+
+await session.close();`;
+
+const turnstile = `import { mochi } from "@mochi.js/core";
+
+// auto-click visible-checkbox Turnstile. Other variants → onEscalation.
+const session = await mochi.launch({
+  profile: "mac-m4-chrome-stable",
+  seed: "warm-session-001",
+  challenges: {
+    turnstile: {
+      autoClick: true,
+      onEscalation: (reason) => {
+        console.warn("Turnstile escalated:", reason);
+      },
+    },
+  },
+});
+
+const page = await session.newPage();
+await page.goto("https://protected.example/login");`;
+
+const inject = `import { mochi } from "@mochi.js/core";
+
+const session = await mochi.launch({ profile: "win11-chrome-stable", seed: "abc" });
+const page = await session.newPage();
+
+// Run a custom inject before any page script. JIT-friendly proxy traps.
+const installed = await page.addInitScript(\`
+  Object.defineProperty(window, "__site_marker", { value: "mochi", configurable: false });
+\`);
+
+await page.goto("https://example.com");
+
+// ...later: remove the inject from future navigations.
+await page.removeInitScript(installed);`;
+---
+<section class="m-code-show">
+  <div class="m-code-head">
+    <div class="m-eyebrow">three-line stealth</div>
+    <h2 class="m-h2">Same Playwright muscle memory.<br/>None of the crumbs.</h2>
+  </div>
+  <div class="m-code-frame" data-tabs>
+    <div class="m-code-tabs" role="tablist">
+      <button class="m-code-tab is-active" type="button" role="tab" data-tab="launch" aria-selected="true">launch.ts</button>
+      <button class="m-code-tab" type="button" role="tab" data-tab="turnstile" aria-selected="false">turnstile.ts</button>
+      <button class="m-code-tab" type="button" role="tab" data-tab="inject" aria-selected="false">inject.ts</button>
+      <button class="m-code-copy" type="button" data-copy-tabs>copy</button>
+    </div>
+    <div class="m-code-body" data-panel="launch">
+      <Code code={launch} lang="ts" theme="github-dark-dimmed" />
+    </div>
+    <div class="m-code-body" data-panel="turnstile" hidden>
+      <Code code={turnstile} lang="ts" theme="github-dark-dimmed" />
+    </div>
+    <div class="m-code-body" data-panel="inject" hidden>
+      <Code code={inject} lang="ts" theme="github-dark-dimmed" />
+    </div>
+  </div>
+</section>
+
+<style>
+  /* Tighten the shiki <pre> to fit inside m-code-body; it already supplies
+     padding, so reset shiki's. */
+  .m-code-body :global(pre.astro-code) {
+    background: transparent !important;
+    padding: 0;
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1.7;
+    overflow-x: auto;
+  }
+</style>
+
+<script>
+  // Tab switcher + copy button. Pure DOM — no framework needed.
+  const root = document.querySelector<HTMLElement>("[data-tabs]");
+  if (root) {
+    const tabs = root.querySelectorAll<HTMLButtonElement>("[data-tab]");
+    const panels = root.querySelectorAll<HTMLElement>("[data-panel]");
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        const target = tab.dataset.tab;
+        tabs.forEach((t) => {
+          const active = t === tab;
+          t.classList.toggle("is-active", active);
+          t.setAttribute("aria-selected", active ? "true" : "false");
+        });
+        panels.forEach((p) => {
+          p.hidden = p.dataset.panel !== target;
+        });
+      });
+    });
+
+    const copyBtn = root.querySelector<HTMLButtonElement>("[data-copy-tabs]");
+    copyBtn?.addEventListener("click", async () => {
+      const visiblePanel = Array.from(panels).find((p) => !p.hidden);
+      const text = visiblePanel?.querySelector("pre")?.textContent ?? "";
+      try {
+        await navigator.clipboard?.writeText(text);
+        if (copyBtn) {
+          copyBtn.textContent = "copied ✓";
+          setTimeout(() => {
+            copyBtn.textContent = "copy";
+          }, 1200);
+        }
+      } catch (_err) {
+        if (copyBtn) copyBtn.textContent = "—";
+      }
+    });
+  }
+</script>

@@ -1,0 +1,77 @@
+---
+import type { MarkdownHeading } from "astro";
+
+interface Props {
+  headings: MarkdownHeading[];
+  editUrl?: string;
+  lastUpdated?: Date;
+}
+const { headings, editUrl, lastUpdated } = Astro.props;
+
+// Only h2 + h3, mirroring docs/.design-reference/ui_kits/docs/Shell.jsx
+const items = headings.filter((h) => h.depth === 2 || h.depth === 3);
+
+function fmtDate(d: Date | undefined) {
+  if (!d) return null;
+  const days = Math.max(0, Math.round((Date.now() - d.getTime()) / 86400000));
+  if (days === 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 30) return `${days}d ago`;
+  return d.toISOString().slice(0, 10);
+}
+const ago = fmtDate(lastUpdated);
+---
+<aside class="d-toc" aria-label="On this page">
+  <div class="d-toc-h">On this page</div>
+  {items.length === 0 && (
+    <p style="font-size: 12px; color: var(--fg-subtle); padding: 0 12px">No headings on this page.</p>
+  )}
+  {items.map((it) => (
+    <a class={"d-toc-link" + (it.depth === 3 ? " is-sub" : "")} href={`#${it.slug}`}>{it.text}</a>
+  ))}
+  {(editUrl || ago) && (
+    <div class="d-toc-edit">
+      {editUrl && (
+        <a href={editUrl} rel="noopener">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          Edit on GitHub
+        </a>
+      )}
+      {ago && (
+        <span style="font-size: 12.5px; color: var(--fg-muted); display: inline-flex; align-items: center; gap: 6px">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>
+          Last updated {ago}
+        </span>
+      )}
+    </div>
+  )}
+</aside>
+
+<script>
+  // Active-heading highlight via IntersectionObserver.
+  const links = document.querySelectorAll<HTMLAnchorElement>(".d-toc-link");
+  if (links.length > 0) {
+    const map = new Map<string, HTMLAnchorElement>();
+    links.forEach((a) => {
+      const id = a.getAttribute("href")?.slice(1);
+      if (id) map.set(id, a);
+    });
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const link = map.get(entry.target.id);
+          if (!link) continue;
+          if (entry.isIntersecting) {
+            links.forEach((l) => l.classList.remove("is-active"));
+            link.classList.add("is-active");
+          }
+        }
+      },
+      { rootMargin: "-80px 0px -70% 0px" }
+    );
+    map.forEach((_, id) => {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    });
+  }
+</script>

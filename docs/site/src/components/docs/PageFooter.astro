@@ -1,0 +1,25 @@
+---
+interface NavEntry {
+  id: string;
+  title: string;
+}
+interface Props {
+  prev?: NavEntry;
+  next?: NavEntry;
+}
+const { prev, next } = Astro.props;
+---
+<div class="d-pagefooter">
+  {prev ? (
+    <a class="d-pf" href={`/docs/${prev.id}`}>
+      <span class="d-pf-label">← Previous</span>
+      <span class="d-pf-title"><span class="d-pf-arr">‹</span> {prev.title}</span>
+    </a>
+  ) : (<span></span>)}
+  {next ? (
+    <a class="d-pf is-next" href={`/docs/${next.id}`}>
+      <span class="d-pf-label">Next →</span>
+      <span class="d-pf-title">{next.title} <span class="d-pf-arr">›</span></span>
+    </a>
+  ) : (<span></span>)}
+</div>

@@ -38,6 +38,9 @@
     "changeset": "bunx --bun @changesets/cli",
     "version-packages": "bunx --bun @changesets/cli version",
     "release": "bun run build && bun scripts/rewrite-workspace-deps.ts && bunx --bun @changesets/cli publish",
+    "docs:dev": "cd docs/site && bun run dev",
+    "docs:build": "cd docs/site && bun install && bun run build",
+    "docs:preview": "cd docs/site && bun run preview",
     "prepare": "git config --local core.hooksPath .githooks 2>/dev/null || true"
   },
   "devDependencies": {

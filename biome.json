@@ -21,7 +21,11 @@
       "!tests/fixtures/cloakbrowser",
       "!docs/.design-reference",
       "!docs/site/dist",
-      "!docs/site/.astro"
+      "!docs/site/.astro",
+      "!docs/site/src",
+      "!docs/site/public",
+      "!docs/site/.cache",
+      "!docs/content"
     ]
   },
   "formatter": {

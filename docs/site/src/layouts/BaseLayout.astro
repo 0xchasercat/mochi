@@ -1,0 +1,52 @@
+---
+import "../styles/global.css";
+
+export interface Props {
+  title: string;
+  description?: string;
+  ogImage?: string;
+}
+
+const {
+  title,
+  description = "Bun-native, raw-CDP browser automation. Relational fingerprint locking, JIT-installed spoofing, JA4-coherent fetch. Leaves no crumbs.",
+  ogImage,
+} = Astro.props;
+
+const siteName = "mochi.js";
+const fullTitle = title === siteName ? title : `${title} — ${siteName}`;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    {ogImage && <meta property="og:image" content={ogImage} />}
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="canonical" href={Astro.url.href} />
+    <script is:inline>
+      // Theme bootstrap — runs before paint to avoid a flash. localStorage
+      // wins; otherwise the OS preference.
+      (function () {
+        try {
+          const stored = localStorage.getItem("mochi.theme");
+          const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          const theme = stored || (prefersDark ? "stealth" : "cream");
+          if (theme === "stealth") document.documentElement.setAttribute("data-theme", "stealth");
+        } catch (_e) {
+          /* localStorage may be disabled — fall through to cream. */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <slot />
+  </body>
+</html>

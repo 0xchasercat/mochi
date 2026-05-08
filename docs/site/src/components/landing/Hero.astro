@@ -1,0 +1,57 @@
+---
+// Hero — pixel-faithful port of docs_site/Hero.jsx. The copy button uses a
+// tiny inline script (no framework) to copy the install command. v0.1.2 is
+// the live release as of 2026-05-08; we install via @mochi.js/core.
+const installCmd = "bun add @mochi.js/core";
+---
+<section class="m-hero">
+  <div class="m-hero-pattern"></div>
+  <div class="m-hero-inner">
+    <div class="m-hero-copy">
+      <div class="m-eyebrow">v0.1.2 · early stealth release</div>
+      <h1 class="m-h1">
+        Sticky on the outside.<br/>
+        <span class="m-h1-honey">Untouchable on the inside.</span>
+      </h1>
+      <p class="m-lede">
+        <strong>mochi.js</strong> is a Bun-native, raw-CDP browser automation framework. Pass a seed and a profile; get a relationally-coherent fingerprint that survives a <code>getParameter(0x9245)</code> probe. JIT-friendly inject payload, JA4-coherent fetch via Rust FFI, behavioral synth on top of Bezier+Fitts. Leaves no crumbs.
+      </p>
+      <div class="m-hero-ctas">
+        <button class="m-btn m-btn-primary" data-copy={installCmd} type="button">
+          <span class="m-mono">$ {installCmd}</span>
+          <span class="m-copy-ic" data-copy-icon>⧉</span>
+        </button>
+        <a class="m-btn m-btn-secondary" href="/docs/getting-started/install">Read the docs →</a>
+      </div>
+      <div class="m-hero-meta">
+        <span class="m-chip-light">bun ≥ 1.1</span>
+        <span class="m-chip-light">macOS · Linux · Windows</span>
+        <span class="m-chip-light">MIT</span>
+      </div>
+    </div>
+    <div class="m-hero-mascot">
+      <div class="m-blob"></div>
+      <img src="/mochi-mascot.png" alt="mochi mascot — a smiling rice cake with a honey drip" width="320" height="320" />
+    </div>
+  </div>
+</section>
+
+<script>
+  // Hero install-command copy button. No framework — vanilla DOM event.
+  // Falls back gracefully if Clipboard API is unavailable.
+  const btn = document.querySelector<HTMLButtonElement>("button[data-copy]");
+  const icon = btn?.querySelector<HTMLElement>("[data-copy-icon]");
+  btn?.addEventListener("click", async () => {
+    if (!btn || !icon) return;
+    const text = btn.dataset.copy ?? "";
+    try {
+      await navigator.clipboard?.writeText(text);
+      icon.textContent = "✓";
+      setTimeout(() => {
+        icon.textContent = "⧉";
+      }, 1400);
+    } catch (_err) {
+      icon.textContent = "—";
+    }
+  });
+</script>

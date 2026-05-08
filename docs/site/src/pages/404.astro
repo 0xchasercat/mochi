@@ -1,0 +1,22 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Nav from "../components/landing/Nav.astro";
+import Footer from "../components/landing/Footer.astro";
+---
+<BaseLayout title="404 — leaves no crumbs" description="That page leaves no crumbs.">
+  <Nav />
+  <main id="main" style="max-width: 720px; margin: 80px auto 120px; padding: 0 32px; text-align: center">
+    <div class="m-eyebrow">404</div>
+    <h1 class="m-h1" style="font-size: 60px; margin: 12px 0 16px">
+      No crumbs <span class="m-h1-honey">here.</span>
+    </h1>
+    <p class="m-lede" style="margin: 0 auto 28px; max-width: 520px">
+      That page either doesn't exist or hasn't shipped yet. Try the docs index, or head back to the landing page.
+    </p>
+    <div class="m-hero-ctas" style="justify-content: center">
+      <a class="m-btn m-btn-primary" href="/">Back to home</a>
+      <a class="m-btn m-btn-secondary" href="/docs/getting-started/install">Open the docs →</a>
+    </div>
+  </main>
+  <Footer />
+</BaseLayout>
