@@ -62,6 +62,11 @@ export async function launchSharedSession(): Promise<Session> {
     profile,
     seed: CONFORMANCE_SEED,
     headless: true,
+    // Conformance runs are hermetic: re-apply the harness-only flags so
+    // updater/sync traffic doesn't pollute the stealth surface or destabilise
+    // reruns. Production `mochi.launch()` callers get the cleaner default
+    // flag set (no command-line bot-tells). Task 0256.
+    hermetic: true,
   };
   if (binary !== undefined && binary.length > 0) {
     (launchOpts as { binary?: string }).binary = binary;

@@ -105,11 +105,16 @@ export async function runHarnessAgainstProfile(
   ]);
   const expectedPaths = (expected?.paths ?? []).map((p) => p.path);
 
-  // Launch a real Mochi session — full spoofing pipeline active.
+  // Launch a real Mochi session — full spoofing pipeline active. Hermetic
+  // mode opts in to the harness-only flag set (suppresses updater traffic,
+  // default-apps auto-install, sync, feed prefetches) so baseline conformance
+  // isn't perturbed by network noise. Production `mochi.launch()` callers
+  // get `hermetic: false` by default. Task 0256, PLAN.md §8.6.
   const session = await mochi.launch({
     profile,
     seed: opts.seed ?? `harness-${profileId}`,
     headless: opts.headless ?? true,
+    hermetic: true,
     ...(opts.browserPath !== undefined ? { binary: opts.browserPath } : {}),
   });
   let captured: CapturedProbeManifest;

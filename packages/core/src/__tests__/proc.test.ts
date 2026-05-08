@@ -14,7 +14,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { buildChromiumArgs, DEFAULT_CHROMIUM_FLAGS, type SpawnConfig } from "../proc";
+import {
+  buildChromiumArgs,
+  DEFAULT_CHROMIUM_FLAGS,
+  HERMETIC_ONLY_CHROMIUM_FLAGS,
+  type SpawnConfig,
+} from "../proc";
 
 const FAKE_BINARY = "/usr/bin/chromium-stub";
 const FAKE_UDD = "/tmp/mochi-test-udd";
@@ -254,5 +259,78 @@ describe("buildChromiumArgs — task 0252 (window-size + start-maximized scrub)"
     // Defensive: if anyone ever adds it to DEFAULT_CHROMIUM_FLAGS, this fails.
     const args = buildChromiumArgs(baseCfg(), FAKE_UDD, undefined);
     expect(args.some((a) => a.startsWith("--start-maximized"))).toBe(false);
+  });
+});
+
+// =============================================================================
+// Task 0256 (default Chromium flags audit + hermetic-mode knob)
+//
+// Verifies the production / hermetic split. Production drops passive
+// command-line bot-tells (`--disable-component-update`,
+// `--disable-default-apps`, `--disable-background-networking`,
+// `--disable-sync`) per patchright `chromiumSwitchesPatch.ts:20-34`;
+// hermetic re-applies them for harness / CI / capture flows.
+// =============================================================================
+
+describe("buildChromiumArgs — task 0256 (hermetic-mode knob)", () => {
+  it("does NOT emit any HERMETIC_ONLY_CHROMIUM_FLAGS entry when hermetic is unset", () => {
+    const args = buildChromiumArgs(baseCfg(), FAKE_UDD, undefined);
+    for (const flag of HERMETIC_ONLY_CHROMIUM_FLAGS) {
+      expect(args).not.toContain(flag);
+    }
+  });
+
+  it("does NOT emit any HERMETIC_ONLY_CHROMIUM_FLAGS entry when hermetic is false", () => {
+    const args = buildChromiumArgs(baseCfg({ hermetic: false }), FAKE_UDD, undefined);
+    for (const flag of HERMETIC_ONLY_CHROMIUM_FLAGS) {
+      expect(args).not.toContain(flag);
+    }
+  });
+
+  it("emits every HERMETIC_ONLY_CHROMIUM_FLAGS entry when hermetic is true", () => {
+    const args = buildChromiumArgs(baseCfg({ hermetic: true }), FAKE_UDD, undefined);
+    for (const flag of HERMETIC_ONLY_CHROMIUM_FLAGS) {
+      expect(args).toContain(flag);
+    }
+  });
+
+  it("preserves DEFAULT_CHROMIUM_FLAGS in hermetic mode (additive, not replacement)", () => {
+    const args = buildChromiumArgs(baseCfg({ hermetic: true }), FAKE_UDD, undefined);
+    for (const flag of DEFAULT_CHROMIUM_FLAGS) {
+      expect(args).toContain(flag);
+    }
+  });
+
+  it("DEFAULT_CHROMIUM_FLAGS does not contain any patchright-trim cmdline tell", () => {
+    // Belt + braces: the production default must not regress on the audit.
+    expect(DEFAULT_CHROMIUM_FLAGS).not.toContain("--disable-component-update");
+    expect(DEFAULT_CHROMIUM_FLAGS).not.toContain("--disable-default-apps");
+    expect(DEFAULT_CHROMIUM_FLAGS).not.toContain("--disable-background-networking");
+    expect(DEFAULT_CHROMIUM_FLAGS).not.toContain("--disable-sync");
+  });
+
+  it("DEFAULT_CHROMIUM_FLAGS does not contain --no-sandbox or AutomationControlled", () => {
+    // Per PLAN.md §8.6 — both are explicitly out of defaults.
+    expect(DEFAULT_CHROMIUM_FLAGS).not.toContain("--no-sandbox");
+    expect(DEFAULT_CHROMIUM_FLAGS).not.toContain("--disable-blink-features=AutomationControlled");
+    expect(HERMETIC_ONLY_CHROMIUM_FLAGS).not.toContain("--no-sandbox");
+    expect(HERMETIC_ONLY_CHROMIUM_FLAGS).not.toContain(
+      "--disable-blink-features=AutomationControlled",
+    );
+  });
+
+  it("hermetic flags are appended AFTER defaults but before --headless / extras", () => {
+    const args = buildChromiumArgs(
+      baseCfg({ hermetic: true, headless: true, extraArgs: ["--foo"] }),
+      FAKE_UDD,
+      undefined,
+    );
+    const lastDefaultIdx = args.indexOf("--enable-features=NetworkService,NetworkServiceInProcess");
+    const firstHermeticIdx = args.indexOf("--disable-default-apps");
+    const headlessIdx = args.indexOf("--headless=new");
+    const extrasIdx = args.indexOf("--foo");
+    expect(firstHermeticIdx).toBeGreaterThan(lastDefaultIdx);
+    expect(headlessIdx).toBeGreaterThan(firstHermeticIdx);
+    expect(extrasIdx).toBeGreaterThan(headlessIdx);
   });
 });

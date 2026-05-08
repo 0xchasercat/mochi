@@ -512,6 +512,12 @@ This is a hard list. The CDP wrapper has runtime asserts that refuse these:
 
 ### 8.6 Flags we always pass
 
+Two-tier flag set as of task 0256 (audit against patchright
+`chromiumSwitchesPatch.ts:20-34` + `puppeteer-real-browser`
+`lib/cjs/index.js:57-58`):
+
+#### Production default — `LaunchOptions.hermetic: false` (default)
+
 ```
 --remote-debugging-pipe
 --user-data-dir=<tmpdir>
@@ -520,15 +526,58 @@ This is a hard list. The CDP wrapper has runtime asserts that refuse these:
 --no-service-autorun
 --password-store=basic
 --use-mock-keychain
---disable-default-apps
---disable-component-update
---disable-features=Translate,OptimizationHints,MediaRouter,AcceptCHFrame,InterestFeedContentSuggestions,CalculateNativeWinOcclusion,IsolateOrigins,site-per-process,Translate
+--disable-features=Translate,AcceptCHFrame,IsolateOrigins,site-per-process
 --enable-features=NetworkService,NetworkServiceInProcess
---disable-background-networking
---disable-sync
 ```
 
-We do **not** pass `--no-sandbox` (that's a leak). We do **not** pass `--disable-blink-features=AutomationControlled` (we patch `navigator.webdriver` from JS instead).
+Plus `--headless=new` (when `headless: true`), `--proxy-server=<…>` (when
+`proxy` is set), `--lang=<…>` (matrix locale; task 0251),
+`--window-size=<W>,<H>` (matrix display; task 0252). User-supplied
+`LaunchOptions.args` and the `MOCHI_EXTRA_ARGS` env passthrough append last
+(after `--start-maximized` is scrubbed per task 0252).
+
+#### Hermetic addendum — `LaunchOptions.hermetic: true`
+
+The harness, CI, and `mochi capture` flows append these on top of the
+production set:
+
+```
+--disable-default-apps
+--disable-component-update
+--disable-background-networking
+--disable-sync
+--disable-features=OptimizationHints,MediaRouter,InterestFeedContentSuggestions,CalculateNativeWinOcclusion
+```
+
+Chromium merges multiple `--disable-features=` tokens into a union, so the
+final hermetic disabled set is `{Translate, AcceptCHFrame, IsolateOrigins,
+site-per-process, OptimizationHints, MediaRouter,
+InterestFeedContentSuggestions, CalculateNativeWinOcclusion}`.
+
+#### Decision lineage (task 0256 audit)
+
+| Flag                                      | Production | Hermetic | Why                                                                           |
+| ----------------------------------------- | ---------- | -------- | ----------------------------------------------------------------------------- |
+| `--remote-debugging-pipe`                 | ✅         | ✅       | §8.2 pipe-mode CDP transport — non-negotiable.                                 |
+| `--no-default-browser-check`              | ✅         | ✅       | Suppresses "set as default" nag; not a tell (Playwright keeps it).             |
+| `--no-first-run`                          | ✅         | ✅       | Suppresses welcome screen in headed mode.                                      |
+| `--no-service-autorun`                    | ✅         | ✅       | Suppresses Win bg services; not a tell.                                        |
+| `--password-store=basic`                  | ✅         | ✅       | Prevents Linux keyring popup; matches stable Chrome behaviour.                 |
+| `--use-mock-keychain`                     | ✅         | ✅       | macOS keychain stub; not a tell.                                               |
+| `--disable-features=Translate,AcceptCHFrame,IsolateOrigins,site-per-process` | ✅ | ✅ | Load-bearing: `IsolateOrigins,site-per-process` keeps OOPIF frames in-process for inject reach; `AcceptCHFrame` keeps UA-CH off the frame-negotiation path so our `Sec-CH-UA` (R-007) is the single source of truth; `Translate` suppresses the headed translate prompt. |
+| `--enable-features=NetworkService,NetworkServiceInProcess` | ✅ | ✅ | Keeps NetworkService in the renderer process so CDP `Network.*` / `Fetch.*` can intercept everything. |
+| `--disable-default-apps`                  | ❌         | ✅       | **Patchright drops** as cmdline tell. Production gets normal default-apps behaviour; hermetic suppresses. |
+| `--disable-component-update`              | ❌         | ✅       | **Patchright drops; PRB drops.** Cmdline tell. Hermetic suppresses for harness determinism. |
+| `--disable-background-networking`         | ❌         | ✅       | **Patchright drops.** Updater traffic suppressor; production users want normal-looking traffic. |
+| `--disable-sync`                          | ❌         | ✅       | **Patchright drops.** Cmdline tell; harmless to leave on for production (Chromium-for-Testing has no Google account). |
+| `--disable-features=OptimizationHints,MediaRouter,InterestFeedContentSuggestions,CalculateNativeWinOcclusion` | ❌ | ✅ | Network/noise suppression for hermetic determinism only; production users want the natural network surface. |
+
+**Explicit non-defaults (per audit):**
+- `--no-sandbox`: real-user fingerprint leak. CI uses `MOCHI_EXTRA_ARGS=--no-sandbox` env passthrough only.
+- `--disable-blink-features=AutomationControlled`: patchright adds this back to its flag set; mochi rejects — we patch `navigator.webdriver` from JS via R-022. Adds a flag-level tell at `chrome://version` for marginal benefit.
+- `--enable-unsafe-swiftshader`: NOT emitted (verified). Patchright strips Playwright's headless SwiftShader fallback that produces a distinct GL fingerprint; mochi never had it.
+- `--start-maximized`: actively scrubbed from `LaunchOptions.args` and `MOCHI_EXTRA_ARGS` (task 0252).
+- Legacy `--headless` (without `=new`): NOT emitted (verified). The `=new` form is critical — sannysoft trivially detects legacy headless.
 
 ---
 
