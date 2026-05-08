@@ -45,12 +45,19 @@ export const ONLINE_ENABLED = E2E_ENABLED && process.env.MOCHI_ONLINE === "1";
 
 /**
  * Launch a Mochi `Session` for the conformance profile with full inject
- * pipeline active. Honors `MOCHI_CHROMIUM_PATH` (the same env the rest of
- * the harness reads) and runs headless by default.
+ * pipeline active. Honors:
+ *   - `MOCHI_CHROMIUM_PATH` — same env the rest of the harness reads.
+ *   - `MOCHI_PROXY` — proxy URL passed straight to `mochi.launch({ proxy })`.
+ *     The string form auto-parses, so credentials in the URL
+ *     (`http://user:pass@host:port` or `socks5://...`) flow through to
+ *     the CDP `Fetch.authRequired` handler. Empty / unset = no proxy.
+ *
+ * Runs headless by default.
  */
 export async function launchSharedSession(): Promise<Session> {
   const profile = await loadProfile(profileDir(CONFORMANCE_PROFILE));
   const binary = process.env.MOCHI_CHROMIUM_PATH;
+  const proxy = process.env.MOCHI_PROXY;
   const launchOpts: Parameters<typeof mochi.launch>[0] = {
     profile,
     seed: CONFORMANCE_SEED,
@@ -58,6 +65,11 @@ export async function launchSharedSession(): Promise<Session> {
   };
   if (binary !== undefined && binary.length > 0) {
     (launchOpts as { binary?: string }).binary = binary;
+  }
+  // Empty-string check is load-bearing — fork PRs / dev envs without the
+  // secret get an empty value here, and the test must still run unproxied.
+  if (proxy !== undefined && proxy.length > 0) {
+    (launchOpts as { proxy?: string }).proxy = proxy;
   }
   return mochi.launch(launchOpts);
 }
