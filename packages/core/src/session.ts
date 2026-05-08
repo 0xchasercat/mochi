@@ -12,6 +12,11 @@
  * @see PLAN.md §7
  */
 
+import {
+  type Disposable as ChallengeHandle,
+  installTurnstileAutoClick,
+  type TurnstileEscalationReason,
+} from "@mochi.js/challenges";
 import type { MatrixV1 } from "@mochi.js/consistency";
 import { buildPayload, type PayloadResult } from "@mochi.js/inject";
 import {
@@ -82,6 +87,23 @@ export interface SessionInit {
    * @internal
    */
   netAdapter?: NetAdapter;
+  /**
+   * Convenience layer toggles surfaced via
+   * `LaunchOptions.challenges`. When `challenges.turnstile.autoClick` is
+   * `true`, every page returned by `Session.newPage` has
+   * `installTurnstileAutoClick(page, opts)` wired automatically.
+   * See `@mochi.js/challenges`.
+   */
+  challenges?: {
+    turnstile?: {
+      autoClick?: boolean;
+      timeout?: number;
+      humanize?: boolean;
+      onSolved?: (token: string) => void;
+      onEscalation?: (reason: TurnstileEscalationReason) => void;
+      pollIntervalMs?: number;
+    };
+  };
 }
 
 /** Public Cookie shape (re-exported from page.ts). */
@@ -153,6 +175,15 @@ export class Session {
    * `Session.close`. Undefined when the session has no proxy auth.
    */
   private proxyAuthHandle: ProxyAuthHandle | undefined;
+  /**
+   * Snapshot of the `challenges` launch option, retained so
+   * {@link newPage} can install the per-page auto-click handler. Undefined
+   * when no challenge convenience layer is enabled. Each page gets its
+   * own {@link ChallengeHandle} tracked here for disposal on
+   * {@link close}.
+   */
+  private readonly challengesOpts: SessionInit["challenges"] | undefined;
+  private readonly challengeHandles: ChallengeHandle[] = [];
 
   constructor(init: SessionInit) {
     this.proc = init.proc;
@@ -161,6 +192,7 @@ export class Session {
     this.bypassInject = init.bypassInject === true;
     this.netProxy = init.netProxy;
     this.netAdapter = init.netAdapter ?? defaultNetAdapter;
+    this.challengesOpts = init.challenges;
     // Skip payload compilation entirely when bypassed — capture flows must
     // not pay the build cost AND must not see the matrix-derived bytes.
     this._payload = this.bypassInject ? null : buildPayload(init.matrix);
@@ -259,6 +291,21 @@ export class Session {
       },
     });
     this._pages.push(page);
+    // Wire the Turnstile auto-click convenience layer if the session was
+    // launched with `challenges.turnstile.autoClick: true`. The handle is
+    // tracked on the Session so it disposes on close (and the page-close
+    // path also cleans up via the disposable's idempotent dispose).
+    const ts = this.challengesOpts?.turnstile;
+    if (ts !== undefined && ts.autoClick === true) {
+      const tsOpts: Parameters<typeof installTurnstileAutoClick>[1] = {};
+      if (ts.timeout !== undefined) tsOpts.timeout = ts.timeout;
+      if (ts.humanize !== undefined) tsOpts.humanize = ts.humanize;
+      if (ts.onSolved !== undefined) tsOpts.onSolved = ts.onSolved;
+      if (ts.onEscalation !== undefined) tsOpts.onEscalation = ts.onEscalation;
+      if (ts.pollIntervalMs !== undefined) tsOpts.pollIntervalMs = ts.pollIntervalMs;
+      const handle = installTurnstileAutoClick(page, tsOpts);
+      this.challengeHandles.push(handle);
+    }
     return page;
   }
 
@@ -388,6 +435,16 @@ export class Session {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    // Dispose any challenge convenience-layer handles first so background
+    // pollers stop before pages tear down their CDP sessions.
+    for (const h of this.challengeHandles) {
+      try {
+        h.dispose();
+      } catch {
+        // ignore — best-effort
+      }
+    }
+    this.challengeHandles.length = 0;
     // Mark all pages as closed (they'll error on further use).
     for (const p of this._pages) {
       // close() is idempotent on Page.

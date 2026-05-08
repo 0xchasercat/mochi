@@ -144,17 +144,26 @@ mochi's peer group is the JS-layer stealth-automation tools that drive stock or 
         └───────────────┘          PR gate / nightly)
 ```
 
-`PLAN.md` §4 has the long version. `PLAN.md` §5 has the per-package contracts.
-
-## Why Bun-only
-
-- `Bun:FFI` bridges to Rust (`wreq`) without N-API overhead.
-- Pipe-mode CDP via Bun's native FD APIs — no TCP listener for WAFs to scan, no localhost port for sandbox escape.
-- Faster cold start, smaller install graph, modern toolchain.
-- Engines: `bun >= 1.1`. Node is not a target. Deno is not a target. (Invariant I-3 — see `PLAN.md` §2.)
 
 ## Documentation
 
+
+## Convenience layers
+
+For common bot-defense widgets, mochi ships opt-in convenience layers under `@mochi.js/challenges`. These are thin wrappers around the existing inject + behavioral pipelines — no new fingerprint surface.
+
+```ts
+const session = await mochi.launch({
+  profile: "...",
+  seed: "...",
+  challenges: { turnstile: { autoClick: true } },
+});
+// Every page from this session auto-clicks visible Turnstile checkboxes.
+```
+
+v0.2 covers: Cloudflare Turnstile (visible-checkbox variants only). Image/audio/managed escalations fire an `onEscalation` callback rather than clicking blindly. See [`packages/challenges/README.md`](packages/challenges/README.md) and [`docs/limits.md`](docs/limits.md).
+
+## Why Bun-only?
 - [`docs/quickstart.md`](docs/quickstart.md) — 5-minute walkthrough, copy-pasteable.
 - [`docs/limits.md`](docs/limits.md) — every known limit, with root cause and workaround.
 - [`PLAN.md`](PLAN.md) — design contract. The 8 architectural invariants live in §2.

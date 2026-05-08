@@ -50,6 +50,7 @@
   },
   "dependencies": {
     "@mochi.js/behavioral": "workspace:*",
+    "@mochi.js/challenges": "workspace:*",
     "@mochi.js/consistency": "workspace:*",
     "@mochi.js/inject": "workspace:*",
     "@mochi.js/net": "workspace:*"
