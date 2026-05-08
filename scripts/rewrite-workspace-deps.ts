@@ -62,9 +62,7 @@ interface PackageJson {
   [key: string]: unknown;
 }
 
-async function loadAllPackageJsons(): Promise<
-  Map<string, { path: string; data: PackageJson }>
-> {
+async function loadAllPackageJsons(): Promise<Map<string, { path: string; data: PackageJson }>> {
   const out = new Map<string, { path: string; data: PackageJson }>();
   const entries = await readdir(PACKAGES_DIR, { withFileTypes: true });
   for (const entry of entries) {
