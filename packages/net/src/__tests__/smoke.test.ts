@@ -30,6 +30,30 @@ describe("@mochi.js/net public surface", () => {
     expect(candidates.some((c) => /target\/release\/libmochi_net\./.test(c))).toBe(true);
   });
 
+  it("dylibCandidates includes the postinstall native/ asset for supported platforms", () => {
+    const candidates = net.dylibCandidates();
+    const fileName = net.nativeAssetFileName();
+    if (fileName === null) {
+      // Unsupported platform — only the cargo-build paths should be present.
+      // Sanity: no `mochi_net-` (native asset) candidate appears.
+      expect(candidates.some((c) => /\/native\/mochi_net-/.test(c))).toBe(false);
+      return;
+    }
+    expect(candidates.some((c) => c.endsWith(`/native/${fileName}`))).toBe(true);
+  });
+
+  it("native/ candidate is preferred over target/release (postinstall over cargo)", () => {
+    // Only meaningful on a supported platform; otherwise this is a no-op.
+    const fileName = net.nativeAssetFileName();
+    if (fileName === null) return;
+    const candidates = net.dylibCandidates();
+    const nativeIdx = candidates.findIndex((c) => c.endsWith(`/native/${fileName}`));
+    const cargoReleaseIdx = candidates.findIndex((c) => /target\/release\/libmochi_net\./.test(c));
+    expect(nativeIdx).toBeGreaterThanOrEqual(0);
+    expect(cargoReleaseIdx).toBeGreaterThanOrEqual(0);
+    expect(nativeIdx).toBeLessThan(cargoReleaseIdx);
+  });
+
   it("MOCHI_NET_DYLIB env override is the first candidate", () => {
     const prev = process.env.MOCHI_NET_DYLIB;
     process.env.MOCHI_NET_DYLIB = "/tmp/synthetic-mochi-net-test.dylib";
@@ -53,10 +77,10 @@ describe("@mochi.js/net public surface", () => {
       // we then assert the resolved path includes libmochi_net.
       try {
         const p = net.resolveDylibPath();
-        expect(p).toMatch(/libmochi_net\./);
+        expect(p).toMatch(/(libmochi_net|mochi_net-)\./);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        expect(msg).toMatch(/cdylib not found/);
+        expect(msg).toMatch(/no @mochi\.js\/net-rs binary found/);
       }
     } finally {
       if (prev === undefined) delete process.env.MOCHI_NET_DYLIB;
