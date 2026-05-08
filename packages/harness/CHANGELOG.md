@@ -1,5 +1,13 @@
 # @mochi.js/harness
 
+## 0.1.5
+
+### Patch Changes
+
+- Updated dependencies [92eda96]
+- Updated dependencies [7cb4997]
+  - @mochi.js/core@0.2.2
+
 ## 0.1.4
 
 ### Patch Changes
