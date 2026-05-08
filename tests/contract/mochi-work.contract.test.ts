@@ -196,9 +196,23 @@ async function runIn(
   cmd: readonly string[],
   env: Record<string, string> = {},
 ): Promise<RunResult> {
+  // CRITICAL: scrub all GIT_* env vars before spawning. If the parent
+  // process (e.g., `bun work submit`, a pre-push hook, or a containing
+  // worktree) has GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE set, child
+  // `git` invocations will silently target the PARENT repo even though
+  // we explicitly pass `cwd: <fixture>`. That's how this fixture
+  // famously poisoned origin/main with a `chore: advance main` test
+  // artifact and rewrote the parent repo's `.git/config` to bare=true
+  // + Test User identity. Stripping every GIT_* key prevents any
+  // similar leak in the future.
+  const cleanEnv: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (k.startsWith("GIT_")) continue;
+    if (v !== undefined) cleanEnv[k] = v;
+  }
   const proc = Bun.spawn(cmd as string[], {
     cwd,
-    env: { ...process.env, ...env },
+    env: { ...cleanEnv, ...env },
     stdout: "pipe",
     stderr: "pipe",
     stdin: "ignore",

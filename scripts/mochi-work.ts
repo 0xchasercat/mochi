@@ -70,9 +70,26 @@ interface RunOpts {
 
 /** Run a command and capture stdout/stderr. Never throws on non-zero. */
 async function run(cmd: readonly string[], opts: RunOpts = {}): Promise<RunResult> {
+  // Scrub GIT_* env vars before spawning. If the parent process has
+  // GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE set (typical when invoked
+  // inside a git hook, a containing worktree, or `bun work submit`),
+  // child `git` invocations would silently target the parent's repo
+  // even though we explicitly pass `cwd`. That's how this script's
+  // sibling test fixture (mochi-work.contract.test.ts) leaked git
+  // operations onto origin/main and rewrote the parent's .git/config.
+  // Any caller that genuinely needs to forward GIT_* must do so via
+  // opts.env explicitly.
+  const cleanEnv: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (k.startsWith("GIT_")) continue;
+    if (v !== undefined) cleanEnv[k] = v;
+  }
+  const finalEnv: Record<string, string | undefined> = opts.env
+    ? { ...cleanEnv, ...opts.env }
+    : cleanEnv;
   const proc = Bun.spawn(cmd as string[], {
     cwd: opts.cwd,
-    env: opts.env ? { ...process.env, ...opts.env } : process.env,
+    env: finalEnv,
     stdout: opts.inherit ? "inherit" : "pipe",
     stderr: opts.inherit ? "inherit" : "pipe",
     stdin: "ignore",
