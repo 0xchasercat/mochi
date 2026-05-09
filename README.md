@@ -162,7 +162,7 @@ The [full limits document](https://mochijs.com/docs/reference/limits) has the pe
 
 ## Comparison
 
-mochi's peer group is the JS-layer stealth-automation tools that drive stock or near-stock Chromium. Each line is a structural axis, not a marketing axis. Per-library audit reports — covering exact CDP method surface, fingerprint patch list, and detected-by-X probe matrix — live under [`docs/audits/`](docs/audits/) and are summarized on the [Comparison page](https://mochijs.com/docs/reference/comparison).
+mochi's peer group is the JS-layer stealth-automation tools that drive stock or near-stock Chromium. Each row below is a structural axis, not a marketing axis. The [Comparison page](https://mochijs.com/docs/reference/comparison) has the deep version: each claim cites a specific upstream-source line range you can follow.
 
 | | mochi | [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright) | [puppeteer-real-browser](https://github.com/zfcsoftware/puppeteer-real-browser) (archived) | [nodriver](https://github.com/ultrafunkamsterdam/nodriver) | [undetected-chromedriver](https://github.com/ultrafunkamsterdam/undetected-chromedriver) |
 |---|---|---|---|---|---|

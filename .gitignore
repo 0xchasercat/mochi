@@ -65,3 +65,10 @@ docs/site/.cache/
 # See CONTRIBUTING.md for the public contributor guide.
 AGENTS.md
 tasks/
+
+# Internal: design mockups (Claude / Cursor scaffolding) + per-tool audit
+# reports. The audit findings are summarized on the public Comparison page
+# (https://mochijs.com/docs/reference/comparison) — full reports are kept
+# locally for the maintainer's reference.
+docs/.design-reference/
+docs/audits/
