@@ -8,7 +8,7 @@ import type { APIRoute } from "astro";
 
 const BODY = `# mochi.js
 
-> One coherent stack for stealth browser automation — relational fingerprint locking, JIT-installed spoofing, behavioral playback, and Chromium-native out-of-band HTTP. Bun-native.
+> The library for faithful browser automation. Bun-native.
 
 mochi is a Bun-native browser automation framework that owns the whole stealth pipeline as one library: pipe-mode CDP transport, a 48-rule relational consistency engine, JIT-friendly inject delivery via Fetch.fulfillRequest, full Bezier+Fitts behavioral synthesis, and a Chromium-native out-of-band fetch (Session.fetch routes through the browser via CDP, so JA4/JA3/H2 are real Chrome by definition). It runs on stock Chromium-for-Testing — no patched binary, no proprietary infrastructure, no FFI bridge to install.
 

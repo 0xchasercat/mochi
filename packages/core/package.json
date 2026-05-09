@@ -1,7 +1,7 @@
 {
   "name": "@mochi.js/core",
   "version": "0.7.0",
-  "description": "Bun-native browser automation framework — relational fingerprint locking, zero-jitter injection, behavioral playback. The primary entry point.",
+  "description": "The library for faithful browser automation. Bun-native; relational fingerprint matrix, biomechanical input, stock Chromium-for-Testing.",
   "license": "MIT",
   "type": "module",
   "main": "./src/index.ts",

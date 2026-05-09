@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>One coherent stack for stealth browser automation — relational fingerprint locking, JIT-installed spoofing, behavioral playback, and Chromium-native out-of-band HTTP.</strong>
+  <strong>The library for faithful browser automation.</strong>
 </p>
 
 <p align="center">
