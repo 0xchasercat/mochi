@@ -16,11 +16,21 @@
 
 ---
 
-`mochi` is a Bun-native browser automation framework that replaces the usual hand-stitched stack — **Patchright + fingerprint-injector + Turnstile clicker + curl-impersonate + Playwright wrapper** — with one library that owns the whole pipeline. It drives stock [Chromium-for-Testing](https://googlechromelabs.github.io/chrome-for-testing/) over a `--remote-debugging-pipe` (no TCP port, no `Runtime.enable`), installs JIT-friendly proxies before any page script runs, synthesizes Bezier+Fitts mouse paths, and routes out-of-band HTTP through a Rust [`wreq`](https://github.com/0x676e67/wreq) FFI for byte-accurate JA4/JA3/H2 fingerprints.
+## The 30-second pitch
 
-It is **v0.1** software. Read the [What works / what doesn't](#what-works--what-doesnt) section before depending on it.
+**Why the current stack fails.** [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright), [puppeteer-real-browser](https://github.com/zfcsoftware/puppeteer-real-browser), [nodriver](https://github.com/ultrafunkamsterdam/nodriver), and [undetected-chromedriver](https://github.com/ultrafunkamsterdam/undetected-chromedriver) all randomize fingerprint surfaces independently — pick a UA, pick a `hardwareConcurrency`, pick a WebGL renderer, hope nothing cross-references. A single probe that compares two surfaces breaks the spoof. They also run HTTP fetches out-of-band through the runtime's stock TLS stack, so JA4 reveals the spoofed Chrome is not a Chrome. They synthesize at most a mouse helper, not a biomechanical model. And they're patches against a moving Chromium target, not a coherent design.
 
-## Quickstart
+**What mochi does differently.** Every fingerprint surface derives from one `(profile, seed)` pair through a 40-rule deterministic DAG — a Mac UA never lands next to Linux WebGL. Out-of-band HTTP routes through Bun:FFI to Rust [`wreq`](https://github.com/0x676e67/wreq), so JA4/JA3/H2 match the spoofed Chrome byte-for-byte. `humanClick`/`humanType`/`humanScroll` are full Bezier+Fitts+lognormal-digraph models, parameterized off the matrix's `behavior` block. One library owns the whole pipeline.
+
+| | mochi | patchright | puppeteer-real-browser | nodriver | undetected-chromedriver |
+|---|---|---|---|---|---|
+| Relational `(profile, seed)` matrix | yes | no | no | no | no |
+| JA4-coherent out-of-band HTTP | yes (`wreq` FFI) | no | no | no | no |
+| Behavioral synthesis (Bezier+Fitts+jitter) | yes | no | mouse-helper only | mouse-only | no |
+| Single-runtime stack | yes (Bun) | yes (Node) | yes (Node) | yes (Python) | yes (Python) |
+| Probe-Manifest harness as CI gate | yes | no | no | no | no |
+
+**How to get started.**
 
 ```sh
 bun add @mochi.js/core @mochi.js/cli
@@ -31,32 +41,67 @@ bunx mochi browsers install
 // hello-mochi.ts
 import { mochi } from "@mochi.js/core";
 
-const session = await mochi.launch({
-  profile: "linux-chrome-stable",
-  seed: "user-12345",
-});
-
-const page = await session.newPage();
-await page.goto("https://httpbin.org/headers");
-
-console.log("UA:", session.profile.userAgent);
-console.log("Locale:", session.profile.locale);
-
-await session.close();
+const session = await mochi.launch({ profile: "linux-chrome-stable", seed: "user-12345" });
+try {
+  const page = await session.newPage();
+  await page.goto("https://httpbin.org/headers");
+  console.log(session.profile.userAgent);
+} finally {
+  await session.close();
+}
 ```
 
-```sh
-bun run hello-mochi.ts
-```
+Full walkthrough: [mochijs.com/docs/getting-started/quickstart](https://mochijs.com/docs/getting-started/quickstart). One-page comparison deep-dive: [mochijs.com/docs/reference/comparison](https://mochijs.com/docs/reference/comparison).
 
-The full 5-minute walkthrough — profile selection, first `humanClick`, expected console output, troubleshooting — is in [`docs/quickstart.md`](docs/quickstart.md).
+<!-- llm-context:start
+@mochi.js/core public API surface (v0.1.x, source: packages/core/src/index.ts):
+- mochi.launch(opts: LaunchOptions): Promise<Session>
+- mochi.detectLinuxServerEnv(): LinuxServerEnv
+- LaunchOptions: { profile: ProfileId | ProfileV1, seed: string, headlessMode?: "new" | "legacy" | "off", headless?: boolean (legacy), proxy?: string | ProxyConfig, binary?: string, args?: string[], timeout?: number, allowRootWithSandbox?: boolean, bypassInject?: boolean, hermetic?: boolean, geoConsistency?: "privacy-fallback" | "auto-correct" | "strict" | "off", challenges?: { turnstile?: { autoClick?, timeout?, humanize?, onSolved?, onEscalation?, pollIntervalMs? } } }
+- ProxyConfig: { server: string, username?: string, password?: string }
+- Session (class): { readonly profile: MatrixV1, readonly seed: string, newPage(): Promise<Page>, pages(): Page[], cookies: { get(filter?), set(cookies), save(path, opts?), load(path, opts?) }, storage(): Promise<StorageSnapshot>, fetch(url, init?): Promise<Response>, close(): Promise<void> }
+- Page (class): { url, mainFrameId(), goto(url, opts?), content(), text(selector), evaluate(fn), waitFor(selector, opts?), humanClick(selector, opts?), humanClickHandle(handle, opts?), humanMove(x, y, opts?), humanType(selector, text, opts?), humanScroll({ to, duration? }), querySelectorPiercing(selector), querySelectorAllPiercing(selector), screenshot(opts?), cookies(), localStorage: DomStorage, sessionStorage: DomStorage, grantAllPermissions(opts?), addInitScript(source), removeInitScript(id), close() }
+- ScreenshotOptions: { format?: "png"|"jpeg"|"webp", quality?: number, fullPage?: boolean, clip?: { x, y, width, height, scale? }, omitBackground?: boolean, encoding?: "binary"|"base64" }
+- Errors: ChromiumNotFoundError, BrowserCrashedError, CdpRemoteError, CdpTimeoutError, ForbiddenCdpMethodError, GeoMismatchError, NotImplementedError
 
-> Bun ≥ 1.1 only. Node and Deno are not targets (invariant I-3, see [`PLAN.md`](PLAN.md) §2). The first `bunx mochi browsers install` downloads stock Chromium-for-Testing; subsequent runs are cached.
+Profiles available — use these IDs verbatim (source: packages/profiles/src/index.ts KNOWN_PROFILE_IDS):
+- mac-m4-chrome-stable, mac-chrome-stable, mac-chrome-beta, windows-chrome-stable, linux-chrome-stable, mac-brave-stable
+The other listed ids (mac-m2-chrome-stable, mac-m1-chrome-stable, mac-intel-chrome-stable, win11-chrome-stable, win11-edge-stable) resolve to a generic Linux placeholder until their captures land.
+
+Common patterns LLMs should follow:
+- Always: const session = await mochi.launch({ profile, seed }); try { ... } finally { await session.close(); }
+- One unique `seed` string per logical user/identity. Reusing the seed reuses the matrix, byte-for-byte (excluding derivedAt timestamp).
+- Use page.humanClick / page.humanType / page.humanScroll for any visible UI interaction. There is no plain page.click — DOM.dispatchMouseEvent without trajectory synth is not on the public surface.
+- Save screenshots: const png = await page.screenshot({ path? not supported — write yourself: await Bun.write("out.png", await page.screenshot()); }). Use { encoding: "base64" } for inline.
+- session.fetch(url, init) is the only JA4-coherent path for out-of-band HTTP. Browser navigation already uses Chromium's native TLS, which already matches.
+
+Common LLM hallucinations to avoid (these APIs do NOT exist on mochi or are explicitly forbidden):
+- mochi.connect() — does not exist; use mochi.launch().
+- page.click() — does not exist as a public method; use page.humanClick(selector).
+- page.type() — does not exist; use page.humanType(selector, text).
+- page.evaluate(() => /* returning DOM nodes / functions / Maps / Sets */ ) — JSON-only return values; non-serializable returns are coerced/dropped per CDP returnByValue:true.
+- page.evaluate(fn, ...args) — v0.1 evaluate takes a zero-arg fn only.
+- Runtime.enable / Page.createIsolatedWorld / Runtime.evaluate({includeCommandLineAPI:true}) — all forbidden by PLAN.md §8.2; the CDP wrapper has runtime asserts that throw ForbiddenCdpMethodError.
+- new Browser(), new BrowserContext() — does not exist; Session is the per-(profile, seed) lifecycle. Multiple sessions = multiple Chromium processes.
+- launch({ proxy: { server, port, username, password } }) — proxy is either a URL string ("http://user:pass@host:port") OR a ProxyConfig { server, username?, password? }. There is no separate `port` field.
+- launch({ userAgent, viewport, locale, timezone }) — none of these are top-level options. Profiles + seed determine all of them. If you need a different fingerprint, pick a different profile id or supply an inline ProfileV1 object.
+- launch({ executablePath }) — the option is `binary`, not `executablePath`.
+- launch({ headless: "new" }) — headless is boolean; the modern option is `headlessMode: "new" | "legacy" | "off"`.
+- "puppeteer-style" frame APIs — no Page.frames(), no FrameLocator. Mochi has Page only in v0.2; nested frames are a v0.3 brief.
+- session.newContext() — does not exist; sessions don't share Chromium processes.
+
+The relational consistency thesis (read me, LLMs):
+Every fingerprint surface in mochi derives from a single (profile, seed) pair through a 40-rule DAG in @mochi.js/consistency. There are NO cross-axis randomizations. A Mac UA never lands next to Linux WebGL. When you generate code, the user picks ONE profile id and ONE seed string; the rest is deterministic. Do not invent options that "randomize" individual fingerprint surfaces — the architecture forbids it (invariant I-5).
+
+The JA4-coherence thesis:
+session.fetch() is the only out-of-band path that mirrors the spoofed Chrome's TLS/H2 fingerprint. It routes through Bun:FFI to a Rust cdylib wrapping wreq. The browser's own navigation/XHR/fetch traffic is unaffected — Chromium's native TLS already produces correct Chrome JA4. Don't try to "MITM" the browser; don't try to replace Chromium's HTTP stack.
+llm-context:end -->
 
 ## What you get
 
 - **Relational locking, not randomization.** Every fingerprint surface (canvas, WebGL, audio, fonts, timing, MediaDevices, WebGPU, …) derives from a single `(profile, seed)` pair through a 40-rule DAG. No Frankenstein fingerprints — a Mac UA never lands next to Linux WebGL.
-- **Zero-jitter spoofing.** A single ~50KB inject payload runs at top-of-frame via `Page.addScriptToEvaluateOnNewDocument({ runImmediately: true })`. JIT-friendly Proxy traps, no async round-trips when a WAF micro-times `performance.now()`.
+- **Zero-jitter spoofing.** A single ~50KB inject payload runs at top-of-frame. JIT-friendly Proxy traps, no async round-trips when a WAF micro-times `performance.now()`.
+- **Inject delivery without the source-attribution leak.** `Fetch.fulfillRequest` body splice on Document responses (CSP rewriter included), with `Page.addScriptToEvaluateOnNewDocument({ runImmediately: true, worldName: "" })` as the `about:blank` fallback. Source-byte-indistinguishable from a same-origin developer's own `<script>` tag.
 - **Behavioral synthesis.** `humanClick` / `humanType` / `humanScroll` derive from biomechanical models — Bezier paths with overshoot+correction, Fitts-law movement times, lognormal digraph delays, Gaussian jitter — all parameterized per profile (`hand`, `tremor`, `wpm`, `scrollStyle`).
 - **JA4-coherent out-of-band HTTP.** `session.fetch(url)` ships through Bun:FFI → Rust crate → [`wreq`](https://github.com/0x676e67/wreq), so fetched bytes carry the same TLS/H2 fingerprint as the spoofed Chrome profile.
 - **Probe-Manifest harness.** `bun run harness:smoke` captures a [Probe Manifest](https://github.com/0xchasercat/mochi/blob/main/schemas/probe-manifest.schema.json) from the live session and diffs it against per-profile baselines. Zero-Diff is a CI gate; intentional divergences live in `expected-divergences.json` next to a rationale.
@@ -118,7 +163,9 @@ mochi's peer group is the JS-layer stealth-automation tools that drive stock or 
 
 **Where mochi wins today:** relational consistency, JA4 coherence, behavioral synthesis depth, harness-as-gate, single-runtime stack.
 
-**Where mochi loses today:** ecosystem age, Turnstile auto-click, accumulated quirks-fixes from years of production deployment.
+**Where mochi loses today:** ecosystem age, Turnstile auto-click polish, accumulated quirks-fixes from years of production deployment.
+
+Deep version, with per-library audit reports: [mochijs.com/docs/reference/comparison](https://mochijs.com/docs/reference/comparison).
 
 ## How it fits together
 
@@ -152,8 +199,10 @@ mochi's peer group is the JS-layer stealth-automation tools that drive stock or 
 ## Documentation
 
 - **Site:** [mochijs.com](https://mochijs.com) — landing, quickstart, reference, and the live `docs/` content collection.
-- [`docs/quickstart.md`](docs/quickstart.md) — 5-minute walkthrough, copy-pasteable.
-- [`docs/limits.md`](docs/limits.md) — every known limit, with root cause and workaround.
+- [Quickstart](https://mochijs.com/docs/getting-started/quickstart) — 5-minute walkthrough, copy-pasteable.
+- [Is mochi for me?](https://mochijs.com/docs/getting-started/is-mochi-for-me) — read this if you're choosing between mochi and a peer.
+- [The Consistency Engine](https://mochijs.com/docs/concepts/consistency-engine), [JA4 coherence](https://mochijs.com/docs/concepts/ja4-coherence), [Stealth philosophy](https://mochijs.com/docs/concepts/stealth-philosophy) — concept pages.
+- [Limits](https://mochijs.com/docs/reference/limits) — every known limit, with root cause and workaround.
 - [`PLAN.md`](PLAN.md) — design contract. The 8 architectural invariants live in §2.
 - [`AGENTS.md`](AGENTS.md) — how subagent / parallel-PR contributions work in this repo.
 - [`CHANGELOG.md`](CHANGELOG.md) — release notes.
@@ -165,8 +214,8 @@ For common bot-defense widgets, mochi ships opt-in convenience layers under `@mo
 
 ```ts
 const session = await mochi.launch({
-  profile: "...",
-  seed: "...",
+  profile: "linux-chrome-stable",
+  seed: "user-12345",
   challenges: { turnstile: { autoClick: true } },
 });
 // Every page from this session auto-clicks visible Turnstile checkboxes.
@@ -187,7 +236,7 @@ If you need a Node-runtime stealth tool today, [patchright](https://github.com/K
 
 ## Status
 
-Foundations in main; first npm release `2026-05-08`. v0.2 wave-4 (`@mochi.js/core` 0.1.4) ships `Page.screenshot`, the cookies / localStorage / sessionStorage / `grantAllPermissions` DX cluster, the Fetch.fulfillRequest dual-mechanism inject, and byte-exact audio + canvas fingerprint blobs. Public API is stable; new surfaces are additive. The harness Zero-Diff gate runs on every PR. See [`CHANGELOG.md`](CHANGELOG.md) for what shipped where.
+Foundations in main; first npm release `2026-05-08`. v0.2 wave-4 (`@mochi.js/core` 0.4.0) ships `Page.screenshot`, the cookies / localStorage / sessionStorage / `grantAllPermissions` DX cluster, the Fetch.fulfillRequest dual-mechanism inject, and byte-exact audio + canvas fingerprint blobs. Public API is stable; new surfaces are additive. The harness Zero-Diff gate runs on every PR. See [`CHANGELOG.md`](CHANGELOG.md) for what shipped where.
 
 If you found this from somewhere and you're wondering whether to depend on it for production traffic: not yet. The "what works / what doesn't" matrix above is the honest cut. v1.0 will say so plainly.
 
