@@ -1,6 +1,6 @@
 {
   "name": "@mochi.js/consistency",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "The Matrix engine — relational fingerprint locking for mochi. Imported by @mochi.js/core.",
   "license": "MIT",
   "type": "module",
