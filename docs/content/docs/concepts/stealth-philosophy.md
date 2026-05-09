@@ -22,37 +22,32 @@ The standard pattern in stealth automation libraries is to randomize fingerprint
 
 mochi flips it: every fingerprint surface mochi spoofs derives from a single `(profile, seed)` pair through a 40-rule deterministic DAG in [`@mochi.js/consistency`](/docs/concepts/consistency-engine). A `ProfileV1` declares the *capabilities* of a device class — `device.cpuFamily`, `gpu.vendor`, `os.name`, fonts, timezone bands. A `MatrixV1` is the concrete instantiation for one `(profile, seed)` pair. The Matrix is what the injector consumes. Two distinct seeds produce two distinct Matrices, but each Matrix is internally fully consistent — every value is reachable from another value through the rule DAG. There are no per-axis randomizations. A Mac UA never lands next to Linux WebGL.
 
-The invariant is enforced architecturally. If a user supplies a manual override that would break a rule (e.g., setting `userAgent` to a Mac UA on a Windows profile), the override is logged as a *deliberate inconsistency* and the [Probe Manifest harness](/docs/concepts/probe-manifest) refuses to certify the resulting profile. mochi will let you do it; the framework just won't pretend the result is internally consistent.
+The invariant is enforced architecturally. If you supply a manual override that would break a rule (e.g., setting `userAgent` to a Mac UA on a Windows profile), the override is logged as a *deliberate inconsistency* and the [Probe Manifest harness](/docs/concepts/probe-manifest) refuses to certify the resulting profile. mochi will let you do it; the framework just won't pretend the result is internally consistent.
 
 ## Default to the host OS, not Windows
 
-The standard advice in the antidetect-browser industry is to spoof Windows from every host because browserscan-style surface checks penalize Linux UAs. The design team's position is that this is wrong, and that the entire industry built Windows spoofing on a false premise.
+The standard advice in the antidetect-browser industry is to spoof Windows from every host because browserscan-style surface checks penalize Linux UAs. That advice is wrong, and the entire industry built Windows spoofing on a false premise.
 
 ### The thesis
 
-The user's voice on this, preserved verbatim from the task brief:
+Everyone told you to spoof Windows. They were wrong.
 
-> Everyone told you to spoof Windows. They were wrong. Here's the proof.
->
-> Linux has like 4% desktop market share, but it's massively overrepresented in high-value user segments — developers, engineers, researchers, power users. The people WAF vendors' customers actually want to serve.
->
-> A CTO who flags all Linux as bot traffic is:
-> - Blocking their own engineering team
-> - Blocking developers evaluating their product
-> - Blocking a disproportionately high-LTV user segment
-> - Creating false positive rates that destroy trust in the detection system
->
-> Nobody would ship that. It's business suicide.
->
-> So Linux was never flagged. The WAFs trained their models on real traffic and Linux users are real users. The signal was always `HeadlessChrome`, not Linux.
->
-> The entire antidetect browser industry built Windows spoofing on a false premise. They assumed Linux was penalized because browserscan said so. Browserscan is a surface-level string checker, not a WAF ML model.
+Linux is roughly 4% of desktop market share, but it's massively overrepresented in high-value user segments — developers, engineers, researchers, power users. The people WAF vendors' customers actually want to serve. A WAF rule that flags all Linux as bot traffic is:
+
+- Blocking the customer's own engineering team.
+- Blocking developers evaluating their product.
+- Blocking a disproportionately high-LTV user segment.
+- Creating false-positive rates that destroy trust in the detection system.
+
+Nobody would ship that. It's business suicide.
+
+So Linux was never flagged. The WAFs trained their models on real production traffic, and on real production traffic Linux users are real users. The signal that does fire is `HeadlessChrome`, not Linux. Browserscan-style penalization of Linux UAs is a different category of tool — a surface-level string checker, not a WAF ML model — and conflating the two is what produces the "always spoof Windows" myth.
 
 ### The architectural rationale
 
 Spoofing across the OS axis is asymmetric. A Mac profile run on a Linux host has to lie about every WebGL string, every audio sample-rate, every font list, every JA4 ciphersuite ordering — and any one of those rules drifting is a relational-consistency hit that mochi's 40-rule DAG would catch on the way out, but that a leaky cross-axis rewrite written *outside* mochi would miss. Matching host-OS removes the entire class of "OS-axis inconsistency" detections. There is also a smaller latency budget: the Probe Manifest harness's headful → `--headless=new` rendering parity check runs faster when the host's native renderer matches the spoofed profile's renderer, because cross-OS spoofs have to patch more surfaces.
 
-Concretely: `mochi.launch({ profile: "linux-chrome-stable", … })` on a Linux server is **the recommended path**, not a workaround. As of task 0272 the user does not even type the profile id — when `profile` is omitted from `mochi.launch()`, mochi consults `process.platform` / `process.arch` and auto-picks the host-OS-matching profile. Linux server runs the linux profile; Mac arm64 dev box runs `mac-m4-chrome-stable`; Windows runs `windows-chrome-stable`. Explicit `profile` always wins. See [`mochi.defaultProfileForHost`](/docs/api/core) and [Linux server deployment](/docs/getting-started/linux-server).
+Concretely: `mochi.launch({ profile: "linux-chrome-stable", … })` on a Linux server is **the recommended path**, not a workaround. You don't even need to type the profile id — when `profile` is omitted from `mochi.launch()`, mochi consults `process.platform` / `process.arch` and auto-picks the host-OS-matching profile. Linux server runs the linux profile; Mac arm64 dev box runs `mac-m4-chrome-stable`; Windows runs `windows-chrome-stable`. Explicit `profile` always wins. See [`mochi.defaultProfileForHost`](/docs/api/core) and [Linux server deployment](/docs/getting-started/linux-server).
 
 ### The proof
 
@@ -78,7 +73,7 @@ Three things this confirms:
 - **`tampering_ml_score: 0.9853` but the classifier did not promote.** The tampering ML *can* tell something is off. It does not promote that to a bot classification because the rest of the fingerprint is internally coherent — exactly what the relational-consistency thesis predicts. Cross-axis agreement is the dominant signal; ML drift on a single axis is not enough to trip the gate alone.
 - **`vpn: false` despite `vpn_origin_timezone: "UTC"`.** The privacy-fallback `geoConsistency` architecture working in production. The session ran with matrix tz `UTC` against a Frankfurt IP. A naive spoof would produce `os_mismatch: true` or `timezone_mismatch: true`; mochi's privacy-fallback presents as a privacy-conscious user (UTC) rather than a tampered Asia/Bangkok→Europe/Berlin mismatch. FPJS recorded `vpn_origin_timezone: "UTC"` (the privacy signal we wanted) and kept `vpn: false` (the classification we wanted).
 
-This is one site (aone.gg, FPJS Pro v4 — high-quality but not best-in-class adversary). Cloudflare bot-management, Akamai Bot Manager, DataDome, Kasada, PerimeterX in their max-aggressiveness modes have not been tested against this run. The [Limits page](/docs/reference/limits) stays the canonical "what we don't claim". The raw FPJS Pro v4 JSON lives in [`tasks/0271`](https://github.com/0xchasercat/mochi/blob/main/tasks/0271-the-linux-os-thesis.md).
+This is one site (aone.gg, FPJS Pro v4 — high-quality but not best-in-class adversary). Cloudflare bot-management, Akamai Bot Manager, DataDome, Kasada, PerimeterX in their max-aggressiveness modes have not been tested against this run. The [Limits page](/docs/reference/limits) stays the canonical "what we don't claim". The raw FPJS Pro v4 JSON is committed in the repo as [evidence](https://github.com/0xchasercat/mochi/blob/main/tasks/0271-the-linux-os-thesis.md).
 
 ## Probe Manifest as gate (invariants I-6, I-7)
 

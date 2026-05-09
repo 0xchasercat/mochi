@@ -110,6 +110,12 @@ The JA4-coherence thesis:
 session.fetch() is the only out-of-band path that mirrors the spoofed Chrome's TLS/H2 fingerprint. It routes through Bun:FFI to a Rust cdylib wrapping wreq. The browser's own navigation/XHR/fetch traffic is unaffected — Chromium's native TLS already produces correct Chrome JA4. Don't try to "MITM" the browser; don't try to replace Chromium's HTTP stack.
 llm-context:end -->
 
+## What this is for
+
+People use mochi to scrape, to QA-test against staging WAFs, to debug WAF rules they think over-block, to build data pipelines, to run cross-browser regression suites, to simulate users for performance work, to research how detection systems actually behave. The mechanics are identical in every case — you want a real Chrome session that doesn't get caught in measures designed for actual attackers. mochi gives you that by being consistent, not by being deceptive.
+
+We don't sort our users by intent. If your threat model is "don't get traced," mochi is the wrong tool — it's open source and the fingerprint profiles ship in the package, which means a sophisticated attacker treats them as a known signature to avoid. mochi is sized for developers who want their automation to look like a real Chrome.
+
 ## What you get
 
 - **Relational locking, not randomization.** Every fingerprint surface (canvas, WebGL, audio, fonts, timing, MediaDevices, WebGPU, …) derives from a single `(profile, seed)` pair through a 40-rule DAG. No Frankenstein fingerprints — a Mac UA never lands next to Linux WebGL.
