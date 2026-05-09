@@ -49,7 +49,7 @@ const CACHE_TTL_MS = 60 * 60 * 1000;
  *   2. recent enough that it isn't EOL
  *   3. stable (no .0 minor — those are dev tip)
  */
-export const PINNED_FALLBACK_VERSION = "131.0.6778.85" as const;
+export const PINNED_FALLBACK_VERSION = "148.0.7778.97" as const;
 export const PINNED_FALLBACK_CHANNEL: Channel = "stable";
 
 /** A single download entry as exposed in the CfT manifest. */

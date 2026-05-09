@@ -107,7 +107,7 @@ function bareLaunchProfile(profileId: string): ProfileV1 {
     id: `${profileId}-bare-launch`,
     version: "0.0.0-bare",
     engine: "chromium",
-    browser: { name: "chrome", channel: "stable", minVersion: "131", maxVersion: "133" },
+    browser: { name: "chrome", channel: "stable", minVersion: "148", maxVersion: "148" },
     os: { name: "linux", version: "22", arch: "x64" },
     device: {
       vendor: "generic",
@@ -132,9 +132,9 @@ function bareLaunchProfile(profileId: string): ProfileV1 {
     locale: "en-US",
     languages: ["en-US", "en"],
     behavior: { hand: "right", tremor: 0.18, wpm: 60, scrollStyle: "smooth" },
-    wreqPreset: "chrome_131_linux",
+    wreqPreset: "chrome_148_linux",
     userAgent:
-      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
     uaCh: {},
     entropyBudget: { fixed: [], perSeed: [] },
   };

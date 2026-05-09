@@ -28,7 +28,7 @@ export interface ProvenanceInputs {
   readonly capturer?: string;
   /** Free-form hardware label. Serial truncation is the caller's job. */
   readonly machine?: string;
-  /** Captured browser version (e.g. `131.0.6778.86`). */
+  /** Captured browser version (e.g. `148.0.7778.97`). */
   readonly browserVersion?: string;
   /** mochi (cli) version that produced the capture. */
   readonly mochiVersion?: string;

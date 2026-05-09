@@ -27,7 +27,7 @@
     },
     "packages/cli": {
       "name": "@mochi.js/cli",
-      "version": "0.2.3",
+      "version": "0.2.4",
       "bin": {
         "mochi": "./src/bin.ts",
       },
@@ -43,17 +43,18 @@
     },
     "packages/core": {
       "name": "@mochi.js/core",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "dependencies": {
         "@mochi.js/behavioral": "workspace:*",
         "@mochi.js/challenges": "workspace:*",
         "@mochi.js/consistency": "workspace:*",
         "@mochi.js/inject": "workspace:*",
+        "@mochi.js/profiles": "workspace:*",
       },
     },
     "packages/harness": {
       "name": "@mochi.js/harness",
-      "version": "0.1.8",
+      "version": "0.1.9",
       "dependencies": {
         "@mochi.js/behavioral": "workspace:*",
         "@mochi.js/consistency": "workspace:*",

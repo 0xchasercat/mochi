@@ -11,6 +11,11 @@
  */
 
 import { deriveMatrix, type ProfileV1 } from "@mochi.js/consistency";
+import {
+  getProfile,
+  ProfileBaselineMissingError,
+  UnknownProfileIdError,
+} from "@mochi.js/profiles";
 import { resolveBinary } from "./binary";
 import { defaultProfileForHost, unsupportedHostMessage } from "./default-profile";
 import { type GeoConsistencyMode, reconcileGeoConsistency } from "./geo-consistency";
@@ -262,15 +267,17 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
   // JS-layer spoof.
   //
   // Inline `ProfileV1` objects flow straight through; string profile ids
-  // are resolved against a placeholder profile until `@mochi.js/profiles`
-  // ships its first capture (phase 0.4). The matrix is bit-stable per
-  // `(profile, seed)` excluding the `derivedAt` timestamp.
+  // resolve to the captured `data/<id>/profile.json` baseline shipped by
+  // `@mochi.js/profiles`. When the catalog declares an id but no captured
+  // baseline ships yet (e.g. `mac-m2-chrome-stable`), we fall back to a
+  // synthesized placeholder so the launch still succeeds. The matrix is
+  // bit-stable per `(profile, seed)` excluding the `derivedAt` timestamp.
   //
   // Task 0272 — when `profile` is omitted, auto-pick the host-OS-matching
   // profile id. Throws with a precise diagnostic if the host is one of the
   // unsupported ones (FreeBSD, Linux arm64 today, Windows arm64, Alpine
   // musl). Explicit `profile:` always wins; the auto-pick never overrides.
-  const profileSource = resolveProfileSource(opts.profile);
+  const profileSource = await resolveProfileSource(opts.profile);
   const matrix = deriveMatrix(profileSource.profile, opts.seed);
   if (profileSource.autoPicked) {
     // One info-level log line so users can see what mochi inferred without
@@ -509,27 +516,33 @@ function normalizeProxy(p: LaunchOptions["proxy"]):
  *
  *   1. Explicit `ProfileV1` object — flows through unchanged. `autoPicked`
  *      false; `id` taken from the inline object.
- *   2. Explicit `ProfileId` string — same placeholder synthesis as before.
- *      `autoPicked` false.
+ *   2. Explicit `ProfileId` string — load the captured baseline from
+ *      `@mochi.js/profiles`. If the id is known to the catalog but no
+ *      captured baseline ships, fall back to a placeholder synthesis so
+ *      the launch still succeeds (and the consistency engine still locks
+ *      a relationally-consistent Matrix from the skeleton). Unknown ids
+ *      propagate as a hard error. `autoPicked` false.
  *   3. `undefined` — task 0272: call `defaultProfileForHost()`. Throw with
  *      the unsupported-host diagnostic when the resolver returns `null`.
- *      `autoPicked` true.
+ *      `autoPicked` true; same captured-vs-placeholder fallback as branch
+ *      2.
  *
- * Pure function — does not log. The launcher emits the INFO line itself
- * after observing `autoPicked === true` so test fixtures can assert the
- * resolution without intercepting `console`.
+ * Async because `getProfile` reads `data/<id>/profile.json` from disk via
+ * `Bun.file().json()`. The launcher does not log here — the INFO line for
+ * `autoPicked === true` is emitted at the call-site so test fixtures can
+ * assert the resolution without intercepting `console`.
  */
-function resolveProfileSource(profile: ProfileId | ProfileV1 | undefined): {
+async function resolveProfileSource(profile: ProfileId | ProfileV1 | undefined): Promise<{
   profile: ProfileV1;
   id: ProfileId;
   autoPicked: boolean;
-} {
+}> {
   if (typeof profile === "object") {
     return { profile, id: profile.id, autoPicked: false };
   }
   if (typeof profile === "string") {
     return {
-      profile: synthesizePlaceholderProfile(profile),
+      profile: await loadProfileWithFallback(profile),
       id: profile,
       autoPicked: false,
     };
@@ -540,24 +553,67 @@ function resolveProfileSource(profile: ProfileId | ProfileV1 | undefined): {
     throw new Error(unsupportedHostMessage(process.platform, process.arch));
   }
   return {
-    profile: synthesizePlaceholderProfile(picked),
+    profile: await loadProfileWithFallback(picked),
     id: picked,
     autoPicked: true,
   };
 }
 
 /**
- * Synthesize a generic placeholder `ProfileV1` from a profile id. Until
- * `@mochi.js/profiles.getProfile` lands (phase 0.4), the consistency engine
- * still produces a real, relationally-locked Matrix from this skeleton —
- * the id is what flows into `sha256(profile.id + seed)`.
+ * Load a `ProfileV1` for `id` from `@mochi.js/profiles` if a captured
+ * baseline ships, otherwise synthesize a placeholder. Unknown ids propagate
+ * as the underlying `UnknownProfileIdError`.
+ *
+ * Critical correctness path: the captured baselines pin tip-of-stable Chrome
+ * majors (147+ as of 2026-05). The pre-fix code path called
+ * `synthesizePlaceholderProfile` for every string id, which hardcoded
+ * Chrome 131 and produced a UA mismatch with the actual Chromium-for-Testing
+ * binary.
+ */
+async function loadProfileWithFallback(id: ProfileId): Promise<ProfileV1> {
+  try {
+    // `ProfileId` here is the loose `string` alias the launcher accepts
+    // (see comment near the type definition). `getProfile` narrows it
+    // back to the catalog union at runtime and throws
+    // `UnknownProfileIdError` for ids outside the catalog — which we
+    // re-throw below.
+    return await getProfile(id as Parameters<typeof getProfile>[0]);
+  } catch (err) {
+    if (err instanceof ProfileBaselineMissingError) {
+      // Known catalog entry, no baseline shipped yet — fall back to the
+      // synthesized placeholder so the launch still succeeds.
+      return synthesizePlaceholderProfile(id);
+    }
+    if (err instanceof UnknownProfileIdError) {
+      // Caller passed an id that isn't in `KNOWN_PROFILE_IDS`. Propagate
+      // unchanged — the user should see the precise diagnostic.
+      throw err;
+    }
+    throw err;
+  }
+}
+
+/**
+ * Synthesize a generic placeholder `ProfileV1` from a profile id, used as
+ * a fallback when the catalog declares an id but no captured baseline
+ * ships in `@mochi.js/profiles` yet. The consistency engine still produces
+ * a real, relationally-locked Matrix from this skeleton — the id is what
+ * flows into `sha256(profile.id + seed)`.
+ *
+ * The major version pinned here MUST track the live Chromium-for-Testing
+ * pin (`packages/cli/src/browsers/manifest.ts:PINNED_FALLBACK_VERSION`)
+ * and the tip entry in
+ * `packages/consistency/src/rules/lookups/browser.ts:BROWSER_TIP_FULL_VERSION`.
+ * A drift between these surfaces ships a UA whose major doesn't match the
+ * installed binary — the canonical fingerprint-mismatch bug R-004 was
+ * meant to prevent. Bump all three together.
  */
 function synthesizePlaceholderProfile(profile: ProfileId): ProfileV1 {
   return {
     id: profile,
     version: "0.0.0-placeholder",
     engine: "chromium",
-    browser: { name: "chrome", channel: "stable", minVersion: "131", maxVersion: "133" },
+    browser: { name: "chrome", channel: "stable", minVersion: "148", maxVersion: "148" },
     os: { name: "linux", version: "22", arch: "x64" },
     device: {
       vendor: "generic",
@@ -582,11 +638,13 @@ function synthesizePlaceholderProfile(profile: ProfileId): ProfileV1 {
     locale: "en-US",
     languages: ["en-US", "en"],
     behavior: { hand: "right", tremor: 0.18, wpm: 60, scrollStyle: "smooth" },
-    // Deprecated — kept for one release for migration; runtime no longer
-    // reads the field. Drops in 0.8.
+    // `wreqPreset` is required by the ProfileV1 schema for one release of
+    // back-compat (see `schemas/profile.schema.json`). The runtime no
+    // longer reads it — `Session.fetch` rides Chromium's network stack via
+    // CDP, so JA4 is real Chrome by definition. Drops in 0.8.
     wreqPreset: "chrome_148_linux",
     userAgent:
-      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
     uaCh: {},
     entropyBudget: { fixed: [], perSeed: [] },
   };

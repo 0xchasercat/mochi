@@ -267,7 +267,7 @@ function detectArch(
 }
 
 function defaultUserAgent(): string {
-  return "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+  return "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36";
 }
 function defaultOsVersion(os: "macos" | "windows" | "linux"): string {
   return os === "macos" ? "14" : os === "windows" ? "10" : "22";
@@ -359,8 +359,8 @@ function detectBrowser(navigator: Record<string, unknown>, userAgent: string): B
   const m = userAgent.match(/Chrome\/(\d+)\.([0-9.]+)/);
   return {
     name: /Edg\//i.test(userAgent) ? "edge" : "chrome",
-    majorVersion: m?.[1] ?? "131",
-    fullVersion: m ? `${m[1]}.${m[2] ?? "0"}` : "131.0.0.0",
+    majorVersion: m?.[1] ?? "148",
+    fullVersion: m ? `${m[1]}.${m[2] ?? "0"}` : "148.0.0.0",
   };
 }
 

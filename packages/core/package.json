@@ -52,7 +52,8 @@
     "@mochi.js/behavioral": "workspace:*",
     "@mochi.js/challenges": "workspace:*",
     "@mochi.js/consistency": "workspace:*",
-    "@mochi.js/inject": "workspace:*"
+    "@mochi.js/inject": "workspace:*",
+    "@mochi.js/profiles": "workspace:*"
   },
   "publishConfig": {
     "access": "public"
