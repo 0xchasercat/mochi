@@ -11,7 +11,16 @@
  * @see PLAN.md §15.2
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
+
+// `mochi-work` integration tests do real `git init` / worktree / spawn work in
+// beforeEach, which can run >5s on slow CI runners — Bun's default `it()` and
+// hook timeout. Bump the per-test ceiling for this entire file so a slow runner
+// doesn't trip a misleading "a beforeEach/afterEach hook timed out" failure on
+// what is in fact a healthy (just slow) git fixture rebuild. 30s is well clear
+// of any realistic local + CI budget; a genuine hang still trips quickly.
+setDefaultTimeout(30_000);
+
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
