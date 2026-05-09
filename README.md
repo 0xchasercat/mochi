@@ -73,8 +73,8 @@ Direct port from [`docs/limits.md`](docs/limits.md) — the architectural-honest
 | `Page.goto({ waitUntil: "networkidle" })` | partial | Mapped to `"load"` until per-frame `Network.enable` lands. |
 | Relational fingerprint Matrix (40 rules) | works | `(profile, seed)` → `MatrixV1`, deterministic, JSON round-trippable. |
 | JS-layer spoofing (UA / UA-CH, navigator, WebGL, WebGPU, MediaDevices, Permissions, screen, fonts, timezone, locale) | works | Inject payload, JIT-proxy traps, top-of-frame. |
-| Audio (`OfflineAudioContext`) byte-accurate fingerprint | works | Per-(profile, sample-rate) captures consumed via R-047 → `audio-fingerprint` inject module. Byte-stable on the [4500..5000) sample window the v0.7 probe corpus reads. Task 0267. |
-| Canvas (`toDataURL`) byte-accurate fingerprint | works | Per-profile data URL synthesis via R-048 → `canvas-fingerprint` inject module. Probe-side `hashString(url)` + length + first-50-char prefix match the captured baseline byte-exactly; size-and-text heuristic falls back to native rendering for non-probe canvases. Task 0267. |
+| Audio (`OfflineAudioContext`) byte-accurate fingerprint | works | Per-(profile, sample-rate) captures consumed via R-047 → `audio-fingerprint` inject module. The spoof distributes the residual across the 489 samples in `[4510..4999)` (using `Math.fround` to model f32 readback) so the page-side digest equals the captured baseline byte-exactly on every host architecture, not just Mac M-series. Task 0267. |
+| Canvas (`toDataURL`) byte-accurate fingerprint | works | Per-profile data URL synthesis via R-048 → `canvas-fingerprint` inject module. Intercepts probe-sized canvases (`300×150`) with the captured baseline; probe-side `hashString(url)` + length + first-50-char prefix match byte-exactly. Non-probe sizes fall through to native rendering. Task 0267. |
 | Behavioral synthesis (`humanClick` / `humanType` / `humanScroll`) | works | Bezier+Fitts+jitter; profile-parameterized (`hand`, `tremor`, `wpm`, `scrollStyle`). |
 | Profile catalog (`mac-m4-chrome-stable`, `mac-chrome-stable`, `mac-chrome-beta`, `windows-chrome-stable`, `linux-chrome-stable`, `mac-brave-stable`) | works | Six real-device baselines imported from the wrkx harvester corpus, each filtered by FingerprintJS Pro `suspectScore <= 20` and validated by the harness round-trip. Other catalog ids (`mac-m2-…`, `mac-intel-…`, `win11-edge-…`) still resolve to the generic placeholder. |
 | Trace recording / replay (`mochi record` → `humanClick(sel, { trace })`) | deferred | API surface forward-compatible; recorder lands in v1.x. |
@@ -86,7 +86,8 @@ Direct port from [`docs/limits.md`](docs/limits.md) — the architectural-honest
 | `Page.localStorage.{get,set}` / `Page.sessionStorage` | works | DOMStorage CDP, frame-scoped (defaults to current main-frame origin). |
 | `Page.grantAllPermissions()` | works | Wraps `Browser.grantPermissions` with the full descriptor list. Pairs with R-036. |
 | Proxy-PAC scripts | not yet | Use system network policy until the flag lands. |
-| Turnstile auto-click | not yet | Tracked in task 0220. |
+| Turnstile auto-click | works | `@mochi.js/challenges` — opt-in via `challenges: { turnstile: { autoClick: true } }`. Visible-checkbox variants only; image / audio / managed escalations fire `onEscalation` instead of clicking blindly (task 0220). |
+| Init-script delivery without `Page.createIsolatedWorld` | works | Dual-mechanism: `Fetch.fulfillRequest` body-splice on Document responses (CSP-rewritten) plus `Page.addScriptToEvaluateOnNewDocument({ runImmediately: true, worldName: "" })` fallback for `about:blank` and other non-HTTP nav targets. Idempotency guard via `__mochi_inject_marker` (task 0266). |
 | `bot.incolumitas.com` anti-debugger trap | known limit | C++-only fix path. Every CDP-driven tool trips it identically. |
 | `deviceandbrowserinfo.com/are_you_a_bot` worker-injection trap | known limit | Same anti-debugger family as incolumitas. |
 | `fingerprint.com/web-scraping` (datacenter IP, cold session) | known limit | Server-side IP-class scoring; route through residential. |
@@ -111,7 +112,7 @@ mochi's peer group is the JS-layer stealth-automation tools that drive stock or 
 | Behavioral synthesis (`humanClick`/`humanType`) | yes (Bezier+Fitts+jitter) | no | mouse-helper only | mouse-only | no |
 | JA4/JA3/H2-coherent out-of-band HTTP | yes (`wreq` FFI) | no | no | no | no |
 | Single-runtime stack (no `pip install` next to `npm install`) | yes | yes | yes | yes (Python only) | yes (Python only) |
-| Turnstile auto-click | not yet (task 0220) | yes | yes | partial | partial |
+| Turnstile auto-click | yes (`@mochi.js/challenges`) | yes | yes | partial | partial |
 | Stable-Chrome quirks accumulated over 4+ years | no | partial | partial | yes | yes |
 | Ecosystem maturity (issues / PRs / community) | new | mid | mid | mid | high |
 
@@ -150,6 +151,13 @@ mochi's peer group is the JS-layer stealth-automation tools that drive stock or 
 
 ## Documentation
 
+- **Site:** [mochijs.com](https://mochijs.com) — landing, quickstart, reference, and the live `docs/` content collection.
+- [`docs/quickstart.md`](docs/quickstart.md) — 5-minute walkthrough, copy-pasteable.
+- [`docs/limits.md`](docs/limits.md) — every known limit, with root cause and workaround.
+- [`PLAN.md`](PLAN.md) — design contract. The 8 architectural invariants live in §2.
+- [`AGENTS.md`](AGENTS.md) — how subagent / parallel-PR contributions work in this repo.
+- [`CHANGELOG.md`](CHANGELOG.md) — release notes.
+- [`packages/challenges/README.md`](packages/challenges/README.md) — Turnstile auto-click and the `challenges` convenience layer.
 
 ## Convenience layers
 
@@ -167,17 +175,19 @@ const session = await mochi.launch({
 v0.2 covers: Cloudflare Turnstile (visible-checkbox variants only). Image/audio/managed escalations fire an `onEscalation` callback rather than clicking blindly. See [`packages/challenges/README.md`](packages/challenges/README.md) and [`docs/limits.md`](docs/limits.md).
 
 ## Why Bun-only?
-- [`docs/quickstart.md`](docs/quickstart.md) — 5-minute walkthrough, copy-pasteable.
-- [`docs/limits.md`](docs/limits.md) — every known limit, with root cause and workaround.
-- [`PLAN.md`](PLAN.md) — design contract. The 8 architectural invariants live in §2.
-- [`AGENTS.md`](AGENTS.md) — how subagent / parallel-PR contributions work in this repo.
-- [`CHANGELOG.md`](CHANGELOG.md) — release notes.
-- Examples directory — *coming soon (task 0240).*
-- Docs site — [mochijs.com](https://mochijs.com) — *landing page + reference docs in flight (tasks 0240 / 0241).*
+
+`mochi` is invariant I-3 in [`PLAN.md`](PLAN.md): Bun ≥ 1.1 only, no Node, no Deno. The reasons are concrete and load-bearing:
+
+- **Bun:FFI** — the JA4-coherent HTTP layer (`session.fetch`) calls a Rust cdylib via `bun:ffi`. Node's N-API would require a Neon/napi-rs wrapper layer; Bun:FFI binds the same `.dylib` / `.so` / `.dll` directly with zero glue code.
+- **Pipe-mode CDP** — `Bun.spawn` exposes file descriptors 3 + 4 directly to user code, which is what `--remote-debugging-pipe` needs. Node's `child_process` doesn't, so every Node-based stealth tool falls back to TCP — and a listening CDP port is a fingerprintable surface.
+- **Bun:SQL** — the offline-first profile lookup and `bun work` orchestrator both use `Bun.SQL` (libSQL-backed). No `better-sqlite3` native dep, no migration story, no platform-specific build issues.
+- **`Bun.spawn` + `Bun.serve` ergonomics** — the harness fixture server, `mochi capture` Probe Manifest collector, and the conformance-suite proxy chain all rely on Bun-native primitives that have no zero-cost equivalent in Node land.
+
+If you need a Node-runtime stealth tool today, [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright) and [puppeteer-real-browser](https://github.com/zfcsoftware/puppeteer-real-browser) are the live options.
 
 ## Status
 
-Foundations in main; first npm release `2026-05-08`. Public API is stable; new surfaces are additive. The harness Zero-Diff gate runs on every PR. See [`CHANGELOG.md`](CHANGELOG.md) for what shipped where.
+Foundations in main; first npm release `2026-05-08`. v0.2 wave-4 (`@mochi.js/core` 0.1.4) ships `Page.screenshot`, the cookies / localStorage / sessionStorage / `grantAllPermissions` DX cluster, the Fetch.fulfillRequest dual-mechanism inject, and byte-exact audio + canvas fingerprint blobs. Public API is stable; new surfaces are additive. The harness Zero-Diff gate runs on every PR. See [`CHANGELOG.md`](CHANGELOG.md) for what shipped where.
 
 If you found this from somewhere and you're wondering whether to depend on it for production traffic: not yet. The "what works / what doesn't" matrix above is the honest cut. v1.0 will say so plainly.
 
