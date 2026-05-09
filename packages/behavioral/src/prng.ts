@@ -15,8 +15,8 @@
  * Cross-package dependency: see `packages/behavioral/package.json` —
  * `@mochi.js/consistency: workspace:*`. This is the only consumer-side
  * dependency the behavioral package declares (PLAN.md §5.5 is otherwise
- * "imports: nothing"). Acknowledged out-of-band in PR comments per AGENTS.md
- * §5; the alternative was duplicating the PRNG, which contradicts I-5
+ * "imports: nothing"). Documented as a deliberate exception; the
+ * alternative was duplicating the PRNG, which contradicts I-5
  * (relational consistency = single source of randomness).
  */
 

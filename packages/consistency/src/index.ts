@@ -32,7 +32,7 @@ export { CONSISTENCY_ENGINE_VERSION } from "./engine-version";
 export { DuplicateOutputError, MissingInputError, RuleDagCycleError } from "./errors";
 export type { MatrixV1 } from "./generated/matrix";
 // Canonical types are generated from schemas/*.schema.json by `bun run codegen`.
-// @mochi.js/consistency *owns* both ProfileV1 and MatrixV1 — see AGENTS.md §5.
+// @mochi.js/consistency *owns* both ProfileV1 and MatrixV1 — see PLAN.md §5.6.
 export type { ProfileV1 } from "./generated/profile";
 // Public PRNG surface — promoted from internal at v0.2.1 so downstream packages
 // (e.g. `@mochi.js/behavioral`, phase 0.8) can reuse the seeded xoshiro256**

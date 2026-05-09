@@ -224,7 +224,7 @@ Deep version, with per-library audit reports: [mochijs.com/docs/reference/compar
 - [The Consistency Engine](https://mochijs.com/docs/concepts/consistency-engine), [Stealth philosophy](https://mochijs.com/docs/concepts/stealth-philosophy) — concept pages.
 - [Limits](https://mochijs.com/docs/reference/limits) — every known limit, with root cause and workaround.
 - [`PLAN.md`](PLAN.md) — design contract. The 8 architectural invariants live in §2.
-- [`AGENTS.md`](AGENTS.md) — contributor workflow (parallel-PR conventions, the harness gate, commit format).
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — contributor workflow (clone → branch → PR, conventional commits, CI gate).
 - [`CHANGELOG.md`](CHANGELOG.md) — release notes.
 - [`packages/challenges/README.md`](packages/challenges/README.md) — Turnstile auto-click and the `challenges` convenience layer.
 
@@ -261,7 +261,7 @@ If you found this from somewhere and you're wondering whether to depend on it fo
 
 ## Contributing
 
-[`CONTRIBUTING.md`](CONTRIBUTING.md) has the short version. [`AGENTS.md`](AGENTS.md) has the long version — including the `bun work` workflow, PR conventions, and the harness gate.
+[`CONTRIBUTING.md`](CONTRIBUTING.md) covers the workflow: clone → branch → PR, conventional commits with package scopes, the gates CI runs (typecheck, lint, test, contract, harness Zero-Diff), and the documentation-discipline rules (every limit landed in `reference/limits.md` in the same PR as the gap it documents).
 
 ## Acknowledgements
 

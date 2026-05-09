@@ -165,7 +165,7 @@ mochi work submit <task-id> [--draft]      run gates, push, and open a PR
 mochi work clean [--merged-only|--all]     remove worktrees (default: merged-only)
 ```
 
-Proxies to `scripts/mochi-work.ts` from the in-tree monorepo (resolved by walking up from `process.cwd()` until `scripts/mochi-work.ts` is found). Outside the monorepo, exits 1 with a hint to run `bun work` from inside it. See PLAN.md §15.2 and `AGENTS.md §3` for the full workflow.
+Proxies to `scripts/mochi-work.ts` from the in-tree monorepo (resolved by walking up from `process.cwd()` until `scripts/mochi-work.ts` is found). Outside the monorepo, exits 1 with a hint to run `bun work` from inside it. Internal monorepo tooling — not part of the public CLI contract.
 
 ```sh
 mochi work create 0270 docs/site
