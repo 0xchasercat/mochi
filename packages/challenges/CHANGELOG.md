@@ -4,14 +4,14 @@
 
 ### Patch Changes
 
-- be1c69b: Closed-shadow-root piercing locator on `Page` (task 0253).
+- be1c69b: Closed-shadow-root piercing locator on `Page`.
 
   `@mochi.js/core` adds `Page.querySelectorPiercing(selector)` /
   `Page.querySelectorAllPiercing(selector)` plus a public `ElementHandle`. The
   locator walks `DOM.getDocument({ depth: -1, pierce: true })` and matches a
   parsed CSS selector in JS, which is the only way to find elements inside
   **closed** shadow roots — `DOM.querySelector(..., pierce: true)` itself does
-  not pierce closed shadows. Required for task 0220's Turnstile auto-clicker
+  not pierce closed shadows. Required for the Turnstile auto-clicker
   on Cloudflare CDN integrations where the iframe lives behind a closed shadow
   root. Algorithm sourced from patchright `framesPatch.ts:868-1012`
   (`_customFindElementsByParsed`); selector subset is intentionally narrower
@@ -37,7 +37,7 @@
 
 ### Minor Changes
 
-- 707e42d: Turnstile auto-click convenience layer per task 0220.
+- 707e42d: Turnstile auto-click convenience layer.
 
   New package `@mochi.js/challenges` exposing `installTurnstileAutoClick(page, opts)` plus
   the `LaunchOptions.challenges.turnstile.autoClick` ergonomic surface on `mochi.launch`.

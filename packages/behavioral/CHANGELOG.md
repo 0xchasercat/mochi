@@ -1,5 +1,12 @@
 # @mochi.js/behavioral
 
+## 0.1.4
+
+### Patch Changes
+
+- Updated dependencies [d79b782]
+  - @mochi.js/consistency@0.1.3
+
 ## 0.1.3
 
 ### Patch Changes

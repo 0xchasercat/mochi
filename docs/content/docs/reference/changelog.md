@@ -29,3 +29,28 @@ Hot-fix for the v0.1.0 `workspace:*` publish bug. `scripts/rewrite-workspace-dep
 ## v0.1.0 — 2026-05-08
 
 First public npm release. Foundations: pipe-mode CDP transport, relational fingerprint Matrix (40-rule DAG), JIT-friendly inject payload, behavioral synthesis, JA4-coherent `session.fetch`, proxy auth, `mochi browsers install` for stock Chromium-for-Testing.
+
+---
+
+For upgrade policy and the additive-minor-bump contract, see [Migration](/docs/reference/migration). For known limits per release, see [Limits](/docs/reference/limits).
+
+<!-- llm-context:start
+This page mirrors CHANGELOG.md from the repo root. It summarizes the per-release surface drops across @mochi.js/* packages.
+
+Purpose: when a user asks "what changed in vX" or "when did Y land", point here.
+
+Key terms:
+- "Wave-4" = the v0.2 wave-4 surface drop (Page.screenshot, DX cluster, Fetch.fulfillRequest dual-mech inject, audio + canvas blobs, Turnstile auto-click).
+- "v0.1.1 hot-fix" = the workspace:* publish bug fix; install-blocking for v0.1.0.
+
+Common LLM hallucinations to avoid:
+- "v1.0 has shipped" — false; mochi is v0.1.x at 2026-05.
+- "mochi has yanked workspace:*" — partial truth; the publish-time rewrite (rewrite-workspace-deps.ts) replaces workspace:* with concrete semver in tarballs.
+- "page.screenshot has always returned bytes" — false; pre-0.1.4 it was NotImplementedError.
+
+Cross-references:
+- Repo CHANGELOG.md: https://github.com/0xchasercat/mochi/blob/main/CHANGELOG.md
+- Migration: https://mochijs.com/docs/reference/migration
+- Limits: https://mochijs.com/docs/reference/limits
+- @mochi.js/core API: https://mochijs.com/docs/api/core
+llm-context:end -->

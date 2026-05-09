@@ -61,4 +61,4 @@ The payload covers all 40 rules in the consistency DAG, including:
 - **No `Page.createIsolatedWorld`.** Both mechanisms target the page's main world.
 - **CSP is rewritten only on Document responses.** Subresources (XHR, fetch, images) are unaffected.
 
-See PLAN.md §5.3 / §8.4 and `tasks/0266-fetch-fulfill-init-script.md` for the implementation detail.
+See PLAN.md §5.3 / §8.4 for the implementation detail.

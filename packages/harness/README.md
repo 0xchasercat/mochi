@@ -7,3 +7,9 @@ Mirrors [Peekaboo's equivalence-harness pattern](https://github.com/0xchasercat/
 **Status:** shipping in v0.2. Capture / normalize / diff / categorize pipeline runs end-to-end; `bun run harness:smoke` and the `bun run test:contract` gate are wired in CI.
 
 See [PLAN.md §13](https://github.com/0xchasercat/mochi/blob/main/PLAN.md).
+
+## Documentation
+
+- Package reference: <https://mochijs.com/docs/api/harness>
+- Concept deep-dive: <https://mochijs.com/docs/concepts/probe-manifest>
+- Cookbook: <https://mochijs.com/docs/guides/pick-a-scenario>

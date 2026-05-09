@@ -22,4 +22,10 @@ mochi --version
 
 **Status:** shipping in v0.2 (`@mochi.js/cli` 0.2.x). All subcommands above are wired.
 
-See [PLAN.md §5.8 and §15.2](https://github.com/0xchasercat/mochi/blob/main/PLAN.md) for design intent and the [quickstart](https://github.com/0xchasercat/mochi/blob/main/docs/quickstart.md) for the 5-minute first-run flow.
+See [PLAN.md §5.8 and §15.2](https://github.com/0xchasercat/mochi/blob/main/PLAN.md) for design intent and the [quickstart](https://mochijs.com/docs/getting-started/quickstart) for the 5-minute first-run flow.
+
+## Documentation
+
+- Package reference: <https://mochijs.com/docs/api/cli>
+- Concept deep-dive: <https://mochijs.com/docs/concepts/probe-manifest>
+- Cookbook: <https://mochijs.com/docs/guides/pick-a-scenario>

@@ -28,14 +28,14 @@ The full [v0.1.4 → v0.2] surface lands as additive minor bumps. See [`CHANGELO
 
 ## What this package gives you
 
-- `mochi.launch(opts)` — spawn a Chromium-for-Testing instance with a relationally-locked fingerprint matrix derived from `(profile, seed)`. Options include `proxy`, `headless`, `binary`, `timeout`, `geoConsistency` (IP/TZ/locale exit reconciliation per task 0262), and `challenges` (Turnstile auto-click, task 0220).
+- `mochi.launch(opts)` — spawn a Chromium-for-Testing instance with a relationally-locked fingerprint matrix derived from `(profile, seed)`. Options include `proxy`, `headless`, `binary`, `timeout`, `geoConsistency` (IP/TZ/locale exit reconciliation), and `challenges` (Turnstile auto-click).
 - `Session` and `Page` — the runtime objects you drive.
 - `page.humanClick / humanType / humanScroll` — biomechanically-shaped input synthesis (Bezier + Fitts + Gaussian jitter).
 - `session.fetch` — out-of-band requests with profile-matching JA3/JA4/H2 via the Rust+wreq backend.
-- `page.screenshot(opts?)` — PNG / JPEG / WebP via CDP `Page.captureScreenshot`. Options: `format`, `quality`, `fullPage`, `clip`, `omitBackground`, `encoding`. Element-bounded capture (`{ element: handle }`) is deferred — see [`docs/limits.md`](https://github.com/0xchasercat/mochi/blob/main/docs/limits.md).
-- `session.cookies.{save,load}(path, { pattern? })` — JSON cookie jar with version header + regex domain filter. Round-trips losslessly via `Storage.getCookies` / `Storage.setCookies` (task 0257).
+- `page.screenshot(opts?)` — PNG / JPEG / WebP via CDP `Page.captureScreenshot`. Options: `format`, `quality`, `fullPage`, `clip`, `omitBackground`, `encoding`. Element-bounded capture (`{ element: handle }`) is deferred — see <https://mochijs.com/docs/reference/limits>.
+- `session.cookies.{save,load}(path, { pattern? })` — JSON cookie jar with version header + regex domain filter. Round-trips losslessly via `Storage.getCookies` / `Storage.setCookies`.
 - `page.localStorage.{get,set}` and `page.sessionStorage.{get,set}` — direct `DOMStorage` CDP access, frame-scoped (defaults to current main-frame origin; pass `{ origin }` for cross-origin).
-- `page.grantAllPermissions(opts?)` — wraps `Browser.grantPermissions` with the full `ALL_BROWSER_PERMISSIONS` descriptor list (task 0257).
+- `page.grantAllPermissions(opts?)` — wraps `Browser.grantPermissions` with the full `ALL_BROWSER_PERMISSIONS` descriptor list.
 
 All of this is the single import. No mixing Patchright + a fingerprint injector + a Turnstile clicker. mochi solves it once.
 
@@ -43,8 +43,8 @@ All of this is the single import. No mixing Patchright + a fingerprint injector 
 
 - **Bun-only.** No Node fallback. Engines: `bun >= 1.1`.
 - **Stock Chromium.** No patched fork. Works against [Chromium-for-Testing](https://googlechromelabs.github.io/chrome-for-testing/), pinned and downloadable via `mochi browsers install`.
-- **Relational locking.** Every fingerprint surface (canvas, WebGL, audio, fonts, timing) derives from a single `(profile, seed)` pair. No Frankenstein fingerprints. Audio + canvas digests are byte-exact via precomputed per-(profile, sample-rate) blobs (R-047 / R-048, task 0267).
-- **Zero-jitter spoofing.** TurboFan-friendly proxies installed before any page script. Init-script delivery via `Fetch.fulfillRequest` body splice closes the source-attribution leak that bare `addScriptToEvaluateOnNewDocument` would otherwise carry (task 0266).
+- **Relational locking.** Every fingerprint surface (canvas, WebGL, audio, fonts, timing) derives from a single `(profile, seed)` pair. No Frankenstein fingerprints. Audio + canvas digests are byte-exact via precomputed per-(profile, sample-rate) blobs (R-047 / R-048).
+- **Zero-jitter spoofing.** TurboFan-friendly proxies installed before any page script. Init-script delivery via `Fetch.fulfillRequest` body splice closes the source-attribution leak that bare `addScriptToEvaluateOnNewDocument` would otherwise carry.
 
 ## License
 
@@ -54,5 +54,9 @@ MIT.
 
 - [Repo](https://github.com/0xchasercat/mochi)
 - [PLAN.md](https://github.com/0xchasercat/mochi/blob/main/PLAN.md) — the full design contract
-- [Quickstart](https://github.com/0xchasercat/mochi/blob/main/docs/quickstart.md) — 5-minute walkthrough
-- [Limits](https://github.com/0xchasercat/mochi/blob/main/docs/limits.md) — what the JS-only ceiling honestly does and doesn't cover
+
+## Documentation
+
+- Package reference: <https://mochijs.com/docs/api/core>
+- Concept deep-dive: <https://mochijs.com/docs/concepts/stealth-philosophy>
+- Cookbook: <https://mochijs.com/docs/guides/pick-a-scenario>

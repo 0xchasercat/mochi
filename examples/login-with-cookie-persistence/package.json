@@ -1,0 +1,16 @@
+{
+  "name": "mochi-example-login-with-cookie-persistence",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run index.ts"
+  },
+  "dependencies": {
+    "@mochi.js/core": "^0.4.0",
+    "@mochi.js/cli": "^0.2.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}

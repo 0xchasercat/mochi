@@ -8,6 +8,8 @@ lastUpdated: 2026-05-09
 
 The common deployment path for mochi is a Linux server — Ubuntu / Debian box, no display, often inside a container. mochi auto-detects this and switches Chromium to `--headless=new` so `mochi.launch()` Just Works on the first try.
 
+`profile` is also auto-picked to match the host OS — a Linux x64 server resolves to `linux-chrome-stable` automatically when you call `mochi.launch({ seed })` without a `profile`. Passing `profile` explicitly still wins. The architectural rationale (host-OS asymmetry, the WAFs-don't-flag-Linux thesis, the FingerprintJS Pro v4 evidence) lives in [Stealth philosophy → Default to the host OS](/docs/concepts/stealth-philosophy#default-to-the-host-os-not-windows).
+
 ## What mochi auto-detects
 
 At launch time mochi snapshots three orthogonal signals from the host:
@@ -68,7 +70,7 @@ await mochi.launch({ profile: "linux-chrome-stable", seed: "abc", headlessMode: 
 
 ### Stealth note
 
-`--headless=new` exposes a `HeadlessChrome` substring in the bare Chromium UA. mochi rewrites the UA via CDP `Network.setUserAgentOverride` (and the matching `Sec-CH-UA*` headers via `userAgentMetadata` per task 0261) so the bytes the network sees match the matrix's browser channel — **the `HeadlessChrome` token never leaves the process**. The stealth conformance gate (`webdriver-detection.test.ts`) runs against `--headless=new` and asserts `navigator.userAgent` does not contain `"HeadlessChrome"`. That gate stays green.
+`--headless=new` exposes a `HeadlessChrome` substring in the bare Chromium UA. mochi rewrites the UA via CDP `Network.setUserAgentOverride` (and the matching `Sec-CH-UA*` headers via `userAgentMetadata`) so the bytes the network sees match the matrix's browser channel — **the `HeadlessChrome` token never leaves the process**. The stealth conformance gate (`webdriver-detection.test.ts`) runs against `--headless=new` and asserts `navigator.userAgent` does not contain `"HeadlessChrome"`. That gate stays green.
 
 ## When you actually need xvfb
 

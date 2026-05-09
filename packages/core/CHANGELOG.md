@@ -1,5 +1,64 @@
 # @mochi.js/core
 
+## 0.6.0
+
+### Minor Changes
+
+- 5705d38: Auto-detect Linux server env, default to `--headless=new`, surface a `headlessMode` option.
+
+  Closes the "common deployment env" failure mode for `mochi.launch()` on a fresh Ubuntu / Debian server: previously a no-DISPLAY box would either crash on the first paint or hang while Chromium tried to attach to a non-existent display server. mochi now snapshots `(process.platform, DISPLAY, WAYLAND_DISPLAY, getuid, container probes)` at launch time and defaults `headlessMode` to `"new"` whenever the host is Linux without a display server.
+
+  New `LaunchOptions` field:
+
+  - **`headlessMode: "new" | "legacy" | "off"`** — supersedes the v0.1 `headless: boolean`. `"new"` emits `--headless=new` (modern headless: full rendering, near-byte-identical to headful for fingerprinting). `"legacy"` emits bare `--headless` for parity with older tooling. `"off"` runs headful and requires a display server / xvfb. The legacy `headless` field is retained — `true` maps to `"new"`, `false` to `"off"`.
+
+  Resolution order:
+
+  1. Explicit `headlessMode` wins.
+  2. Legacy `headless: true | false` maps to `"new"` / `"off"`.
+  3. Env-aware default — Linux without DISPLAY / WAYLAND_DISPLAY → `"new"`; everywhere else → `"off"`.
+
+  New helper:
+
+  - **`mochi.detectLinuxServerEnv()`** (and the named export `detectLinuxServerEnv` / `probeLinuxServerEnv`) — pure read of `process.platform`, `process.env.DISPLAY`, `process.env.WAYLAND_DISPLAY`, `process.getuid?.()`, and the container probes (`/.dockerenv`, `/proc/1/cgroup` mentions of `docker | containerd | kubepods`). Returns a `LinuxServerEnv` summary `{ serverNoDisplay, root, container, rationale }` so users can introspect what mochi would infer before launching.
+  - **`resolveHeadlessMode(opts, env)`** — pure helper exposing the resolution table above, for callers that want to reason about the default without spawning.
+
+  The existing root + auto-`--no-sandbox` fallback is unchanged — orthogonal axis, kept verbatim. Stealth conformance (`webdriver-detection.test.ts`) remains green: the inject layer rewrites the UA via `Network.setUserAgentOverride` so the `HeadlessChrome` substring under `--headless=new` never reaches the network or the page's `navigator.userAgent`.
+
+  Docs: new `docs/getting-started/linux-server.md` covers the auto-detection, the `headlessMode` option, container guidance (Docker / Kubernetes / `--cap-add=SYS_ADMIN` trade-off), and the "if you really need it" xvfb path. `docs/quickstart.md` cross-links to the new page.
+
+- dd9a3c9: Auto-pick the host-OS-matching profile when `LaunchOptions.profile` is omitted ( engineering follow-up to the strategic thesis).
+
+  `mochi.launch({ seed })` (no `profile`) now succeeds on Linux, Mac, and Windows hosts — mochi consults the host's `(process.platform, process.arch)` pair and routes to the matching real-device baseline:
+
+  - `linux/x64` → `linux-chrome-stable`
+  - `darwin/arm64` → `mac-m4-chrome-stable`
+  - `darwin/x64` → `mac-chrome-stable`
+  - `win32/x64` → `windows-chrome-stable`
+
+  On any unsupported host (FreeBSD, Linux arm64 today, Windows arm64, Alpine musl), launch throws with a precise diagnostic listing the six explicit profile IDs and a pointer to the `choose-your-profile` guide. We never silently fall back to a placeholder. Passing `profile` explicitly always wins; the auto-pick never overrides an explicit choice.
+
+  `LaunchOptions.profile` is now optional (`profile?: ProfileId | ProfileV1`). When the auto-pick fires, mochi logs one INFO line so the inferred id is visible without an extra introspection call:
+
+  ```
+  [mochi] no profile supplied; auto-picked linux-chrome-stable for host linux/x64. To override: pass profile: "linux-chrome-stable" explicitly.
+  ```
+
+  New helper:
+
+  - **`mochi.defaultProfileForHost(): ProfileId | null`** (and the named export `defaultProfileForHost` / `resolveDefaultProfileForHost`) — pure read of `process.platform` / `process.arch`. Returns `null` on unsupported hosts. Use it to introspect what mochi would pick before launching.
+
+  The strategic rationale: spoofing Windows from a Linux server is the wrong default. Linux is a real-user signal in WAFs trained on real traffic, not a bot signal — high-value user segments (developers, engineers, researchers) are heavily Linux-skewed and CTOs do not flag their own engineering team. Production validation: `aone.gg` / FingerprintJS Pro v4 / Linux DC IP / `bot: not_detected` / `suspect_score: 8` (vs patched Chrome 14-18, CloakBrowser 20+) on 2026-05-08. See `concepts/stealth-philosophy` for the full thesis + evidence.
+
+  Docs: README "Proof" subsection, `concepts/stealth-philosophy` ("Default to the host OS, not Windows"), `reference/comparison` ("Default profile strategy" axis), `reference/faq` ("Should I spoof Windows even when running on a Linux server?"), `reference/glossary` (host-OS asymmetry, privacy-fallback, tampering ML score), and inline notes on `getting-started/install` + `getting-started/linux-server`.
+
+### Patch Changes
+
+- Updated dependencies [d79b782]
+  - @mochi.js/inject@0.3.0
+  - @mochi.js/consistency@0.1.3
+  - @mochi.js/behavioral@0.1.4
+
 ## 0.4.0
 
 ### Minor Changes
@@ -39,7 +98,7 @@
 
   nodriver-cited (`docs/audits/nodriver.md` LOW × 3).
 
-- a92cebf: Implement `Page.screenshot` via CDP `Page.captureScreenshot` (task 0265).
+- a92cebf: Implement `Page.screenshot` via CDP `Page.captureScreenshot`.
 
   The placeholder `NotImplementedError` rejection is replaced with a real
   implementation that supports the standard puppeteer/playwright option
@@ -75,7 +134,7 @@
   (`Page.printToPDF`).
 
 - 5cb8160: init-script delivery via `Fetch.fulfillRequest` body splice + CSP rewriter
-  (architectural pivot — task 0266).
+  (architectural pivot).
 
   Replaces `Page.addScriptToEvaluateOnNewDocument` as the inject delivery
   mechanism with a `Fetch.requestPaused` → `Fetch.fulfillRequest` body splice
@@ -128,7 +187,7 @@
 ### Minor Changes
 
 - 61ee52c: Add exit-IP / timezone / locale consistency probe + reconciler with
-  privacy-fallback default (task 0262).
+  privacy-fallback default.
 
   Closes the cross-layer leak where `(matrix.timezone, matrix.locale)` and
   the apparent **exit IP** disagree — a fingerprinter computing
@@ -217,7 +276,7 @@
 ### Patch Changes
 
 - 92eda96: Audit and trim `DEFAULT_CHROMIUM_FLAGS` against patchright's
-  `chromiumSwitchesPatch.ts:20-34` removal list (task 0256).
+  `chromiumSwitchesPatch.ts:20-34` removal list.
 
   Drops these passive command-line bot-tells from the production default
   flag set:
@@ -279,12 +338,12 @@ AcceptCHFrame,IsolateOrigins,site-per-process` (load-bearing for inject
 
   Plus a "Linux gotcha — Chromium and root" note in `docs/quickstart.md` so server / dev-rig setups don't hit the EPIPE first.
 
-- a7d8ca9: Defensive UA override at the network layer (task 0255).
+- a7d8ca9: Defensive UA override at the network layer.
 
   `Session.newPage` now sends `Network.setUserAgentOverride` on every page
   session immediately after `Target.attachToTarget` and before
   `Page.addScriptToEvaluateOnNewDocument`. Closes a real defensive gap: under
-  `--headless=new` (task 0220) Chromium's bare User-Agent header still contains
+  `--headless=new` Chromium's bare User-Agent header still contains
   `"HeadlessChrome"`. The inject module patches `navigator.userAgent` in JS,
   but early subresource / preload / navigation `Network.requestWillBeSent`
   events fire BEFORE any document script can run — only a CDP-level UA
@@ -307,7 +366,6 @@ AcceptCHFrame,IsolateOrigins,site-per-process` (load-bearing for inject
   the same defensive gap as LOW).
 
 - ddcc49e: Pin Chromium's outer-window geometry from `matrix.display.{width,height}` per
-  task 0252.
 
   Under `--headless=new` Chromium's outer window defaults to 800×600 regardless
   of the JS-spoofed `screen.*` surface — `fingerprint-scan.com` flags the
@@ -326,7 +384,7 @@ AcceptCHFrame,IsolateOrigins,site-per-process` (load-bearing for inject
 
 - ef00f63: Tighten the worker payload-inject race window via patchright's
   `Runtime.evaluate("globalThis", { serialization: "idOnly" })` trick
-  (task 0254). On `Target.attachedToTarget` for a worker-style target,
+ . On `Target.attachedToTarget` for a worker-style target,
   mochi now extracts the worker's executionContextId by parsing
   `objectId.split(".")[1]` of an idOnly-serialised `globalThis`, then
   delivers the inject via `Runtime.callFunctionOn({ functionDeclaration,
@@ -349,14 +407,14 @@ executionContextId, returnByValue: true })` before
 
 ### Minor Changes
 
-- be1c69b: Closed-shadow-root piercing locator on `Page` (task 0253).
+- be1c69b: Closed-shadow-root piercing locator on `Page`.
 
   `@mochi.js/core` adds `Page.querySelectorPiercing(selector)` /
   `Page.querySelectorAllPiercing(selector)` plus a public `ElementHandle`. The
   locator walks `DOM.getDocument({ depth: -1, pierce: true })` and matches a
   parsed CSS selector in JS, which is the only way to find elements inside
   **closed** shadow roots — `DOM.querySelector(..., pierce: true)` itself does
-  not pierce closed shadows. Required for task 0220's Turnstile auto-clicker
+  not pierce closed shadows. Required for the Turnstile auto-clicker
   on Cloudflare CDN integrations where the iframe lives behind a closed shadow
   root. Algorithm sourced from patchright `framesPatch.ts:868-1012`
   (`_customFindElementsByParsed`); selector subset is intentionally narrower
@@ -382,7 +440,7 @@ executionContextId, returnByValue: true })` before
 
 - 4f1b81e: Pass `--lang=<matrix.locale>` to the spawned Chromium so the network-layer
   `Accept-Language` header agrees with the JS-layer `navigator.language(s)`
-  spoof. Closes the PLAN.md I-5 leak surfaced by task 0251.
+  spoof. Closes the PLAN.md I-5 leak surfaced by the upstream audit.
 
   Without this flag, Chromium falls back to the host OS locale (or the
   `en-US,en;q=0.9` default), and a site that cross-references the request
@@ -409,7 +467,7 @@ executionContextId, returnByValue: true })` before
 
 ### Patch Changes
 
-- 707e42d: Turnstile auto-click convenience layer per task 0220.
+- 707e42d: Turnstile auto-click convenience layer.
 
   New package `@mochi.js/challenges` exposing `installTurnstileAutoClick(page, opts)` plus
   the `LaunchOptions.challenges.turnstile.autoClick` ergonomic surface on `mochi.launch`.
@@ -617,7 +675,7 @@ executionContextId, returnByValue: true })` before
 ":mediaDevices:<i>:<kind>")` for byte-stable per-(profile, seed) IDs.
 
   `packages/profiles/data/mac-m4-chrome-stable/expected-divergences.json`
-  trims to just `audio.**` + `canvas.**` (deferred to task 0071).
+  trims to just `audio.**` + `canvas.**` (deferred to a future minor).
   `baseline.manifest.json` is corrected for the natural-Chrome shape
   (`webdriver: false`, no `HeadlessChrome` UA leak, `deviceMemory: 8` per
   Chrome's quantization).

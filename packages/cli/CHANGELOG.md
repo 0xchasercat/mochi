@@ -1,5 +1,16 @@
 # @mochi.js/cli
 
+## 0.2.3
+
+### Patch Changes
+
+- Updated dependencies [5705d38]
+- Updated dependencies [d79b782]
+- Updated dependencies [dd9a3c9]
+  - @mochi.js/core@0.6.0
+  - @mochi.js/consistency@0.1.3
+  - @mochi.js/harness@0.1.8
+
 ## 0.2.2
 
 ### Patch Changes
@@ -15,7 +26,7 @@
 ### Patch Changes
 
 - 6761997: Import 6+ real-device profiles from the wrkx harvester corpus and ship a
-  new `mochi profiles import` CLI subcommand (task 0260).
+  new `mochi profiles import` CLI subcommand.
 
   The v0.1.4 catalog shipped a single captured baseline (`mac-m4-chrome-stable`)
   plus seven placeholder ids that resolved to a generic Linux fallback. This
@@ -37,7 +48,7 @@
 
   - `profile.json` ProfileV1 derived from the captured navigator/
     screen/webgl probes via the existing
-    `deriveProfile` (task 0040) pipeline.
+    `deriveProfile` pipeline.
   - `baseline.manifest.json` Per-category snapshot dict assembled from the
     harvester's `/api/visitors/<id>` payload.
   - `expected-divergences.json` Glob list of intentional divergences (audio/
@@ -149,7 +160,7 @@
 
 ### Minor Changes
 
-- afeef48: Add `mochi browsers` subcommand surface and the programmatic `resolveChromiumBinary` helper that `@mochi.js/core` will consume in task 0011.
+- afeef48: Add `mochi browsers` subcommand surface and the programmatic `resolveChromiumBinary` helper that `@mochi.js/core` will consume.
 
   - `mochi browsers install [--channel] [--version] [--platform] [--force] [--sha256]` downloads a Chromium-for-Testing build from Google's CfT registry, verifies SHA256, and atomically installs to `~/.mochi/browsers/<channel>-<version>-<platform>/`.
   - `mochi browsers list` prints installed binaries.

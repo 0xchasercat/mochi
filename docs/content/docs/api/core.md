@@ -1,177 +1,852 @@
 ---
 title: "@mochi.js/core"
-description: Public surface — mochi.launch, Session, Page, error classes, and the proxy-URL parser.
+description: "User-facing entrypoint — mochi.launch, Session, Page, ElementHandle, error classes, Linux-server detection."
 order: 1
 category: api
 lastUpdated: 2026-05-09
 ---
 
-The public entry point. `import { mochi } from "@mochi.js/core"` is enough for nearly all consumers.
+`@mochi.js/core` is the package you import. `mochi.launch(opts)` resolves a profile, derives a `MatrixV1` from `(profile, seed)`, spawns Chromium-for-Testing under `--remote-debugging-pipe`, installs the inject pipeline + proxy-auth listener, and returns a `Session`. Every other `@mochi.js/*` package re-exports through here when it makes sense; reach for the sibling packages directly only when you need a piece of the surface that core doesn't expose (the FFI handle, the rule DAG, raw payload bytes, etc.).
 
-## `mochi.launch(opts) : Promise<Session>`
+## Installation
 
-Resolves a profile, derives a consistency Matrix from `(profile, seed)`, spawns Chromium-for-Testing via `--remote-debugging-pipe`, and returns a connected `Session`.
+```sh
+bun add @mochi.js/core
+```
+
+## Public exports
+
+### Namespace `mochi`
 
 ```ts
-import { mochi, type LaunchOptions } from "@mochi.js/core";
+export const mochi: {
+  readonly version: string;
+  readonly launch: (opts: LaunchOptions) => Promise<Session>;
+  readonly detectLinuxServerEnv: () => LinuxServerEnv;
+  readonly defaultProfileForHost: () => ProfileId | null;
+};
+export type Mochi = typeof mochi;
+```
+
+The default import surface. `mochi.launch` is the one function 99% of users call; `mochi.version` exposes the package's `VERSION` constant; `mochi.detectLinuxServerEnv()` runs the same probe `launch` runs internally to decide the headless default; `mochi.defaultProfileForHost()` returns the profile id `launch` would auto-pick if `profile` were omitted.
+
+```ts
+import { mochi } from "@mochi.js/core";
 
 const session = await mochi.launch({
   profile: "linux-chrome-stable",
   seed: "user-12345",
 });
+const page = await session.newPage();
+await page.goto("https://example.com");
+await session.close();
 ```
 
-`LaunchOptions` (selected fields):
+### `function launch(opts: LaunchOptions): Promise<Session>`
 
-- `profile: ProfileId` — required. One of the IDs in `@mochi.js/profiles#KNOWN_PROFILE_IDS`.
-- `seed: string` — required. Used to derive the Matrix; same `(profile, seed)` is byte-identical across runs.
-- `proxy?: string | ProxyConfig` — inline URL with credentials, or explicit `{ server, username, password }`.
-- `binary?: string` — bring-your-own Chromium binary path. Defaults to the resolved Chromium-for-Testing.
-- `userDataDir?: string` — override the per-Session profile directory.
-- `challenges?: ChallengeLaunchOptions` — see below.
+Same function as `mochi.launch`, exposed as a named export for users who tree-shake or prefer named imports.
 
-### `ChallengeLaunchOptions`
+### `interface LaunchOptions`
 
 ```ts
-challenges: {
-  turnstile: {
-    autoClick: true,
-    onEscalation: (reason) => { /* "image-challenge" | "managed" | "timeout" */ },
-  },
+interface LaunchOptions {
+  profile?: ProfileId | ProfileV1;
+  seed: string;
+  proxy?: string | ProxyConfig;
+  headless?: boolean;
+  headlessMode?: "new" | "legacy" | "off";
+  binary?: string;
+  args?: string[];
+  out?: { traceDir?: string };
+  timeout?: number;
+  allowRootWithSandbox?: boolean;
+  bypassInject?: boolean;
+  hermetic?: boolean;
+  challenges?: ChallengeLaunchOptions;
+  geoConsistency?: GeoConsistencyMode;
 }
 ```
 
-Turnstile auto-click ships in v0.1.2 (only the visible-checkbox variant). Image / audio / managed escalations fire `onEscalation` and bail — the framework deliberately does not click into image-challenge iframes. See the [Cloudflare Turnstile](/docs/guides/turnstile) guide and [Limits](/docs/reference/limits) for the rationale.
+- `profile` — **optional**. A `ProfileId` string (looked up under `packages/profiles/data/<id>/profile.json`) or an inline `ProfileV1` object. When omitted, mochi calls [`defaultProfileForHost`](#function-defaultprofileforhost-profileid--null) and auto-picks the profile whose declared OS matches the host's `process.platform` / `process.arch` pair (`linux/x64` → `linux-chrome-stable`, `darwin/arm64` → `mac-m4-chrome-stable`, `darwin/x64` → `mac-chrome-stable`, `win32/x64` → `windows-chrome-stable`). On unsupported hosts (FreeBSD, Linux arm64 today, Windows arm64, Alpine musl) launch throws with a precise diagnostic listing the six explicit profile IDs. Explicit `profile` always wins. The architectural rationale lives in [Stealth philosophy → Default to the host OS](/docs/concepts/stealth-philosophy#default-to-the-host-os-not-windows).
+- `seed` — required. Drives the consistency engine PRNG. Same `(profile, seed)` produces a byte-identical Matrix (excluding `derivedAt`).
+- `proxy` — `"http://user:pass@host:port"` URL form, `"socks5://host:1080"` form, or `{ server, username?, password? }`. Credentials get stripped from the `--proxy-server=` flag and replayed via a CDP `Fetch.authRequired` handler.
+- `headlessMode` — `"new"` (modern headless), `"legacy"`, or `"off"` (headful). When unset, mochi infers `"new"` on Linux without `DISPLAY` / `WAYLAND_DISPLAY`, `"off"` everywhere else. The legacy `headless: boolean` knob still works (`true` → `"new"`, `false` → `"off"`) but `headlessMode` wins when both are set.
+- `binary` — path to a Chromium-for-Testing binary. When omitted, mochi resolves through `MOCHI_CHROMIUM_PATH`, then `~/.mochi/browsers/`. See [`mochi browsers install`](/docs/api/cli).
+- `hermetic` — apply the harness/CI flag set (`--disable-component-update`, `--disable-default-apps`, `--disable-background-networking`, `--disable-sync`, plus a noise-reduction `--disable-features=` block). Default `false` so production users don't carry the passive command-line bot-tells. `mochi capture` and the harness orchestrator both set this `true`.
+- `bypassInject` — skip the inject payload entirely (no `buildPayload`, no `Fetch.fulfillRequest` body splice, no worker injection). Used by `mochi capture`. Never enable in production — the browser exposes its bare CfT fingerprint.
+- `geoConsistency` — `"privacy-fallback"` (default), `"auto-correct"`, `"strict"`, or `"off"`. Reconciles `(matrix.timezone, matrix.locale)` against the proxy's exit-IP geolocation; closes the cross-layer leak where a US profile over an EU proxy reports PT timezone while the IP geolocates to UTC+1.
 
-## `Session`
+See [Concepts → Profiles](/docs/concepts/profiles) for the `(profile, seed)` derivation contract.
 
-Owns one Chromium child + the per-Session network FFI handle. Created by `mochi.launch`; closed via `session.close()` (idempotent).
+### `type ProfileId = string`
 
-- `session.profile` — the resolved Matrix, exposed as a structured object (`userAgent`, `locale`, `timezone`, …).
-- `session.newPage(): Promise<Page>` — open a new tab.
-- `session.fetch(url, init): Promise<Response>` — out-of-band HTTP via `@mochi.js/net` → Rust `wreq`. Mirrors `RequestInit` for the supported subset (no streaming or binary bodies in v0.1.x).
-- `session.cookies` — the cookie-jar namespace (see below).
-- `session.storage(): StorageSnapshot` — sync snapshot of per-Session storage state.
-- `session.close(): Promise<void>` — flush, kill the Chromium child, drop the FFI handle.
+A `ProfileV1` directory id. Keep it string-typed; `@mochi.js/profiles` enumerates the shipped IDs in `KNOWN_PROFILE_IDS`.
 
-### `Session.cookies` — read / write / persist
-
-The cookie jar is a namespaced object. All methods route through the root browser target's `Storage.getCookies` / `Storage.setCookies`, so the jar is session-wide (not page-scoped).
+### `interface ProxyConfig`
 
 ```ts
-// Read every cookie the browser knows about.
-const jar = await session.cookies.get();
+interface ProxyConfig {
+  server: string;
+  username?: string;
+  password?: string;
+}
+```
 
-// Read cookies a URL would see.
-const apiJar = await session.cookies.get({ url: "https://api.example.com" });
+Explicit form when the URL string isn't ergonomic (e.g. credentials with reserved characters that you'd rather not percent-encode).
 
-// Write back.
-await session.cookies.set(jar);
+### `interface ChallengeLaunchOptions`
 
-// Persist to disk. The file format is { version, savedAt, mochiVersion,
-// pattern, count, cookies } — JSON, round-trips losslessly.
-await session.cookies.save("./state/cookies.json");
+```ts
+interface ChallengeLaunchOptions {
+  turnstile?: {
+    autoClick?: boolean;
+    timeout?: number;
+    humanize?: boolean;
+    onSolved?: (token: string) => void;
+    onEscalation?: (reason: "image-challenge" | "managed" | "timeout") => void;
+    pollIntervalMs?: number;
+  };
+}
+```
 
-// Restore in a future run.
-await session.cookies.load("./state/cookies.json");
+When `turnstile.autoClick: true`, every page returned by `Session.newPage()` has [`installTurnstileAutoClick`](/docs/api/challenges) wired automatically. Image / audio / managed-failed iframes never get blind-clicked — `onEscalation` fires and the session bails. v0.2 covers visible-checkbox Turnstile only.
 
-// Filter by domain on save AND on load.
+### `function resolveHeadlessMode(opts, env): "new" | "legacy" | "off"`
+
+```ts
+function resolveHeadlessMode(
+  opts: Pick<LaunchOptions, "headless" | "headlessMode">,
+  env: LinuxServerEnv,
+): "new" | "legacy" | "off";
+```
+
+Pure resolver for the headless dispatch table. Exposed so unit tests (and downstream tooling) can assert what mode `launch` would pick without spawning a Chromium.
+
+### `function defaultProfileForHost(): ProfileId | null`
+
+```ts
+function defaultProfileForHost(): ProfileId | null;
+function resolveDefaultProfileForHost(
+  platform: NodeJS.Platform,
+  arch: string,
+): ProfileId | null;
+```
+
+Returns the profile id `launch` would auto-pick on the current host when `profile` is omitted from `LaunchOptions`. Pure read of `process.platform` / `process.arch`. Returns `null` on unsupported hosts (FreeBSD, Linux arm64 today, Windows arm64, Alpine musl) — `launch` throws on that path with a list of the six explicit profile IDs.
+
+```ts
+import { mochi, defaultProfileForHost } from "@mochi.js/core";
+
+console.log(defaultProfileForHost());
+// On a Linux x64 server: "linux-chrome-stable"
+// On a Mac arm64 dev box: "mac-m4-chrome-stable"
+// On linux/arm64:         null  (unsupported — pass profile explicitly)
+
+// The auto-pick happens transparently when `profile` is omitted:
+const session = await mochi.launch({ seed: "u-1" });
+// [mochi] no profile supplied; auto-picked linux-chrome-stable for host linux/x64. ...
+```
+
+The strategic rationale: spoofing Windows from a Linux server is the wrong default — Linux is a real-user signal, not a bot signal — see [Stealth philosophy → Default to the host OS](/docs/concepts/stealth-philosophy#default-to-the-host-os-not-windows). `resolveDefaultProfileForHost` is the same table exposed for tests that want to drive both axes without stubbing `process`.
+
+### `class Session`
+
+The per-`(profile, seed)` browser lifecycle. Owns one Chromium child + one CDP transport + one lazily-opened net Ctx. Constructed by `launch`; close idempotently via `session.close()`.
+
+```ts
+class Session {
+  readonly profile: MatrixV1;
+  readonly seed: string;
+  newPage(): Promise<Page>;
+  pages(): Page[];
+  get cookies(): CookieJar;
+  storage(): Promise<StorageSnapshot>;
+  fetch(url: string, init?: RequestInit): Promise<Response>;
+  close(): Promise<void>;
+}
+```
+
+- `profile` — the resolved `MatrixV1` (NOT the input `ProfileV1`). Read it for `userAgent`, `locale`, `timezone`, `display.{width,height}`, `wreqPreset`, etc.
+- `newPage()` — opens a tab via `Target.createTarget` + `Target.attachToTarget({ flatten: true })`, then wires the inject payload through both the session-level Fetch splice AND the per-page `Page.addScriptToEvaluateOnNewDocument` fallback. Returns a `Page`.
+- `cookies` — see `CookieJar` below.
+- `fetch(url, init)` — out-of-band HTTP through the per-Session `NetCtx` (Rust `wreq`). The wire fingerprint matches the matrix's `wreqPreset`. v0.6 limits: string / `ArrayBuffer` / `URLSearchParams` bodies only — no streaming, no `FormData`, no `Blob`.
+- `storage()` — snapshot `{ cookies, localStorage: {}, sessionStorage: {} }`. localStorage / sessionStorage are placeholders today; for live read/write use `Page.localStorage` / `Page.sessionStorage`.
+- `close()` — disposes challenge handles, closes every page, drops the net Ctx, removes the init-injector subscription, closes the router, kills Chromium (SIGTERM → 2s grace → SIGKILL), removes the user-data-dir.
+
+```ts
+const session = await mochi.launch({ profile: "mac-m4-chrome-stable", seed: "u-1" });
+try {
+  const page = await session.newPage();
+  await page.goto("https://api.example.com/whoami");
+  const html = await page.content();
+  const apiResp = await session.fetch("https://api.example.com/profile", {
+    headers: { authorization: "Bearer abc" },
+  });
+  console.log(apiResp.status, html.slice(0, 200));
+} finally {
+  await session.close();
+}
+```
+
+### `interface SessionInit`
+
+Constructor-init shape. Internal — `launch` builds it for you. Exposed for tests + downstream tooling.
+
+```ts
+interface SessionInit {
+  proc: ChromiumProcess;
+  matrix: MatrixV1;
+  seed: string;
+  defaultTimeoutMs?: number;
+  bypassInject?: boolean;
+  netProxy?: string;
+  proxyAuth?: { username: string; password: string };
+  netAdapter?: NetAdapter; // @internal
+  challenges?: ChallengeLaunchOptions;
+}
+```
+
+### `interface CookieJar`
+
+```ts
+interface CookieJar {
+  get(filter?: { url?: string }): Promise<Cookie[]>;
+  set(cookies: Cookie[]): Promise<void>;
+  save(path: string, opts?: CookieJarOptions): Promise<void>;
+  load(path: string, opts?: CookieJarOptions): Promise<void>;
+}
+```
+
+Returned from `session.cookies`. Routes through `Storage.getCookies` / `Storage.setCookies` on the root browser target — the jar is session-wide, not page-scoped. `save` / `load` read and write a JSON file with the `CookieJarFile` shape; `pattern` (a `RegExp`) filters by `cookie.domain` and applies on both sides.
+
+```ts
 await session.cookies.save("./state/cookies.json", {
   pattern: /\.example\.com$/,
 });
+
+// In a future run:
+await session.cookies.load("./state/cookies.json");
 ```
 
-The `pattern` regex is matched against each cookie's `domain` and applies on **both** sides — a saved-with-everything jar can be partially restored, and a saved-narrow jar can be loaded everywhere it matches. Invalid / version-mismatched files throw with a precise diagnostic.
-
-## `Page`
-
-Owns one tab + the per-page CDP target.
-
-### Navigation
-
-- `page.goto(url, opts?: GotoOptions): Promise<void>` — `waitUntil` accepts `"load" | "domcontentloaded" | "networkidle"`. `networkidle` is mapped to `load` until per-frame `Network.enable` lands.
-- `page.content(): Promise<string>` — outerHTML of `document.documentElement`.
-- `page.evaluate<T>(fn): Promise<T>` — `Runtime.callFunctionOn`-based; JSON-serializable returns only.
-
-### Behavioral input
-
-- `page.humanClick(selector, opts?: HumanClickOptions): Promise<void>` — Bezier+Fitts trajectory to the selector, then click.
-- `page.humanType(selector, text, opts?: HumanTypeOptions): Promise<void>` — focus + lognormal digraph delays + adjacent-key mistakes.
-- `page.humanScroll(opts: HumanScrollOptions): Promise<void>` — inertial scroll with friction.
-- `page.humanMove(x, y, opts?: HumanMoveOptions): Promise<void>` — trajectory only; no click.
-
-### Inject control
-
-- `page.addInitScript(source: string): Promise<string>` — install a script via `Page.addScriptToEvaluateOnNewDocument({ runImmediately: true, worldName: "" })`. Returns an opaque handle.
-- `page.removeInitScript(handle: string): Promise<void>` — remove a previously installed script from future navigations.
-
-The session-level Mochi inject payload is not delivered through this method — see [The inject pipeline](/docs/concepts/inject-pipeline) for the dual-mechanism design (`Fetch.fulfillRequest` body splice + `addScriptToEvaluateOnNewDocument` fallback). `addInitScript` composes on top.
-
-### Timing
-
-- `page.waitFor(selector: string, opts?: WaitForOptions): Promise<void>` — waits for `attached` (default), `visible`, or `hidden`.
-
-### DOM storage
-
-`Page.localStorage` and `Page.sessionStorage` are getters that return a namespaced accessor backed by CDP `DOMStorage.getDOMStorageItems` / `setDOMStorageItem`. Both default to the page's current main-frame origin; pass `{ origin }` to scope explicitly.
+### `interface CookieJarFile`
 
 ```ts
-const ls = await page.localStorage.get();
-await page.localStorage.set({ lastVisit: Date.now().toString(), bucket: "B" });
-
-// Cross-origin warming requires an explicit origin.
-await page.localStorage.set(
-  { consent: "granted" },
-  { origin: "https://example.com" },
-);
-
-const ss = await page.sessionStorage.get();
-```
-
-Both `set` calls have `Object.assign` semantics — keys not mentioned are left alone. To clear a key, set it to `""`. `get` returns a `Record<string, string>` (CDP's `[[k, v], ...]` shape collapsed for ergonomics). Throws when the page is on `about:blank` and no `origin` was passed (opaque origins can't be scoped).
-
-### Permissions
-
-- `page.grantAllPermissions(opts?: { origin?: string }): Promise<void>` — wraps `Browser.grantPermissions` with the full `ALL_BROWSER_PERMISSIONS` descriptor list (geolocation, clipboardReadWrite, notifications, midi, sensors, …). Defaults to the page's current main-frame origin; pass `origin` to grant explicitly. Throws on opaque origins (`about:blank`, `data:`).
-
-This grants permissions at the *browser* level so the page never sees a prompt. The page-side `navigator.permissions.query()` matrix is still controlled by the inject (R-036) — the two surfaces are orthogonal: this method decides what the browser *enforces*; the inject decides what the page *sees*.
-
-### Capture
-
-- `page.screenshot(opts?: ScreenshotOptions): Promise<Uint8Array | string>` — CDP `Page.captureScreenshot`. Defaults to a PNG-encoded `Uint8Array` of the visible viewport. Discriminated overloads narrow the return type by `encoding`.
-
-```ts
-interface ScreenshotOptions {
-  format?: "png" | "jpeg" | "webp";   // default "png"
-  quality?: number;                    // 0..100; jpeg/webp only
-  fullPage?: boolean;                  // synthesized via setDeviceMetricsOverride
-  clip?: { x: number; y: number; width: number; height: number; scale?: number };
-  omitBackground?: boolean;            // PNG only; transparent background
-  encoding?: "binary" | "base64";      // default "binary" → Uint8Array
+interface CookieJarFile {
+  version: 1;
+  savedAt: string; // ISO-8601 UTC
+  mochiVersion: string;
+  pattern: string; // regex source
+  count: number;
+  cookies: Cookie[];
 }
 ```
 
-`fullPage: true` round-trips through `Page.getLayoutMetrics` + `Emulation.setDeviceMetricsOverride`, captures, then clears the override (in a `finally`, so a capture failure can't leave the viewport in a frozen oversized state). `clip` and `fullPage` are mutually exclusive — `clip` wins per CDP semantics. Element-bounded capture (`{ element: handle }`) is a separate brief and not yet shipped.
+### `interface CookieJarOptions`
 
-### Closed-shadow piercing
+```ts
+interface CookieJarOptions {
+  pattern?: RegExp;
+}
+```
 
-- `page.querySelectorPiercing(selector): Promise<ElementHandle | null>` — find an element across the entire DOM tree, including descendants of closed shadow roots. Required for the Turnstile auto-click on Cloudflare Challenge pages where the widget iframe lives behind a closed shadow root. Supports tag / id / class / attribute / descendant / comma-list selectors. No combinators (`>`, `+`, `~`), no pseudo-classes, no XPath at v0.2.
-- `page.querySelectorAllPiercing(selector): Promise<ElementHandle[]>` — same, but returns every match in DFS pre-order.
-- `page.humanClickHandle(handle: ElementHandle, opts?): Promise<void>` — `humanClick` against a handle resolved through the piercing locator.
+### `const COOKIE_JAR_FORMAT_VERSION: 1`
 
-## Error classes
+Format version stamped on every saved jar. The reader rejects unknown majors with a precise diagnostic.
 
-- `ChromiumNotFoundError` — Chromium-for-Testing not installed; run `bunx mochi browsers install`.
-- `BrowserCrashedError` — the Chromium child died unexpectedly.
-- `CdpRemoteError` — a CDP method returned an error response.
-- `CdpTimeoutError` — a CDP request didn't resolve within the configured timeout.
-- `ForbiddenCdpMethodError` — code attempted to send a CDP method on the I-1 / §8.2 forbidden list (`Runtime.enable`, etc.). Internal use; surfaces if you reach into `session._cdp` directly.
-- `NotImplementedError` — a placeholder method that hasn't shipped yet.
+### `interface StorageSnapshot`
 
-## Utilities
+```ts
+interface StorageSnapshot {
+  cookies: Cookie[];
+  localStorage: Record<string, Record<string, string>>;
+  sessionStorage: Record<string, Record<string, string>>;
+}
+```
 
-- `parseProxyUrl(url: string): ParsedProxy` — normalize a proxy URL string into `{ server, username, password }`. Useful for tests and downstream tools.
+Returned by `session.storage()`. localStorage / sessionStorage are empty placeholders at v0.1.x — use `Page.localStorage` / `Page.sessionStorage` for the live read/write surface.
 
-## Versions
+### `class Page`
 
-This page tracks `@mochi.js/core@0.1.4` (v0.2 wave-4).
+Owns one Chromium tab + the per-page CDP target. Constructed by `Session.newPage()` — never directly.
+
+```ts
+class Page {
+  get url(): string;
+  mainFrameId(): string | null;
+  cursorPosition(): { x: number; y: number };
+  goto(url: string, opts?: GotoOptions): Promise<void>;
+  content(): Promise<string>;
+  text(selector: string): Promise<string | null>;
+  evaluate<T>(fn: () => T | Promise<T>): Promise<T>;
+  waitFor(selector: string, opts?: WaitForOptions): Promise<void>;
+  cookies(): Promise<Cookie[]>;
+  get localStorage(): DomStorage;
+  get sessionStorage(): DomStorage;
+  grantAllPermissions(opts?: GrantAllPermissionsOptions): Promise<void>;
+  addInitScript(source: string): Promise<string>;
+  removeInitScript(identifier: string): Promise<void>;
+  humanMove(x: number, y: number, opts?: HumanMoveOptions): Promise<void>;
+  humanClick(selector: string, opts?: HumanClickOptions): Promise<void>;
+  humanClickHandle(handle: ElementHandle, opts?: HumanClickOptions): Promise<void>;
+  humanType(selector: string, text: string, opts?: HumanTypeOptions): Promise<void>;
+  humanScroll(opts: HumanScrollOptions): Promise<void>;
+  querySelectorPiercing(selector: string): Promise<ElementHandle | null>;
+  querySelectorAllPiercing(selector: string): Promise<ElementHandle[]>;
+  screenshot(opts: ScreenshotOptions & { encoding: "base64" }): Promise<string>;
+  screenshot(opts?: ScreenshotOptions & { encoding?: "binary" }): Promise<Uint8Array>;
+  close(): Promise<void>;
+}
+```
+
+Critical §8.2 invariant: `Page` never sends `Runtime.enable`. Evaluation routes through `DOM.resolveNode` → `Runtime.callFunctionOn` against the document's `objectId`, which runs in the page's main world without naming an isolated world.
+
+#### Navigation + content
+
+- `goto(url, opts?)` — `waitUntil: "load" | "domcontentloaded" | "networkidle"`. `"networkidle"` is currently mapped to `"load"` until per-frame `Network.enable` lands.
+- `content()` — outerHTML of `document.documentElement`.
+- `text(selector)` — `textContent` of the first match, or `null`.
+- `evaluate(fn)` — `Runtime.callFunctionOn` on the document with `awaitPromise: true`. Limits: function takes no args, returns a JSON-serializable value or a `Promise` of one.
+- `waitFor(selector, { state, timeout })` — `state: "attached" | "visible" | "hidden"`, polls every 50ms.
+
+#### Behavioral input
+
+- `humanClick(selector, { button?, duration?, preMoveSettle? })` — Bezier+Fitts trajectory, then `mousePressed` + `mouseReleased`.
+- `humanType(selector, text, { wpm?, mistakeRate? })` — focus + lognormal digraph delays + adjacent-key mistakes. `text === ""` clears the field with realistic Backspace timings.
+- `humanScroll({ to, duration? })` — inertial scroll with friction. `to` is a selector or `{ x, y }`.
+- `humanMove(x, y, { duration? })` — trajectory only, no click. Updates the cursor so a subsequent `humanClick` chains realistically from this point.
+- `humanClickHandle(handle, opts?)` — same as `humanClick` but takes an `ElementHandle` (used after `querySelectorPiercing`).
+
+#### Closed-shadow piercing
+
+- `querySelectorPiercing(selector)` — find an element across the entire DOM, piercing closed shadow roots. Required for Cloudflare Turnstile auto-click on Cloudflare Challenge pages where the widget iframe lives behind a closed shadow root. Selector grammar: tag / id / class / attribute / descendant / comma-list. **No** `>`/`+`/`~` combinators, **no** pseudo-classes, **no** XPath.
+- `querySelectorAllPiercing(selector)` — DFS pre-order match list.
+
+#### Storage + permissions
+
+- `localStorage.get(opts?) / set(items, opts?)` — backed by `DOMStorage.getDOMStorageItems` / `setDOMStorageItem`. Origin defaults to the page's main-frame origin; pass `{ origin }` to scope explicitly. `set` has `Object.assign` semantics. Throws on opaque origins (`about:blank`, `data:`).
+- `sessionStorage` — same surface, hits sessionStorage via `isLocalStorage: false`.
+- `grantAllPermissions({ origin? })` — wraps `Browser.grantPermissions` with the full `ALL_BROWSER_PERMISSIONS` descriptor list. Browser-level grant; the page-side `navigator.permissions.query()` matrix is still controlled by the inject (R-036) — orthogonal surfaces.
+
+#### Init scripts
+
+- `addInitScript(source)` — installs a main-world script via `Page.addScriptToEvaluateOnNewDocument({ runImmediately: true, worldName: "" })`. Returns the CDP identifier. Empty `worldName` is critical — naming a world creates an isolated world (PLAN.md §8.4) that's detectable.
+- `removeInitScript(identifier)` — best-effort uninstall.
+
+The session's Mochi inject payload is NOT routed through `addInitScript` — see [the inject pipeline concept page](/docs/concepts/inject-pipeline).
+
+#### Capture
+
+- `screenshot(opts?)` — CDP `Page.captureScreenshot`. Defaults to a PNG `Uint8Array` of the visible viewport. `format: "png" | "jpeg" | "webp"`, `quality: 0..100` (jpeg/webp only), `fullPage: true` (synthesized via `Emulation.setDeviceMetricsOverride`), `clip: { x, y, width, height, scale? }`, `omitBackground: true` (PNG only), `encoding: "binary" | "base64"`. `clip` and `fullPage` are mutually exclusive — `clip` wins.
+
+```ts
+const png = await page.screenshot({ fullPage: true });
+await Bun.write("./out.png", png);
+
+const b64 = await page.screenshot({ format: "jpeg", quality: 80, encoding: "base64" });
+```
+
+### `class ElementHandle`
+
+```ts
+class ElementHandle {
+  constructor(init: ElementHandleInit);
+  get backendNodeId(): number;
+  getAttribute(name: string): Promise<string | null>;
+  textContent(): Promise<string | null>;
+  evaluate<T>(fn: (this: Element) => T): Promise<T>;
+}
+```
+
+Issued by `page.querySelectorPiercing` / `querySelectorAllPiercing`. Lifetime is bound to the page's CDP session — closing the page invalidates every handle.
+
+### `interface ElementHandleInit`
+
+```ts
+interface ElementHandleInit {
+  router: MessageRouter;
+  sessionId: CdpSessionId;
+  objectId: string;
+  backendNodeId: number;
+}
+```
+
+### Page option types
+
+```ts
+type WaitUntil = "load" | "domcontentloaded" | "networkidle";
+interface GotoOptions { waitUntil?: WaitUntil; timeout?: number; }
+type WaitState = "attached" | "visible" | "hidden";
+interface WaitForOptions { timeout?: number; state?: WaitState; }
+interface HumanClickOptions {
+  button?: "left" | "right" | "middle";
+  duration?: number;
+  preMoveSettle?: boolean;
+}
+interface HumanMoveOptions { duration?: number; }
+interface HumanTypeOptions { wpm?: number; mistakeRate?: number; }
+interface HumanScrollOptions {
+  to: string | { x: number; y: number };
+  duration?: number;
+}
+interface DomStorageOptions { origin?: string; }
+interface DomStorage {
+  get(opts?: DomStorageOptions): Promise<Record<string, string>>;
+  set(items: Record<string, string>, opts?: DomStorageOptions): Promise<void>;
+}
+interface GrantAllPermissionsOptions { origin?: string; }
+interface ScreenshotOptions {
+  format?: "png" | "jpeg" | "webp";
+  quality?: number;
+  fullPage?: boolean;
+  clip?: { x: number; y: number; width: number; height: number; scale?: number };
+  omitBackground?: boolean;
+  encoding?: "binary" | "base64";
+}
+```
+
+### `interface PageInit`
+
+Constructor shape for `Page`. `Session.newPage` builds it; you should not construct pages directly.
+
+### `const ALL_BROWSER_PERMISSIONS`
+
+```ts
+const ALL_BROWSER_PERMISSIONS = [
+  "accessibilityEvents", "audioCapture", "backgroundSync", "backgroundFetch",
+  "captureHandle", "clipboardReadWrite", "clipboardSanitizedWrite",
+  "displayCapture", "durableStorage", "flash", "geolocation",
+  "idleDetection", "localFonts", "midi", "midiSysex", "nfc", "notifications",
+  "paymentHandler", "periodicBackgroundSync", "protectedMediaIdentifier",
+  "sensors", "storageAccess", "speakerSelection", "topLevelStorageAccess",
+  "videoCapture", "videoCapturePanTiltZoom", "wakeLockScreen", "wakeLockSystem",
+  "webAppInstallation", "windowManagement",
+] as const;
+type BrowserPermission = (typeof ALL_BROWSER_PERMISSIONS)[number];
+```
+
+Pinned to Chromium ≥ 131 (the mochi profile floor). The list is verbose-on-purpose so a contract test catches the day Chromium adds a new permission.
+
+### `interface Cookie`
+
+```ts
+interface Cookie {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  expires: number;
+  size: number;
+  httpOnly: boolean;
+  secure: boolean;
+  session: boolean;
+  sameSite?: "Strict" | "Lax" | "None";
+}
+```
+
+Mirrors CDP `Network.Cookie`.
+
+### Linux-server detection
+
+```ts
+interface LinuxServerProbes {
+  platform: NodeJS.Platform;
+  display: string | undefined;
+  waylandDisplay: string | undefined;
+  uid: number | undefined;
+  hasDockerEnvFile: boolean;
+  cgroup: string | undefined;
+}
+interface LinuxServerEnv {
+  serverNoDisplay: boolean;
+  root: boolean;
+  container: boolean;
+  rationale: string;
+}
+function detectLinuxServerEnv(probes: LinuxServerProbes): LinuxServerEnv;
+function probeLinuxServerEnv(): LinuxServerEnv;
+function snapshotProbes(): LinuxServerProbes;
+```
+
+`probeLinuxServerEnv()` is what `mochi.detectLinuxServerEnv()` calls — same return value. Use it to introspect whether `launch` would auto-pick `headlessMode: "new"`. See [Linux server setup](/docs/getting-started/linux-server).
+
+### Geo-consistency
+
+```ts
+type GeoConsistencyMode = "privacy-fallback" | "auto-correct" | "strict" | "off";
+interface GeoReconcileResult {
+  readonly matrix: MatrixV1;
+  readonly action: "ok" | "no-probe" | "off" | "privacy-fallback" | "auto-correct";
+  readonly geo: ExitGeo | null;
+  readonly reason?: string;
+}
+class GeoMismatchError extends Error { /* matrix, geo, reason */ }
+function tzOffsetMinutes(zone: string, ref?: Date): number | null;
+function localeRegion(locale: string): string | null;
+function reconcileGeoConsistency(
+  matrix: MatrixV1,
+  geo: ExitGeo | null,
+  mode: GeoConsistencyMode,
+): GeoReconcileResult;
+interface ExitGeo {
+  readonly ip: string;
+  readonly country: string;
+  readonly region?: string;
+  readonly city?: string;
+  readonly timezone: string;
+  readonly postalCode?: string;
+  readonly lat?: number;
+  readonly lng?: number;
+  readonly source: string;
+}
+interface ProbeOptions {
+  readonly proxy?: string;
+  readonly matrix: Pick<MatrixV1, "wreqPreset">;
+  readonly maxAttempts?: number;
+  readonly perEndpointTimeoutMs?: number;
+  readonly fetch?: ProbeFetch;
+  readonly shuffle?: (xs: readonly Adapter[]) => readonly Adapter[];
+}
+function probeExitGeo(opts: ProbeOptions): Promise<ExitGeo | null>;
+```
+
+`probeExitGeo` issues a single GET via wreq using the matrix's `wreqPreset` (4-attempt cap, 2s per endpoint). `reconcileGeoConsistency` cross-references `(matrix.timezone, matrix.locale)` against the IP's country/timezone and applies the policy. `launch` calls both internally when `geoConsistency !== "off"`.
+
+### `function parseProxyUrl(url: string): ParsedProxy`
+
+```ts
+interface ParsedProxy {
+  server: string;
+  auth?: { username: string; password: string };
+  protocol: "http" | "https" | "socks5" | "socks4";
+}
+```
+
+Accepts `http://user:pass@host:port`, `socks5://user@host:1080`, `http://host:8080`, percent-encoded credentials, IPv6 hosts. Throws on unsupported protocols or empty hosts.
+
+### Error classes
+
+```ts
+class ChromiumNotFoundError extends Error { /* "ChromiumNotFoundError" */ }
+class BrowserCrashedError extends Error { /* "BrowserCrashedError"; cause? */ }
+class CdpRemoteError extends Error {
+  readonly method: string;
+  readonly code: number;
+  readonly data: unknown;
+}
+class CdpTimeoutError extends Error {
+  readonly method: string;
+  readonly timeoutMs: number;
+}
+class ForbiddenCdpMethodError extends Error { /* §8.2 violation */ }
+class NotImplementedError extends Error { /* placeholder */ }
+class GeoMismatchError extends Error {
+  readonly matrix: { timezone: string; locale: string };
+  readonly geo: ExitGeo;
+  readonly reason: string;
+}
+```
+
+### CDP router types
+
+```ts
+type CdpEventHandler = (params: unknown, sessionId?: CdpSessionId) => void;
+type Unsubscribe = () => void;
+interface SendOptions {
+  timeoutMs?: number;
+  sessionId?: CdpSessionId;
+}
+```
+
+### `const VERSION: string`
+
+The package version as published on npm. Mirrored on `mochi.version`.
+
+## Common patterns
+
+### Scrape under a residential proxy
+
+```ts
+import { mochi } from "@mochi.js/core";
+
+const session = await mochi.launch({
+  profile: "linux-chrome-stable",
+  seed: process.env.RUN_ID ?? "default",
+  proxy: process.env.PROXY_URL, // "http://user:pass@host:port"
+  geoConsistency: "privacy-fallback",
+});
+try {
+  const page = await session.newPage();
+  await page.goto("https://target.example.com");
+  const html = await page.content();
+  console.log(html.length);
+} finally {
+  await session.close();
+}
+```
+
+### Persist + restore a cookie jar
+
+```ts
+const a = await mochi.launch({ profile: "mac-m4-chrome-stable", seed: "u1" });
+const page = await a.newPage();
+await page.goto("https://app.example.com/login");
+await page.humanType("input[name=email]", "me@example.com");
+await page.humanType("input[name=password]", "hunter2");
+await page.humanClick("button[type=submit]");
+await page.waitFor("[data-testid=dashboard]");
+await a.cookies.save("./state/jar.json", { pattern: /\.example\.com$/ });
+await a.close();
+
+const b = await mochi.launch({ profile: "mac-m4-chrome-stable", seed: "u1" });
+await b.cookies.load("./state/jar.json");
+const p = await b.newPage();
+await p.goto("https://app.example.com/dashboard"); // already logged in
+```
+
+### Side-channel API call sharing the session's TLS fingerprint
+
+```ts
+const session = await mochi.launch({ profile: "linux-chrome-stable", seed: "x" });
+const apiResp = await session.fetch("https://api.example.com/v1/me", {
+  headers: { authorization: `Bearer ${token}` },
+});
+console.log(apiResp.status, await apiResp.json());
+await session.close();
+```
+
+### Auto-solve Turnstile on every new page
+
+```ts
+const session = await mochi.launch({
+  profile: "mac-m4-chrome-stable",
+  seed: "u1",
+  challenges: {
+    turnstile: {
+      autoClick: true,
+      onSolved: (token) => console.log("got cf-turnstile token:", token.slice(0, 8)),
+      onEscalation: (reason) => console.warn("turnstile escalated:", reason),
+    },
+  },
+});
+const page = await session.newPage();
+await page.goto("https://protected.example.com");
+```
+
+### Pierce a closed shadow root and click
+
+```ts
+const handle = await page.querySelectorPiercing("iframe[src*='challenges.cloudflare.com']");
+if (handle !== null) {
+  const src = await handle.getAttribute("src");
+  await page.humanClickHandle(handle);
+}
+```
+
+## Errors
+
+| Class | When it fires | How to recover |
+| --- | --- | --- |
+| `ChromiumNotFoundError` | No CfT install matched and `MOCHI_CHROMIUM_PATH` is unset | `bunx mochi browsers install` or set `MOCHI_CHROMIUM_PATH` |
+| `BrowserCrashedError` | Chromium child exited or pipe closed mid-call | Re-launch the session; check `cause` for the underlying signal |
+| `CdpRemoteError` | A CDP method returned `{error: ...}` | Read `.method`, `.code`, `.data`; usually a logic bug in the caller |
+| `CdpTimeoutError` | A CDP request didn't resolve within `timeoutMs` | Bump `LaunchOptions.timeout` or per-call `timeout` |
+| `ForbiddenCdpMethodError` | Code reached for `Runtime.enable` / `Page.createIsolatedWorld` / similar §8.2-banned method | Don't reach into `session._internalRouter()`; if you must, file an issue |
+| `NotImplementedError` | A placeholder method that hasn't shipped yet | Check the version table; pin a compatible release |
+| `GeoMismatchError` | `geoConsistency: "strict"` and the proxy egress doesn't match the matrix's `(timezone, locale)` | Switch profile, switch proxy, or relax to `"privacy-fallback"` |
+
+## See also
+
+- [Concepts → Inject pipeline](/docs/concepts/inject-pipeline)
+- [Concepts → Profiles](/docs/concepts/profiles)
+- [Concepts → Network FFI](/docs/concepts/network-ffi)
+- [Guides → Cookies and storage](/docs/guides/cookies-and-storage)
+- [Guides → Proxy auth](/docs/guides/proxy-auth)
+- [Guides → Cloudflare Turnstile](/docs/guides/turnstile)
+- [Guides → Screenshots](/docs/guides/screenshots)
+- [API → @mochi.js/consistency](/docs/api/consistency)
+- [API → @mochi.js/inject](/docs/api/inject)
+- [API → @mochi.js/challenges](/docs/api/challenges)
+- [API → @mochi.js/net](/docs/api/net)
+- [API → mochi CLI](/docs/api/cli)
+- [Reference → Limits](/docs/reference/limits)
+
+<!-- llm-context:start
+Package: @mochi.js/core
+Public surface (verbatim from packages/core/src/index.ts as of 2026-05-09):
+
+Re-exports:
+  ChromiumNotFoundError                              (class, from "./binary")
+  ForbiddenCdpMethodError                            (class, from "./cdp/forbidden")
+  BrowserCrashedError                                (class, from "./cdp/router")
+  CdpRemoteError                                     (class)
+  CdpTimeoutError                                    (class)
+  CdpEventHandler                                    (type)
+  SendOptions                                        (type)
+  Unsubscribe                                        (type)
+  NotImplementedError                                (class, from "./errors")
+
+  GeoConsistencyMode                                 (type)
+  GeoMismatchError                                   (class)
+  GeoReconcileResult                                 (type)
+  localeRegion                                       (function)
+  reconcileGeoConsistency                            (function)
+  tzOffsetMinutes                                    (function)
+  ExitGeo                                            (type, from "./geo-probe")
+  ProbeOptions                                       (type)
+  probeExitGeo                                       (function)
+
+  ChallengeLaunchOptions                             (type, from "./launch")
+  LaunchOptions                                      (type)
+  launch(opts: LaunchOptions): Promise<Session>      (function)
+  Mochi                                              (type)
+  mochi                                              (const namespace)
+  ProfileId                                          (type alias for string)
+  ProxyConfig                                        (type)
+  resolveHeadlessMode(opts, env)                     (function)
+
+  defaultProfileForHost(): ProfileId | null          (function, from "./default-profile")
+  resolveDefaultProfileForHost(platform, arch)       (function — pure resolver for tests)
+  EXPLICIT_PROFILE_IDS                               (const tuple of 6 real-device profile IDs)
+
+  detectLinuxServerEnv(probes): LinuxServerEnv       (function, from "./linux-server")
+  LinuxServerEnv                                     (type)
+  LinuxServerProbes                                  (type)
+  probeLinuxServerEnv(): LinuxServerEnv              (function)
+  snapshotProbes(): LinuxServerProbes                (function)
+
+  ALL_BROWSER_PERMISSIONS                            (const tuple, from "./page")
+  BrowserPermission                                  (type)
+  Cookie                                             (type)
+  DomStorage                                         (type)
+  DomStorageOptions                                  (type)
+  GotoOptions                                        (type)
+  GrantAllPermissionsOptions                         (type)
+  HumanClickOptions                                  (type)
+  HumanMoveOptions                                   (type)
+  HumanScrollOptions                                 (type)
+  HumanTypeOptions                                   (type)
+  Page                                               (class)
+  PageInit                                           (type)
+  ScreenshotOptions                                  (type)
+  WaitForOptions                                     (type)
+  WaitState                                          (type)
+  WaitUntil                                          (type)
+
+  ElementHandle                                      (class, from "./page/element-handle")
+  ElementHandleInit                                  (type)
+
+  ParsedProxy                                        (type, from "./proxy-auth")
+  parseProxyUrl(url: string): ParsedProxy            (function)
+
+  COOKIE_JAR_FORMAT_VERSION                          (const, value 1, from "./session")
+  CookieJar                                          (type)
+  CookieJarFile                                      (type)
+  CookieJarOptions                                   (type)
+  Session                                            (class)
+  SessionInit                                        (type)
+  StorageSnapshot                                    (type)
+
+  VERSION                                            (const string, from "./version")
+
+mochi namespace shape:
+  mochi.version: string
+  mochi.launch(opts: LaunchOptions): Promise<Session>
+  mochi.detectLinuxServerEnv(): LinuxServerEnv
+  mochi.defaultProfileForHost(): ProfileId | null  // host-OS auto-pick
+
+LaunchOptions:
+  - profile is OPTIONAL. When omitted, mochi auto-picks via defaultProfileForHost():
+      linux/x64    → linux-chrome-stable
+      darwin/arm64 → mac-m4-chrome-stable
+      darwin/x64   → mac-chrome-stable
+      win32/x64    → windows-chrome-stable
+    Unsupported hosts throw with a list of the 6 explicit profile IDs.
+    Explicit `profile` always wins.
+  - On Linux servers, omit `profile`; the default is the right answer.
+  - Strategic rationale: https://mochijs.com/docs/concepts/stealth-philosophy#default-to-the-host-os-not-windows
+
+Session methods:
+  session.profile: MatrixV1
+  session.seed: string
+  session.newPage(): Promise<Page>
+  session.pages(): Page[]
+  session.cookies: CookieJar (getter)
+  session.storage(): Promise<StorageSnapshot>
+  session.fetch(url, init?): Promise<Response>
+  session.close(): Promise<void>
+
+Page methods:
+  page.url (getter)
+  page.mainFrameId(): string | null
+  page.cursorPosition(): {x, y}
+  page.goto(url, opts?)
+  page.content()
+  page.text(selector)
+  page.evaluate(fn)
+  page.waitFor(selector, opts?)
+  page.cookies()
+  page.localStorage / page.sessionStorage (getters → DomStorage)
+  page.grantAllPermissions(opts?)
+  page.addInitScript(source) → identifier
+  page.removeInitScript(identifier)
+  page.humanMove(x, y, opts?)
+  page.humanClick(selector, opts?)
+  page.humanClickHandle(handle, opts?)
+  page.humanType(selector, text, opts?)
+  page.humanScroll(opts)
+  page.querySelectorPiercing(selector)
+  page.querySelectorAllPiercing(selector)
+  page.screenshot(opts?) — overloaded: encoding "base64" → string, "binary" (default) → Uint8Array
+  page.close()
+
+CookieJar methods: get, set, save, load
+DomStorage methods: get, set
+ElementHandle methods: backendNodeId (getter), getAttribute, textContent, evaluate
+
+Common LLM hallucinations for this package (DO NOT use these — they do not exist):
+- `mochi.connect()` / `mochi.attach()` — there is no remote-attach API
+- `session.context()` / `session.contexts` / `BrowserContext` — mochi has no Playwright-style contexts; one Session = one Chromium child
+- `page.click(selector)` / `page.type(selector, text)` — names are `humanClick` / `humanType` (no plain `click` / `type`)
+- `page.fill(selector, value)` — does not exist; use `humanType`
+- `page.hover(selector)` — does not exist; use `humanMove(x, y)` or compute the box and move into it
+- `page.$(selector)` / `page.$$(selector)` — no jQuery-style shortcuts; use `text()`, `humanClick(selector)`, or `querySelectorPiercing(selector)`
+- `page.locator(selector)` — no Playwright-style locator API
+- `page.frames()` / `page.frame(name)` — no frame surface in v0.1.x
+- `page.setViewportSize()` — viewport is matrix-derived; pass `display.{width,height}` via the profile, not at runtime
+- `page.setExtraHTTPHeaders()` — not in v0.1.x; use `session.fetch` for header control or set them on the profile/matrix
+- `Session.context.cookies()` — call `session.cookies.get()` (not `.cookies()`)
+- `session.cookies()` (function-call form) — `cookies` is a getter returning the `CookieJar`; call `session.cookies.get()`
+- `page.evaluate(fn, ...args)` — `evaluate` takes a zero-arg function only; arguments are not supported in v0.1.x
+- `page.waitForSelector` / `page.waitForLoadState` / `page.waitForNavigation` — use `page.waitFor(selector)` and `goto({ waitUntil })`
+- `page.screenshot({ path: "..." })` — there is no `path` option; the call returns bytes. Write yourself with `Bun.write(path, bytes)`
+- `page.pdf()` / `Page.printToPDF` — not implemented
+- `mochi.launch({ headless: "new" })` — `headless` is boolean. Use `headlessMode: "new"`
+- `mochi.launch({ profile: "windows-chrome-stable" })` from a Linux server — that's the wrong default. On Linux, omit `profile` (mochi auto-picks `linux-chrome-stable`) or pass it explicitly. Linux is a real-user signal, not a bot signal — full rationale at https://mochijs.com/docs/concepts/stealth-philosophy
+- `LaunchOptions.userDataDir` — not a public option; mochi manages a per-Session ephemeral user-data-dir
+- `LaunchOptions.viewport` — derive viewport from the profile/matrix, not at launch
+- `LaunchOptions.executablePath` — use `binary`
+- `LaunchOptions.proxy.bypass` — not supported; the proxy URL is the entire surface
+- `Runtime.enable` / `Page.createIsolatedWorld` — forbidden via `ForbiddenCdpMethodError`; do not reach for these
+- `addInitScript({ path })` — only the source-string form exists; read the file yourself
+
+Cross-references:
+- /docs/api/consistency
+- /docs/api/inject
+- /docs/api/behavioral
+- /docs/api/challenges
+- /docs/api/net
+- /docs/api/profiles
+- /docs/api/cli
+- /docs/concepts/inject-pipeline
+- /docs/concepts/profiles
+- /docs/concepts/network-ffi
+- /docs/concepts/consistency-engine
+- /docs/concepts/behavioral-synth
+- /docs/getting-started/linux-server
+- /docs/guides/proxy-auth
+- /docs/guides/turnstile
+- /docs/guides/cookies-and-storage
+- /docs/guides/screenshots
+- /docs/reference/limits
+- /docs/reference/invariants
+llm-context:end -->

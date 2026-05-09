@@ -89,5 +89,10 @@ The `onEscalation` callback receives `"image-challenge" | "managed" | "timeout"`
 
 - [PLAN.md §8.4](https://github.com/0xchasercat/mochi/blob/main/PLAN.md) — main-world inject pattern
 - [PLAN.md §11](https://github.com/0xchasercat/mochi/blob/main/PLAN.md) — behavioral synth (Bezier + Fitts)
-- [`tasks/0220-turnstile-auto-click.md`](https://github.com/0xchasercat/mochi/blob/main/tasks/0220-turnstile-auto-click.md) — the brief
-- [`docs/limits.md`](https://github.com/0xchasercat/mochi/blob/main/docs/limits.md) — what's deferred to v0.3
+- <https://mochijs.com/docs/reference/limits> — what's deferred to v0.3
+
+## Documentation
+
+- Package reference: <https://mochijs.com/docs/api/challenges>
+- Concept deep-dive: <https://mochijs.com/docs/concepts/inject-pipeline>
+- Cookbook: <https://mochijs.com/docs/guides/pick-a-scenario>
