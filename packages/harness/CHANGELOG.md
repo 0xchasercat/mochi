@@ -1,5 +1,13 @@
 # @mochi.js/harness
 
+## 0.1.12
+
+### Patch Changes
+
+- Updated dependencies [c8e2055]
+  - @mochi.js/core@0.9.0
+  - @mochi.js/behavioral@0.1.6
+
 ## 0.1.11
 
 ### Patch Changes
