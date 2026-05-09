@@ -22,11 +22,26 @@
 
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
-import { mochi, type Page, type Session } from "@mochi.js/core";
+import { defaultProfileForHost, mochi, type Page, type Session } from "@mochi.js/core";
 import { loadProfile } from "../../run";
 
-/** Default profile id for the conformance suite. */
-export const CONFORMANCE_PROFILE = "mac-m4-chrome-stable";
+/**
+ * Default profile id for the conformance suite — host-OS-matched.
+ *
+ * CI runs on Linux x86_64; local dev runs on Mac (M4 / Intel) or Windows.
+ * Loading a profile whose OS doesn't match the runtime is detectable: the
+ * spoofed UA / canvas / audio / WebGL all say "Mac" while the underlying
+ * Chromium binary's TLS handshake, font list, and platform-specific media
+ * device IDs say "Linux". Cloudflare Turnstile catches that mismatch and
+ * refuses to issue a token, which had been silently masked pre-0.8 by a
+ * placeholder that always returned Linux regardless of the requested id.
+ *
+ * `defaultProfileForHost()` consults the same decision table that
+ * `mochi.launch({ profile: undefined })` uses, so dev + CI are aligned.
+ * Falls back to `mac-m4-chrome-stable` for unsupported hosts (the prior
+ * hardcoded value) so nothing breaks for exotic platforms.
+ */
+export const CONFORMANCE_PROFILE = defaultProfileForHost() ?? "mac-m4-chrome-stable";
 
 /** Default seed — stable per (profile, conformance-run). */
 export const CONFORMANCE_SEED = "stealth-conformance";
