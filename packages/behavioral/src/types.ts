@@ -92,3 +92,22 @@ export const DEFAULT_BEHAVIOR_PROFILE: BehaviorProfile = {
   wpm: 65,
   scrollStyle: "smooth",
 } as const;
+
+/**
+ * Conservative-default `BehaviorProfile` returned when a `Session` was launched
+ * with `profile: null` (no-spoof mode) — see `mochi.connect` /
+ * `mochi.launch({ profile: null })`. The fields differ slightly from
+ * {@link DEFAULT_BEHAVIOR_PROFILE} (which is the in-band default for
+ * matrix-derived sessions): the brief pins `wpm: 60` here so the no-spoof
+ * default is its own contract surface, independent from the matrix-default
+ * baseline.
+ *
+ * Consumers in `@mochi.js/core/page.ts` use this as the fallback when the
+ * Session's `profile` is `null` and per-page `behavior` is also unset.
+ */
+export const DEFAULT_BEHAVIOR: BehaviorProfile = {
+  hand: "right",
+  tremor: 0.18,
+  wpm: 60,
+  scrollStyle: "smooth",
+} as const;

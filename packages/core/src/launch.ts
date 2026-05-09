@@ -13,6 +13,7 @@
 import { deriveMatrix, type ProfileV1 } from "@mochi.js/consistency";
 import { getProfile, ProfileBaselineMissingError, UnknownProfileIdError } from "@mochi.js/profiles";
 import { resolveBinary } from "./binary";
+import { connect } from "./connect";
 import { defaultProfileForHost, unsupportedHostMessage } from "./default-profile";
 import { type GeoConsistencyMode, reconcileGeoConsistency } from "./geo-consistency";
 import { probeExitGeo } from "./geo-probe";
@@ -113,8 +114,17 @@ export interface LaunchOptions {
    * signal, not a bot signal — see `concepts/stealth-philosophy` for the
    * thesis + production evidence.
    */
-  profile?: ProfileId | ProfileV1;
-  seed: string;
+  /**
+   * Pass `null` to opt OUT of the spoof entirely — see "No-spoof mode" below.
+   */
+  profile?: ProfileId | ProfileV1 | null;
+  /**
+   * Required when `profile` is set to a string id, an inline `ProfileV1`, or
+   * left undefined (auto-pick). Unused when `profile === null` (no-spoof
+   * mode); a `console.warn` fires if `seed` is supplied alongside a `null`
+   * profile to flag the apparent confusion without blocking the launch.
+   */
+  seed?: string;
   proxy?: string | ProxyConfig;
   /**
    * Legacy boolean knob — `true` runs Chromium under `--headless=new`,
@@ -273,8 +283,28 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
   // profile id. Throws with a precise diagnostic if the host is one of the
   // unsupported ones (FreeBSD, Linux arm64 today, Windows arm64, Alpine
   // musl). Explicit `profile:` always wins; the auto-pick never overrides.
+  //
+  // Explicit `profile: null` opts out of every override entirely — no
+  // matrix is derived, no inject is built, no UA / locale / TZ /
+  // viewport CDP calls fire. The user wants mochi's API surface only.
   const profileSource = await resolveProfileSource(opts.profile);
-  const matrix = deriveMatrix(profileSource.profile, opts.seed);
+  if (profileSource.profile === null && opts.seed !== undefined && opts.seed.length > 0) {
+    console.warn(
+      "[mochi] launch: `seed` was supplied alongside `profile: null`. " +
+        "Seeds are only consumed when a profile is set; ignoring.",
+    );
+  }
+  if (profileSource.profile !== null && (opts.seed === undefined || opts.seed.length === 0)) {
+    throw new Error(
+      "[mochi] launch: `seed` is required when `profile` is set " +
+        "(string id, inline ProfileV1, or auto-picked). Pass `profile: null` " +
+        "if you want to skip the spoof entirely.",
+    );
+  }
+  const matrix =
+    profileSource.profile === null
+      ? null
+      : deriveMatrix(profileSource.profile, opts.seed as string);
   if (profileSource.autoPicked) {
     // One info-level log line so users can see what mochi inferred without
     // calling `defaultProfileForHost()` themselves. Wording is pinned by
@@ -305,7 +335,7 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
   // the mode so we don't pay the network round-trip in offline tests.
   const geoMode: GeoConsistencyMode = opts.geoConsistency ?? "privacy-fallback";
   let adjustedMatrix = matrix;
-  if (geoMode !== "off") {
+  if (matrix !== null && geoMode !== "off") {
     const geo = await probeExitGeo({
       ...(normalized?.proxy !== undefined ? { proxy: normalized.proxy } : {}),
       matrix,
@@ -364,7 +394,10 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
     // inject layer's `navigator.languages` spoof; Chromium derives the
     // q-weighted `Accept-Language` value from the single `--lang` primary
     // automatically.
-    locale: adjustedMatrix.locale,
+    //
+    // Skipped under no-spoof mode (`profile: null`) — the user wants the
+    // host's native locale on the wire.
+    ...(adjustedMatrix !== null ? { locale: adjustedMatrix.locale } : {}),
     // Pin OS-level outer window from the matrix's display geometry so
     // `window.outerWidth/outerHeight` (which reads from the OS window,
     // NOT the JS-spoofed `screen.*`) matches the spoof. Closes the
@@ -374,7 +407,11 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
     // (`adjustedMatrix.display` === `matrix.display` since geo reconcile
     // only touches timezone/locale/languages — but we use the adjusted
     // ref for forward-compat.)
-    ...(Number.isInteger(adjustedMatrix.display.width) &&
+    //
+    // Skipped under no-spoof mode — the OS-level window geometry is
+    // whatever Chromium picks by default.
+    ...(adjustedMatrix !== null &&
+    Number.isInteger(adjustedMatrix.display.width) &&
     Number.isInteger(adjustedMatrix.display.height) &&
     adjustedMatrix.display.width > 0 &&
     adjustedMatrix.display.height > 0
@@ -396,7 +433,7 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
   const session = new Session({
     proc,
     matrix: adjustedMatrix,
-    seed: opts.seed,
+    seed: opts.seed ?? "",
     ...(opts.timeout !== undefined ? { defaultTimeoutMs: opts.timeout } : {}),
     ...(opts.bypassInject === true ? { bypassInject: true } : {}),
     // Proxy auth is the only piece that needs explicit Session-side
@@ -418,6 +455,14 @@ export const mochi = {
   version: VERSION,
   /** Launch a browser session. */
   launch,
+  /**
+   * Attach to a CDP browser endpoint mochi did NOT spawn (BrowserBase,
+   * dockerised Chromium, user-managed patched Chrome, re-attach). Mirrors
+   * `puppeteer.connect`'s shape; supports `profile: null` for no-spoof
+   * mode. `session.close()` disconnects the WebSocket but leaves the
+   * browser running.
+   */
+  connect,
   /**
    * Inspect what mochi would infer about the current process environment for
    * Linux-server detection (drives `headlessMode` defaulting). Pure read of
@@ -528,11 +573,18 @@ function normalizeProxy(p: LaunchOptions["proxy"]):
  * `autoPicked === true` is emitted at the call-site so test fixtures can
  * assert the resolution without intercepting `console`.
  */
-async function resolveProfileSource(profile: ProfileId | ProfileV1 | undefined): Promise<{
-  profile: ProfileV1;
-  id: ProfileId;
+export async function resolveProfileSource(
+  profile: ProfileId | ProfileV1 | null | undefined,
+): Promise<{
+  profile: ProfileV1 | null;
+  id: ProfileId | null;
   autoPicked: boolean;
 }> {
+  // Explicit `null` — no-spoof mode. The launcher / connect path will
+  // skip every CDP override that depends on a derived matrix.
+  if (profile === null) {
+    return { profile: null, id: null, autoPicked: false };
+  }
   if (typeof profile === "object") {
     return { profile, id: profile.id, autoPicked: false };
   }

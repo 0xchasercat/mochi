@@ -12,6 +12,7 @@
  * @see PLAN.md §7
  */
 
+import { DEFAULT_BEHAVIOR } from "@mochi.js/behavioral";
 import {
   type Disposable as ChallengeHandle,
   installTurnstileAutoClick,
@@ -66,8 +67,26 @@ function isTransientWorkerError(err: unknown): boolean {
 
 export interface SessionInit {
   proc: ChromiumProcess;
-  matrix: MatrixV1;
+  /**
+   * The resolved `MatrixV1` for this session, or `null` for no-spoof mode
+   * (`mochi.launch({ profile: null })` / `mochi.connect({ profile: null })`).
+   * When `null`, every spoof-side CDP call (UA override, locale / timezone
+   * emulation, viewport, init-script delivery, worker injection) is skipped
+   * — the browser presents its bare fingerprint, and `Session.profile`
+   * surfaces as `null`.
+   */
+  matrix: MatrixV1 | null;
   seed: string;
+  /**
+   * `true` when mochi spawned the underlying Chromium process and
+   * `session.close()` should kill it (the `mochi.launch` path). `false`
+   * when the Session was attached to a browser the caller manages
+   * (`mochi.connect`); on close the transport is torn down but the
+   * browser is left running, matching `puppeteer.connect` semantics.
+   *
+   * Defaults to `true` (the historical launch-only behaviour).
+   */
+  owned?: boolean;
   /** Optional overrides for the underlying message-router timeout. */
   defaultTimeoutMs?: number;
   /**
@@ -201,9 +220,24 @@ export class Session {
   /**
    * The resolved Matrix for this session — a relationally-locked snapshot
    * of `(profile, seed)` produced by `@mochi.js/consistency.deriveMatrix`.
+   *
+   * `null` when the session was launched with `profile: null` (no-spoof
+   * mode) — there is no spoof on top of Chromium's bare fingerprint.
    */
-  readonly profile: MatrixV1;
+  readonly profile: MatrixV1 | null;
   readonly seed: string;
+  /**
+   * Whether `session.close()` should kill the underlying browser process.
+   * `true` for sessions returned by `mochi.launch` (mochi spawned the
+   * Chromium it owns). `false` for sessions returned by `mochi.connect`
+   * (mochi attached to a browser the caller manages — closing the session
+   * disconnects the WebSocket but leaves the browser running, matching
+   * `puppeteer.connect` semantics).
+   *
+   * @internal — surfaced for tests; production callers should not branch on
+   * this.
+   */
+  readonly owned: boolean;
 
   private readonly proc: ChromiumProcess;
   private readonly router: MessageRouter;
@@ -297,11 +331,14 @@ export class Session {
     this.proc = init.proc;
     this.profile = init.matrix;
     this.seed = init.seed;
+    this.owned = init.owned ?? true;
     this.bypassInject = init.bypassInject === true;
     this.challengesOpts = init.challenges;
     // Skip payload compilation entirely when bypassed — capture flows must
     // not pay the build cost AND must not see the matrix-derived bytes.
-    this._payload = this.bypassInject ? null : buildPayload(init.matrix);
+    // Likewise skip when `matrix` is null (no-spoof mode): there is no
+    // matrix to derive a payload from.
+    this._payload = this.bypassInject || init.matrix === null ? null : buildPayload(init.matrix);
     this.router = new MessageRouter(this.proc.reader, this.proc.writer, {
       defaultTimeoutMs: init.defaultTimeoutMs,
     });
@@ -396,8 +433,9 @@ export class Session {
     // we never send empty here because that would defeat the purpose.
     //
     // Skipped under `bypassInject:true` (PLAN.md §12.1) — capture flows
-    // record the bare browser timezone.
-    if (!this.bypassInject) {
+    // record the bare browser timezone. Also skipped under no-spoof mode
+    // (`profile: null`) — there is no matrix to source a timezone from.
+    if (!this.bypassInject && this.profile !== null) {
       await this.router.send(
         "Emulation.setTimezoneOverride",
         { timezoneId: this.profile.timezone },
@@ -433,8 +471,9 @@ export class Session {
     //
     // Skipped under `bypassInject:true` (PLAN.md §12.1) — capture flows must
     // record the bare browser fingerprint, including its raw UA AND raw
-    // `Sec-CH-UA*` headers.
-    if (!this.bypassInject) {
+    // `Sec-CH-UA*` headers. Also skipped under no-spoof mode
+    // (`profile: null`) — same reasoning, by user request.
+    if (!this.bypassInject && this.profile !== null) {
       await this.router.send(
         "Network.setUserAgentOverride",
         {
@@ -487,6 +526,20 @@ export class Session {
       );
       injectScriptIdentifier = installed.identifier;
     }
+    // Behavior + initial cursor: source from the matrix when present, fall
+    // back to `DEFAULT_BEHAVIOR` (no-spoof mode) so `humanClick` /
+    // `humanType` still work. Default cursor is a sensible (320, 240)
+    // center-ish point — we can't read the bare browser's actual viewport
+    // synchronously without a CDP roundtrip, so pick something off-origin
+    // and let the synth chain from there.
+    const pageBehavior = this.profile?.behavior ?? DEFAULT_BEHAVIOR;
+    const pageCursor =
+      this.profile !== null
+        ? {
+            x: Math.floor(this.profile.display.width / 2),
+            y: Math.floor(this.profile.display.height / 2),
+          }
+        : { x: 320, y: 240 };
     const page = new Page({
       router: this.router,
       targetId: created.targetId,
@@ -496,15 +549,12 @@ export class Session {
       // PLAN.md I-5: behavior comes from MatrixV1.behavior (the matrix is
       // the single source of truth — `Session.profile` is the resolved
       // MatrixV1). Per-call opts may override individual fields.
-      behavior: this.profile.behavior,
+      behavior: pageBehavior,
       seed: this.seed,
       // Initial cursor at the display center — a real human's pointer is
       // never at (0, 0). The matrix's display dimensions are the canonical
       // source (PLAN.md I-5).
-      initialCursor: {
-        x: Math.floor(this.profile.display.width / 2),
-        y: Math.floor(this.profile.display.height / 2),
-      },
+      initialCursor: pageCursor,
     });
     this._pages.push(page);
     // Wire the Turnstile auto-click convenience layer if the session was
@@ -944,7 +994,25 @@ export class Session {
       this.initInjectorHandle = undefined;
     }
     await this.router.close();
-    await this.proc.close();
+    // For owned (launched) sessions, `proc.close()` kills Chromium and
+    // removes the user-data-dir. For borrowed (`mochi.connect`) sessions
+    // the WebSocket transport's `close()` already disconnected the
+    // underlying socket via `router.close()` above; we still call
+    // `proc.close()` here because the connect-mode `proc` shim's
+    // `close()` is a no-op (or, defensively, idempotent) — letting any
+    // future shape that needs to release a resource keep doing so.
+    if (this.owned) {
+      await this.proc.close();
+    } else {
+      // Best-effort — connect-mode shim's `close()` is a no-op, but if a
+      // future shape grows side effects (e.g. detaching event listeners)
+      // we want the call to still flow through.
+      try {
+        await this.proc.close();
+      } catch {
+        // ignore — not a fatal condition for a borrowed session.
+      }
+    }
   }
 
   /**

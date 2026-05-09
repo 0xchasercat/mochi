@@ -19,6 +19,19 @@ export {
   type SendOptions,
   type Unsubscribe,
 } from "./cdp/router";
+// WebSocket-mode CDP transport (used by `mochi.connect`). The pipe-mode
+// transport in `./cdp/transport.ts` remains the load-bearing path for
+// `mochi.launch`.
+export {
+  ConnectionLostError,
+  type ConnectWebSocketCdpOptions,
+  connectWebSocketCdp,
+  type WebSocketCdpAdapter,
+} from "./cdp/transport-ws";
+// `mochi.connect` — attach to a Chromium mochi did NOT spawn (BrowserBase,
+// dockerised Chromium, user-managed patched Chrome, re-attach). Mirrors
+// `puppeteer.connect`'s shape; supports `profile: null` for no-spoof mode.
+export { type ConnectOptions, connect } from "./connect";
 // Auto-pick host-OS-matching profile when `LaunchOptions.profile` is omitted
 //  (— paired with the strategic thesis in task 0271).
 export {

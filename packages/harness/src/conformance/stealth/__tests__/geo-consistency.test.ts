@@ -108,7 +108,8 @@ describeOrSkip(
             // Step 4 — passes if the matrix is UTC (privacy-fallback
             // already kicked in). The session's reconciled matrix is
             // exposed via session.profile (the live MatrixV1).
-            if (session.profile.timezone === "UTC") {
+            // biome-ignore lint/style/noNonNullAssertion: harness always launches with a profile
+            if (session.profile!.timezone === "UTC") {
               expect(pageTz).toBe("UTC");
               expect(pageOffsetMin).toBe(0);
               return;
@@ -121,8 +122,10 @@ describeOrSkip(
             //   b) the page-side offset matches what `Intl.DateTimeFormat`
             //      derives for that zone (Date.getTimezoneOffset
             //      consistency).
-            expect(pageTz).toBe(session.profile.timezone);
-            const expectedOffset = computeOffsetMinutes(session.profile.timezone);
+            // biome-ignore lint/style/noNonNullAssertion: harness always launches with a profile
+            expect(pageTz).toBe(session.profile!.timezone);
+            // biome-ignore lint/style/noNonNullAssertion: harness always launches with a profile
+            const expectedOffset = computeOffsetMinutes(session.profile!.timezone);
             expect(pageOffsetMin).toBe(expectedOffset);
 
             // Step 6 — capture sanity: at least one request hit the

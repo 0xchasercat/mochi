@@ -39,7 +39,7 @@ export type {
   ScrollEvent,
   TrajectoryEvent,
 } from "./types";
-export { DEFAULT_BEHAVIOR_PROFILE } from "./types";
+export { DEFAULT_BEHAVIOR, DEFAULT_BEHAVIOR_PROFILE } from "./types";
 
 // ---- Synth surfaces ---------------------------------------------------------
 

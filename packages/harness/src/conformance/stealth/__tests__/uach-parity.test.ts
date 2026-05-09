@@ -161,7 +161,8 @@ describeOrSkip(
             // User-Agent header parity (covered by 0255 already, but
             // re-asserted here so a regression surfaces in this test
             // suite as well).
-            expect(headers["user-agent"]).toBe(session.profile.userAgent);
+            // biome-ignore lint/style/noNonNullAssertion: harness always launches with a profile
+            expect(headers["user-agent"]).toBe(session.profile!.userAgent);
           });
         });
       },

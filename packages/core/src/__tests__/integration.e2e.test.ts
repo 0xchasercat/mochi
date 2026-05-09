@@ -31,7 +31,7 @@ describeOrSkip("@mochi.js/core E2E (MOCHI_E2E=1)", () => {
       try {
         // Sanity: the user-data-dir was created and the matrix carries our seed.
         expect(session.seed).toBe("e2e");
-        expect(session.profile.seed).toBe("e2e");
+        expect(session.profile?.seed).toBe("e2e");
 
         const page = await session.newPage();
         await page.goto("data:text/html,<title>hi</title><h1>world</h1>");

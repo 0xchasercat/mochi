@@ -103,6 +103,7 @@ describeOrSkip("@mochi.js/core --window-size E2E (MOCHI_E2E=1) — task 0252", (
 
       try {
         const matrix = session.profile;
+        if (matrix === null) throw new Error("[mochi e2e] expected matrix-derived session");
         const page = await session.newPage();
         await page.goto(PROBE_DATA_URL);
         const txt = await page.text("#p");

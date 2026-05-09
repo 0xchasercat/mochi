@@ -22,13 +22,14 @@ bun add @mochi.js/core
 export const mochi: {
   readonly version: string;
   readonly launch: (opts: LaunchOptions) => Promise<Session>;
+  readonly connect: (opts: ConnectOptions) => Promise<Session>;
   readonly detectLinuxServerEnv: () => LinuxServerEnv;
   readonly defaultProfileForHost: () => ProfileId | null;
 };
 export type Mochi = typeof mochi;
 ```
 
-The default import surface. `mochi.launch` is the one function 99% of users call; `mochi.version` exposes the package's `VERSION` constant; `mochi.detectLinuxServerEnv()` runs the same probe `launch` runs internally to decide the headless default; `mochi.defaultProfileForHost()` returns the profile id `launch` would auto-pick if `profile` were omitted.
+The default import surface. `mochi.launch` is the one function 99% of users call; `mochi.connect` attaches to a Chromium mochi did NOT spawn (BrowserBase, dockerised Chromium, user-managed patched Chrome, re-attach); `mochi.version` exposes the package's `VERSION` constant; `mochi.detectLinuxServerEnv()` runs the same probe `launch` runs internally to decide the headless default; `mochi.defaultProfileForHost()` returns the profile id `launch` would auto-pick if `profile` were omitted.
 
 ```ts
 import { mochi } from "@mochi.js/core";
@@ -50,8 +51,8 @@ Same function as `mochi.launch`, exposed as a named export for users who tree-sh
 
 ```ts
 interface LaunchOptions {
-  profile?: ProfileId | ProfileV1;
-  seed: string;
+  profile?: ProfileId | ProfileV1 | null;
+  seed?: string;
   proxy?: string | ProxyConfig;
   headless?: boolean;
   headlessMode?: "new" | "legacy" | "off";
@@ -67,8 +68,8 @@ interface LaunchOptions {
 }
 ```
 
-- `profile` — **optional**. A `ProfileId` string (looked up under `packages/profiles/data/<id>/profile.json`) or an inline `ProfileV1` object. When omitted, mochi calls [`defaultProfileForHost`](#function-defaultprofileforhost-profileid--null) and auto-picks the profile whose declared OS matches the host's `process.platform` / `process.arch` pair (`linux/x64` → `linux-chrome-stable`, `darwin/arm64` → `mac-m4-chrome-stable`, `darwin/x64` → `mac-chrome-stable`, `win32/x64` → `windows-chrome-stable`). On unsupported hosts (FreeBSD, Linux arm64 today, Windows arm64, Alpine musl) launch throws with a precise diagnostic listing the six explicit profile IDs. Explicit `profile` always wins. The architectural rationale lives in [Stealth philosophy → Default to the host OS](/docs/concepts/stealth-philosophy#default-to-the-host-os-not-windows).
-- `seed` — required. Drives the consistency engine PRNG. Same `(profile, seed)` produces a byte-identical Matrix (excluding `derivedAt`).
+- `profile` — **optional**. A `ProfileId` string (looked up under `packages/profiles/data/<id>/profile.json`), an inline `ProfileV1` object, or `null` to opt out of the spoof entirely (see [No-spoof mode](#no-spoof-mode-profile-null) below). When omitted, mochi calls [`defaultProfileForHost`](#function-defaultprofileforhost-profileid--null) and auto-picks the profile whose declared OS matches the host's `process.platform` / `process.arch` pair (`linux/x64` → `linux-chrome-stable`, `darwin/arm64` → `mac-m4-chrome-stable`, `darwin/x64` → `mac-chrome-stable`, `win32/x64` → `windows-chrome-stable`). On unsupported hosts (FreeBSD, Linux arm64 today, Windows arm64, Alpine musl) launch throws with a precise diagnostic listing the six explicit profile IDs. Explicit `profile` always wins. The architectural rationale lives in [Stealth philosophy → Default to the host OS](/docs/concepts/stealth-philosophy#default-to-the-host-os-not-windows).
+- `seed` — required when `profile` is anything except `null`. Drives the consistency engine PRNG. Same `(profile, seed)` produces a byte-identical Matrix (excluding `derivedAt`). Ignored under `profile: null` (a `console.warn` fires if both are supplied).
 - `proxy` — `"http://user:pass@host:port"` URL form, `"socks5://host:1080"` form, or `{ server, username?, password? }`. Credentials get stripped from the `--proxy-server=` flag and replayed via a CDP `Fetch.authRequired` handler.
 - `headlessMode` — `"new"` (modern headless), `"legacy"`, or `"off"` (headful). When unset, mochi infers `"new"` on Linux without `DISPLAY` / `WAYLAND_DISPLAY`, `"off"` everywhere else. The legacy `headless: boolean` knob still works (`true` → `"new"`, `false` → `"off"`) but `headlessMode` wins when both are set.
 - `binary` — path to a Chromium-for-Testing binary. When omitted, mochi resolves through `MOCHI_CHROMIUM_PATH`, then `~/.mochi/browsers/`. See [`mochi browsers install`](/docs/api/cli).
@@ -77,6 +78,83 @@ interface LaunchOptions {
 - `geoConsistency` — `"privacy-fallback"` (default), `"auto-correct"`, `"strict"`, or `"off"`. Reconciles `(matrix.timezone, matrix.locale)` against the proxy's exit-IP geolocation; closes the cross-layer leak where a US profile over an EU proxy reports PT timezone while the IP geolocates to UTC+1.
 
 See [Concepts → Profiles](/docs/concepts/profiles) for the `(profile, seed)` derivation contract.
+
+#### No-spoof mode (`profile: null`)
+
+Pass `profile: null` to skip every fingerprint override. Mochi launches a stock Chromium-for-Testing, drives it through the same `Session` / `Page` API surface (including `humanClick` / `humanType` / `session.fetch` / cookies / screenshots), but does **not**:
+
+- derive a `MatrixV1`;
+- compile or splice the inject payload;
+- send `Network.setUserAgentOverride`, `Emulation.setTimezoneOverride`, `Emulation.setLocaleOverride`, `Page.addScriptToEvaluateOnNewDocument`, or any matrix-derived viewport / locale CDP call.
+
+`Session.profile` surfaces as `null`. Behavioral synthesis falls back to [`DEFAULT_BEHAVIOR`](/docs/api/behavioral) from `@mochi.js/behavioral` (`{ hand: "right", tremor: 0.18, wpm: 60, scrollStyle: "smooth" }`).
+
+```ts
+import { mochi } from "@mochi.js/core";
+
+const session = await mochi.launch({ profile: null });
+const page = await session.newPage();
+await page.goto("https://example.com");
+// humanClick still works — uses DEFAULT_BEHAVIOR.
+await page.humanClick("button#submit");
+await session.close();
+```
+
+This is the right shape when you've layered your own stealth elsewhere (a patched binary, your own inject pipeline, a remote browser that already spoofs), or when you want to run the harness against the bare browser to measure a baseline.
+
+### `function connect(opts: ConnectOptions): Promise<Session>`
+
+Same shape as `mochi.connect`, exposed as a named export. Attaches to a CDP browser endpoint mochi did NOT spawn — BrowserBase, Browserless, a Chromium running in a Docker container you manage, a patched Chrome you want mochi to drive, or a Chromium you (or another tool) launched earlier and want to re-attach to.
+
+`session.close()` disconnects the WebSocket without killing the browser, matching `puppeteer.connect`'s convention. The browser keeps running.
+
+```ts
+import { mochi } from "@mochi.js/core";
+
+// Direct WebSocket endpoint (BrowserBase-style).
+const a = await mochi.connect({
+  wsEndpoint: "wss://gateway.browserbase.com/devtools/browser/abc123",
+  profile: "linux-chrome-stable",
+  seed: "user-12345",
+  headers: { Authorization: "Bearer …" },
+});
+
+// HTTP base — mochi fetches /json/version to discover the WS URL.
+const b = await mochi.connect({
+  browserURL: "http://localhost:9222",
+  profile: null,            // no-spoof — drive the bare browser
+});
+```
+
+#### `interface ConnectOptions`
+
+```ts
+interface ConnectOptions {
+  wsEndpoint?: string;
+  browserURL?: string;
+  profile?: ProfileId | ProfileV1 | null;
+  seed?: string;
+  geoConsistency?: GeoConsistencyMode;
+  challenges?: ChallengeLaunchOptions;
+  headers?: Record<string, string>;
+  timeout?: number;
+}
+```
+
+- `wsEndpoint` — direct WebSocket URL of the CDP browser endpoint (`ws://…/devtools/browser/<id>`). Takes precedence over `browserURL` when both are set.
+- `browserURL` — base HTTP URL of the browser (e.g. `http://localhost:9222`). Mochi GETs `${browserURL}/json/version` and reads `webSocketDebuggerUrl` — the same discovery dance Puppeteer / Playwright run.
+- `profile` — same semantics as `LaunchOptions.profile`, plus `null` for no-spoof mode. **Required**: `undefined` is rejected because the auto-pick path keys off the local `process.platform`, which is meaningless for a remote browser whose host OS we don't know. Pass an explicit profile (or `null`).
+- `seed` — required when `profile` is non-null.
+- `headers` — extra HTTP headers for the WebSocket upgrade request. Useful for proxied / authenticated CDP gateways (BrowserBase tokens, mTLS-gated Docker Chromium, etc.). Applied to the upgrade only; in-band CDP is unaffected.
+- `geoConsistency`, `challenges`, `timeout` — same semantics as the matching `LaunchOptions` fields.
+
+`ConnectOptions` deliberately **omits** launch-only fields (`binary`, `headless`, `proxy`, `extraArgs`, `hermetic`, `allowRootWithSandbox`, `bypassInject`). The browser is already running; the launcher's flag-set tradeoffs don't apply.
+
+For end-to-end usage examples, see [Connect to an existing Chrome](/docs/guides/connect-existing-chrome).
+
+### `class ConnectionLostError extends Error`
+
+Thrown when the connect-mode transport could not be established (DNS, ECONNREFUSED, TLS, 4xx upgrade rejection, timeout) or when the live socket dropped without a clean close. Carries `endpoint: string` so logs can pinpoint which CDP gateway failed.
 
 ### `type ProfileId = string`
 
@@ -155,8 +233,9 @@ The per-`(profile, seed)` browser lifecycle. Owns one Chromium child + one CDP t
 
 ```ts
 class Session {
-  readonly profile: MatrixV1;
+  readonly profile: MatrixV1 | null;
   readonly seed: string;
+  readonly owned: boolean;
   newPage(): Promise<Page>;
   pages(): Page[];
   get cookies(): CookieJar;
@@ -166,7 +245,8 @@ class Session {
 }
 ```
 
-- `profile` — the resolved `MatrixV1` (NOT the input `ProfileV1`). Read it for `userAgent`, `locale`, `timezone`, `display.{width,height}`, etc.
+- `profile` — the resolved `MatrixV1` (NOT the input `ProfileV1`). Read it for `userAgent`, `locale`, `timezone`, `display.{width,height}`, etc. **`null`** when the session was launched / connected with `profile: null` (no-spoof mode) — the browser is presenting its bare fingerprint.
+- `owned` — `true` for sessions returned by `mochi.launch` (mochi spawned the Chromium it owns; `close()` kills it). `false` for `mochi.connect` sessions (mochi attached to a browser the caller manages; `close()` disconnects the WebSocket but leaves the browser running, matching `puppeteer.connect`).
 - `newPage()` — opens a tab via `Target.createTarget` + `Target.attachToTarget({ flatten: true })`, then wires the inject payload through both the session-level Fetch splice AND the per-page `Page.addScriptToEvaluateOnNewDocument` fallback. Returns a `Page`.
 - `cookies` — see `CookieJar` below.
 - `fetch(url, init)` — out-of-band HTTP routed through Chromium itself via CDP. Simple GETs (no `init` / no method override / no headers / no body) use `Network.loadNetworkResource` (no CORS at the network layer); anything else uses `page.evaluate("fetch(url, init)")` against an `about:blank` scratch frame. JA4/JA3/H2 are real Chrome by definition because Chromium is the client. Cookies inherit from the page's origin; CORS applies for non-GET cross-origin calls. Body shapes: `string`, `ArrayBuffer` / typed arrays, `URLSearchParams`. `Blob` / `FormData` / `ReadableStream` throw with a clear diagnostic.
@@ -195,8 +275,9 @@ Constructor-init shape. Internal — `launch` builds it for you. Exposed for tes
 ```ts
 interface SessionInit {
   proc: ChromiumProcess;
-  matrix: MatrixV1;
+  matrix: MatrixV1 | null;
   seed: string;
+  owned?: boolean;
   defaultTimeoutMs?: number;
   bypassInject?: boolean;
   netProxy?: string;

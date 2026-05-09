@@ -74,7 +74,8 @@ describeOrSkip(
           await withPage(session, async (page) => {
             await page.goto("about:blank");
             const language = await evalExpr<string>(page, "navigator.language");
-            expect(language).toBe(session.profile.locale);
+            // biome-ignore lint/style/noNonNullAssertion: harness always launches with a profile
+            expect(language).toBe(session.profile!.locale);
           });
         });
       },
@@ -103,7 +104,8 @@ describeOrSkip(
             const observed = server.lastAcceptLanguage();
             expect(observed).not.toBeNull();
             const primary = (observed as string).split(",")[0]?.trim() ?? "";
-            expect(primary.toLowerCase()).toBe(session.profile.locale.toLowerCase());
+            // biome-ignore lint/style/noNonNullAssertion: harness always launches with a profile
+            expect(primary.toLowerCase()).toBe(session.profile!.locale.toLowerCase());
           });
         });
       },
