@@ -96,24 +96,39 @@ Run it:
 bun run hello-mochi.ts
 ```
 
-Expected output (Linux placeholder profile in v0.1.x; full Mac / Win profiles ship in phase 0.4):
+Expected output (real-device baseline imported per task 0260; six profile ids ship today — see step 4 below):
 
 ```
-UA:         Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36
+UA:         Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/<pinned>.0.0.0 Safari/537.36
 Locale:     en-US
-Timezone:   UTC
-wreqPreset: chrome_131_linux
+Timezone:   <captured>
+wreqPreset: chrome_<major>_linux
 ```
 
 What just happened:
 
 1. `mochi.launch` resolved `linux-chrome-stable` into a `ProfileV1`, ran it through the 40-rule consistency DAG with `seed: "user-12345"`, and produced a deterministic `MatrixV1`.
-2. The CDP transport opened a `--remote-debugging-pipe` connection (no TCP port) and started the spoofing inject before any page script ran.
-3. `page.goto` navigated; `session.profile` is the resolved Matrix — every fingerprint surface coheres.
+2. The CDP transport opened a `--remote-debugging-pipe` connection (no TCP port) and started the spoofing inject before any page script ran. Inject delivery uses the dual-mechanism path from task 0266: `Fetch.fulfillRequest` body splice on Document responses, with `Page.addScriptToEvaluateOnNewDocument({ runImmediately: true, worldName: "" })` as the `about:blank` / `data:` fallback.
+3. `page.goto` navigated; `session.profile` is the resolved Matrix — every fingerprint surface coheres, including byte-exact `OfflineAudioContext` and `toDataURL` digests (R-047 / R-048 fed by the precomputed audio + canvas fingerprint blobs from task 0267).
 
 The same `(profile, seed)` always produces the same Matrix. Swap the seed for a different identity; swap the profile for a different device class.
 
-## 4. First `humanClick`
+## 4. Profile catalog
+
+Six real-device baselines ship in v0.2 (imported from the wrkx harvester corpus per task 0260, each filtered by FingerprintJS Pro `suspectScore <= 20` and validated by the harness round-trip):
+
+| Profile id | Device |
+|---|---|
+| `mac-m4-chrome-stable` | MacBook (Apple Silicon, M4) — Chrome stable |
+| `mac-chrome-stable` | macOS — Chrome stable |
+| `mac-chrome-beta` | macOS — Chrome beta |
+| `windows-chrome-stable` | Windows 11 — Chrome stable |
+| `linux-chrome-stable` | Linux x86_64 — Chrome stable |
+| `mac-brave-stable` | macOS — Brave stable |
+
+Other ids in the catalog (`mac-m2-…`, `mac-intel-…`, `win11-edge-…`) still resolve to the generic placeholder; see [`docs/limits.md`](limits.md).
+
+## 5. First `humanClick`
 
 ```ts
 import { mochi } from "@mochi.js/core";
@@ -149,7 +164,7 @@ You should see the IANA "Example Domain" link clicked and a navigation to `https
 
 Same matrix → same behavioral parameters (`hand`, `tremor`, `wpm`, `scrollStyle`). Same seed → same path within a session.
 
-## 5. JA4-coherent fetch
+## 6. JA4-coherent fetch
 
 `session.fetch` ships through Bun:FFI → Rust [`wreq`](https://github.com/0x676e67/wreq), so the TLS / H2 fingerprint matches the spoofed Chrome profile byte-for-byte.
 
@@ -164,7 +179,53 @@ The JA4 you read here should match the JA4 emitted when the **same** session hit
 
 Out-of-the-box, prebuilt cdylibs ship for `darwin-{arm64,x64}`, `linux-{x64,arm64}`, and `win32-x64`. On other targets (FreeBSD, Alpine musl, Windows arm64), `bun add` falls back to a local `cargo build`; install the Rust toolchain first.
 
-## 6. Cleanup
+## 7. Convenience surfaces (v0.2 wave-4)
+
+A handful of v0.2 conveniences land on `Page` and `Session`. Full reference lives at [mochijs.com](https://mochijs.com); the quickstart-relevant one-liners:
+
+```ts
+// Screenshot the current viewport (PNG by default).
+const png = await page.screenshot();
+await Bun.write("out.png", png);
+
+// Full-page capture in JPEG with a quality knob.
+const jpeg = await page.screenshot({ format: "jpeg", quality: 80, fullPage: true });
+
+// Persist + replay cookies (JSON, NOT pickle).
+await session.cookies.save("./cookies.json");
+await session.cookies.load("./cookies.json");
+
+// Direct DOMStorage access — no `evaluate` round-trip.
+await page.localStorage.set({ token: "abc" });
+const ls = await page.localStorage.get();
+
+// Grant the full Browser.PermissionType list in one shot (handy for tests).
+await page.grantAllPermissions();
+```
+
+Element-bounded screenshot (`page.screenshot({ element: handle })`) is deferred — see [`docs/limits.md`](limits.md). For now, pass an explicit `clip` rect.
+
+## 8. Turnstile auto-click
+
+If your target ships a visible Cloudflare Turnstile checkbox, opt in at launch:
+
+```ts
+const session = await mochi.launch({
+  profile: "linux-chrome-stable",
+  seed: "user-12345",
+  challenges: {
+    turnstile: {
+      autoClick: true,
+      onSolved: (token) => console.log("turnstile passed:", token.slice(0, 8) + "…"),
+      onEscalation: (reason) => console.warn("escalation:", reason),
+    },
+  },
+});
+```
+
+The click goes through the same Bezier+Fitts behavioral synth as `humanClick`. Image / audio / managed-mode escalations fire `onEscalation(reason)` (`"image-challenge" | "managed" | "timeout"`) and bail rather than clicking blindly into a challenge iframe. See [`packages/challenges/README.md`](../packages/challenges/README.md).
+
+## 9. Cleanup
 
 ```sh
 # Remove the cached Chromium build
@@ -180,8 +241,8 @@ You skipped step 2. Run `bunx mochi browsers install`.
 **`bun add` fails with `Workspace dependency not found`**
 You're on `v0.1.0`, which leaked `workspace:*` into published `package.json` files. Upgrade: `bun add @mochi.js/core@latest @mochi.js/cli@latest` (the `v0.1.1` hot-fix rewrites those refs to concrete semver).
 
-**Linux UA on a Mac profile id**
-v0.1.x profile resolution falls back to a Linux placeholder until `@mochi.js/profiles` ships per-device baselines (phase 0.4). The Matrix is still relationally locked; only the surface values are placeholder. See [`docs/limits.md`](limits.md).
+**Profile id resolves to a generic placeholder**
+Six real-device baselines ship today (see step 4). Catalog ids outside that set still fall back to the generic placeholder; the Matrix is relationally locked but the surface values aren't from a real capture. See [`docs/limits.md`](limits.md).
 
 **`bot.incolumitas.com` flags the session**
 It will. So does every other CDP-driven tool — that page traps `Function.prototype.toString` on its anti-debugger trampoline, and the fix path is a Chromium C++ patch (which is [invariant I-1](../PLAN.md)). Tracked in [`docs/limits.md`](limits.md).
@@ -189,6 +250,6 @@ It will. So does every other CDP-driven tool — that page traps `Function.proto
 ## Next steps
 
 - [`docs/limits.md`](limits.md) — every known limit with root cause and workaround.
+- [mochijs.com](https://mochijs.com) — landing + reference docs.
 - [`PLAN.md`](../PLAN.md) — the design contract.
-- [mochijs.com](https://mochijs.com) — landing + reference docs (in flight, tasks 0240 / 0241).
 - [`tasks/`](../tasks/) — open task briefs you might want to pick up.

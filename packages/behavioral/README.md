@@ -4,6 +4,6 @@ Biomechanical input synthesis for [mochi](https://github.com/0xchasercat/mochi).
 
 Internal package consumed by `@mochi.js/core`.
 
-**Status:** v0.0.1 claim release. Engine lands in phase 0.8.
+**Status:** shipping in v0.2. Engine drives `humanClick` / `humanType` / `humanScroll` on every `Page` returned by `@mochi.js/core` — Bezier paths with overshoot+correction, Fitts-law movement times, lognormal digraph delays, profile-parameterized off `MatrixV1.profile.behavior` (`hand`, `tremor`, `wpm`, `scrollStyle`).
 
 See [PLAN.md §11](https://github.com/0xchasercat/mochi/blob/main/PLAN.md).

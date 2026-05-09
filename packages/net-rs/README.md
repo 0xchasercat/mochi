@@ -6,7 +6,7 @@ This package distributes platform-specific native artifacts (`darwin-arm64`, `da
 
 Internal package consumed by `@mochi.js/net`.
 
-**Status:** v0.0.1 claim release — only `mochi_net_version()` symbol implemented. Real wreq integration + prebuilt-binary distribution lands in phase 0.6 / 0.10.
+**Status:** shipping in v0.2. Full wreq integration plus prebuilt-binary distribution for `darwin-{arm64,x64}`, `linux-{x64,arm64}`, and `win32-x64`. On unsupported targets (FreeBSD / OpenBSD / Alpine musl / Windows arm64), the loader walks both the postinstall `native/` directory and `target/release/`, so a local `cargo build` Just Works. Set `MOCHI_NET_SKIP_POSTINSTALL=1` to bypass the download entirely.
 
 ```sh
 # build the cdylib locally
