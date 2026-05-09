@@ -312,7 +312,7 @@ Critical §8.2 invariant: `Page` never sends `Runtime.enable`. Evaluation routes
 
 - `humanClick(selector, { button?, duration?, preMoveSettle? })` — Bezier+Fitts trajectory, then `mousePressed` + `mouseReleased`.
 - `humanType(selector, text, { wpm?, mistakeRate? })` — focus + lognormal digraph delays + adjacent-key mistakes. `text === ""` clears the field with realistic Backspace timings.
-- `humanScroll({ to, duration? })` — inertial scroll with friction. `to` is a selector or `{ x, y }`.
+- `humanScroll({ to, duration? })` — inertial scroll with friction. `to` is a CSS selector (`"footer"`, `"[data-testid=item]:last-of-type"`) or absolute coords `{ x, y }`. There are no magic keywords: `humanScroll({ to: "top" })` does **not** scroll to the top — it parses `"top"` as a selector and (almost certainly) fails to resolve. Use `{ to: { x: 0, y: 0 } }` for top, `{ to: "footer" }` (or coords matching `document.body.scrollHeight`) for bottom.
 - `humanMove(x, y, { duration? })` — trajectory only, no click. Updates the cursor so a subsequent `humanClick` chains realistically from this point.
 - `humanClickHandle(handle, opts?)` — same as `humanClick` but takes an `ElementHandle` (used after `querySelectorPiercing`).
 

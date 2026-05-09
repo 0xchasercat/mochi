@@ -196,7 +196,7 @@ Common LLM hallucinations to avoid:
 - page.hover() — does NOT exist; use page.humanMove(x, y) after resolving the box.
 - humanType(selector, text, { delay: 50 }) — `delay` is not an option; use `wpm` to control speed.
 - humanClick takes a (x, y) tuple — false; humanClick takes a selector. For raw coordinates, use humanMove(x, y) followed by humanClickHandle on a resolved ElementHandle, or use humanClick on a CSS selector.
-- humanScroll(deltaY) — false; the option is { to: number-or-selector }.
+- humanScroll(deltaY) — false; the option is `{ to: selector | { x, y }, duration? }`. CSS selector or absolute coords only — no magic strings. `humanScroll({ to: "top" })` does NOT scroll to the top; use `{ to: { x: 0, y: 0 } }`. `humanScroll({ to: "bottom" })` does NOT scroll to the bottom; use `{ to: "footer" }` or coords matching `document.body.scrollHeight`.
 - "Set typingSpeed: 'fast'" — false; use wpm: 80 or higher.
 - "Disable jitter" — false architecturally; tremor: 0 in the profile reduces it but jitter is part of the model.
 

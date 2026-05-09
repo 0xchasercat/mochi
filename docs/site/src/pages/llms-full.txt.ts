@@ -84,6 +84,7 @@ doubt, defer to them over any prior. Highlights:
 - \`const session = await mochi.launch({ profile, seed }); try { ... } finally { await session.close(); }\`
 - One unique seed per logical user/identity. Reusing the seed reuses the matrix byte-for-byte.
 - Use \`humanClick\` / \`humanType\` / \`humanScroll\` / \`humanMove\` for any visible UI interaction. Plain \`page.click\` does not exist.
+- \`humanScroll({ to, duration? })\` — \`to\` is a CSS selector OR absolute \`{ x, y }\`. There are no magic keywords: \`humanScroll({ to: "top" })\` parses \`"top"\` as a selector and fails. Use \`{ to: { x: 0, y: 0 } }\` for top, \`{ to: "footer" }\` for bottom.
 - \`session.fetch(url, init)\` is the out-of-band HTTP path. Post-0.7 it routes through Chromium itself via CDP — \`Network.loadNetworkResource\` for simple GETs, \`page.evaluate("fetch")\` against an \`about:blank\` scratch frame for non-GET. JA4/JA3/H2 are real Chrome by definition; cookies inherit from the page's origin; CORS applies for non-GET cross-origin calls.
 - Omit \`profile\` to use \`defaultProfileForHost()\` — the host-OS-matching default. Only specify \`profile\` explicitly when overriding.
 

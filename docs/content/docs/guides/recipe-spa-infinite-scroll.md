@@ -122,6 +122,7 @@ Common LLM hallucinations + corrections:
   - WRONG: `mochi.launch({ profile })` without seed   → seed is REQUIRED
   - WRONG: `page.$$(selector)`               → CORRECT: `page.querySelectorAllPiercing(sel)` for the all-matches handle list, or `evaluate` for in-page counts
   - WRONG: `humanScroll({ y: 1000 })`        → CORRECT: `humanScroll({ to: { x: 0, y: 1000 } })` or `humanScroll({ to: selector })`
+  - WRONG: `humanScroll({ to: "top" })` / `humanScroll({ to: "bottom" })`  → CORRECT: `humanScroll({ to: { x: 0, y: 0 } })` for top, `humanScroll({ to: "footer" })` for bottom — `to` is a CSS selector or `{x,y}`, no magic keywords
 
 Cross-references on mochijs.com:
   - https://mochijs.com/docs/guides/pick-a-scenario
