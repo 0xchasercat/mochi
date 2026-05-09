@@ -49,6 +49,12 @@ There is also an architectural reason: spoofing across the OS axis is asymmetric
 
 The exception is when your audience is intentionally Windows-shaped (e.g. a fixture-replay against a baseline captured on Windows): pass `profile: "windows-chrome-stable"` explicitly. Explicit always wins. See [Stealth philosophy → Default to the host OS](/docs/concepts/stealth-philosophy#default-to-the-host-os-not-windows), [Linux server deployment](/docs/getting-started/linux-server), and [Comparison → Default profile strategy](/docs/reference/comparison#default-profile-strategy) for the deeper cuts.
 
+### **Is mochi for scraping, or for QA, or for something else?**
+
+Yes. People use mochi to scrape product catalogs, to QA-test against staging WAFs, to debug WAF rules they think over-block, to build data pipelines, to run cross-browser regression suites, to simulate users for performance work, to research how detection systems actually behave. The mechanics are identical in every case — you want a real Chrome session that produces the same response a normal user would get. We don't sort our users by intent.
+
+If your threat model is "don't get traced," mochi is the wrong tool. It's open source and the fingerprint profiles ship in the package, which means a sophisticated attacker treats them as a known signature to avoid; they want guarantees that DNS, OS, WebRTC, and JA4 are airtight and unique to them. mochi is sized for developers who want their automation to look like a real Chrome — not for anyone trying to obscure who they are. See [Stealth philosophy](/docs/concepts/stealth-philosophy) and [Comparison](/docs/reference/comparison).
+
 ### **Why is my profile resolving to a placeholder?**
 
 Three IDs in the catalog are placeholders, not captures: `mac-m2-chrome-stable`, `mac-intel-chrome-stable`, `win11-edge-stable`. They resolve to a generic synthesis that's consistency-clean but doesn't match any specific captured device.

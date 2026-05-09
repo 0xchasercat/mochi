@@ -6,6 +6,8 @@ category: reference
 lastUpdated: 2026-05-09
 ---
 
+The peer tools all spoof. mochi spoofs too — every fingerprint surface is JS-injected, every profile is a captured real device. The structural difference is what a tool does when forced to choose between an internally-consistent fingerprint and a "harder to detect" one. Patchright, puppeteer-real-browser, nodriver, and undetected-chromedriver default to randomization: pick a UA, pick a `hardwareConcurrency`, pick a WebGL renderer, hope no probe cross-references. mochi defaults to coherence: every surface derives from one `(profile, seed)` pair through a 40-rule DAG, so a Mac UA never lands next to Linux WebGL. WAFs flag contradictions, not automation. mochi gives them no contradictions to flag.
+
 The README's [comparison table](https://github.com/0xchasercat/mochi/blob/main/README.md#comparison) is the at-a-glance summary. This page is the deeper cut: each axis, what's measured, who's ahead, and a citation back to the per-tool audit report under [`docs/audits/`](https://github.com/0xchasercat/mochi/tree/main/docs/audits) (briefs in `tasks/0200`–`tasks/0203`).
 
 ## Who's in scope
