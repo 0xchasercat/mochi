@@ -31,25 +31,25 @@ permissions:
 jobs:
   release:
     name: Version PR or publish
-    # Self-hosted (chaser-runner). Linux/x64 — same gate workload as
-    # pr-fast.yml, plus the Trusted-Publishing OIDC exchange to npm.
-    # OIDC works on self-hosted runners identically (id-token: write
-    # populates ACTIONS_ID_TOKEN_REQUEST_URL/TOKEN regardless of runner
-    # provider). NPM provenance signing is sigstore — also runner-agnostic.
+    # GitHub-hosted (ubuntu-latest) — REQUIRED for the publish step.
+    # npm's sigstore provenance verifier rejects attestations from
+    # self-hosted runners with E422 "Unsupported GitHub Actions runner
+    # environment: 'self-hosted'. Only 'github-hosted' runners are
+    # supported when publishing with provenance." So even though
+    # pr-fast and docs-build run on the self-hosted chaser-runner for
+    # speed, this job has to stay on github-hosted to keep
+    # `npm publish --provenance` working.
+    #
+    # Trade-off: ~5 min total wall-clock (apt install + CfT download +
+    # conformance) vs ~2 min on chaser. Acceptable on a workflow that
+    # only fires on push to main and only does real publish work when
+    # there are pending changesets.
+    #
     # Release only fires on push to main (no PR trigger), so fork-gate
-    # is moot here — but kept symmetric with pr-fast/docs-build for
+    # is moot — but kept symmetric with pr-fast/docs-build for
     # defense-in-depth in case the trigger surface ever expands.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, Linux, X64]
-    env:
-      # changesets/action invokes setup-git-credentials, which writes
-      # `${HOME}/.netrc`. On the chaser-runner systemd service HOME isn't
-      # propagated to the action subprocess, so the path resolves to
-      # `undefined/.netrc` and the step fails with ENOENT. Pinning HOME
-      # at the job level ensures every action sees a real path. The
-      # runner is installed under /root/actions-runner/mochi-runner per
-      # the workflow logs.
-      HOME: /root
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
