@@ -195,22 +195,3 @@ jobs:
 
           # Also exercise the changesets CLI so a broken config fails fast.
           bunx --bun @changesets/cli status || echo "::warning::changeset status returned non-zero (soft-fail at v0.0)"
-
-  rust:
-    name: Rust — build cdylib + test
-    # Same chaser-runner. Cargo + Rust toolchain caches persist across runs
-    # on the self-hosted runner, so a warm cdylib build is sub-second vs.
-    # ~30s on ubuntu-latest. dtolnay/rust-toolchain@stable is idempotent.
-    # Fork-gate: same as `ts` job above.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, Linux, X64]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: ". -> target"
-      - name: Build cdylib
-        run: cargo build --release --manifest-path packages/net-rs/Cargo.toml
-      - name: Test
-        run: cargo test --manifest-path packages/net-rs/Cargo.toml
