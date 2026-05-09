@@ -16,17 +16,17 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import type { Session } from "@mochi.js/core";
-import { E2E_ENABLED, evalExpr, launchSessionForProfile, withPage } from "../helpers";
+import {
+  CONFORMANCE_PROFILE,
+  E2E_ENABLED,
+  evalExpr,
+  launchSharedSession,
+  loadConformanceBaseline,
+  withPage,
+} from "../helpers";
 
 const TEST_TIMEOUT_MS = 20_000;
 const SUITE_TIMEOUT_MS = 60_000;
-
-/**
- * This suite asserts byte-exact replay of the `mac-m4-chrome-stable` capture's
- * audio + canvas blobs. It MUST stay pinned to that profile regardless of
- * `CONFORMANCE_PROFILE` (which is host-OS-matched for the rest of the suite).
- */
-const REPLAY_PROFILE = "mac-m4-chrome-stable";
 
 const describeOrSkip = E2E_ENABLED ? describe : describe.skip;
 
@@ -43,12 +43,31 @@ const HASH_STRING_SRC = `
 `;
 
 describeOrSkip(
-  `stealth conformance / Layer 1 — audio + canvas fingerprint (profile=${REPLAY_PROFILE})`,
+  `stealth conformance / Layer 1 — audio + canvas fingerprint (profile=${CONFORMANCE_PROFILE})`,
   () => {
     let session: Session;
+    let expectedCanvasHash: string;
+    let expectedCanvasLength: number;
+    let expectedCanvasPrefix: string;
+    let expectedAudioHash: string;
+    let expectedAudioSamples: number[];
 
     beforeAll(async () => {
-      session = await launchSessionForProfile(REPLAY_PROFILE);
+      session = await launchSharedSession();
+      // Expected byte-exact values come from the captured baseline for the
+      // host-matched profile — same source the inject layer replays.
+      const baseline = await loadConformanceBaseline();
+      const canvas = baseline.canvas as {
+        hash: string;
+        dataUrlLength: number;
+        dataUrlPrefix: string;
+      };
+      const audio = baseline.audio as { audioHash: string; sampleValues: number[] };
+      expectedCanvasHash = canvas.hash;
+      expectedCanvasLength = canvas.dataUrlLength;
+      expectedCanvasPrefix = canvas.dataUrlPrefix;
+      expectedAudioHash = audio.audioHash;
+      expectedAudioSamples = audio.sampleValues;
     }, SUITE_TIMEOUT_MS);
 
     afterAll(async () => {
@@ -58,7 +77,7 @@ describeOrSkip(
     }, SUITE_TIMEOUT_MS);
 
     it(
-      "canvas: 300x150 toDataURL hash + length match the mac-m4 baseline",
+      "canvas: 300x150 toDataURL hash + length match the captured baseline",
       async () => {
         await withPage(session, async (page) => {
           await page.goto("about:blank");
@@ -81,10 +100,10 @@ describeOrSkip(
             })()
             `,
           );
-          // mac-m4-chrome-stable's captured baseline.
-          expect(r.hash).toBe("96152ABE");
-          expect(r.length).toBe(24094);
-          expect(r.prefix).toBe("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwA");
+          // Captured baseline values, loaded per-profile in beforeAll.
+          expect(r.hash).toBe(expectedCanvasHash);
+          expect(r.length).toBe(expectedCanvasLength);
+          expect(r.prefix).toBe(expectedCanvasPrefix);
         });
       },
       TEST_TIMEOUT_MS,
@@ -156,17 +175,10 @@ describeOrSkip(
             })()
             `,
           );
-          // mac-m4-chrome-stable's captured baseline (same as mac-chrome-stable
-          // — Mac M4 + Mac M-series share the audio fingerprint).
-          expect(r.audioHash).toBe("124.04347624466754");
-          // Sample window byte-exact.
-          const expectedSamples = [
-            -0.10808053612709045, -0.3909117877483368, -0.005692681297659874, 0.3892313539981842,
-            0.1189708411693573, -0.3545846939086914, -0.22215834259986877, 0.28990939259529114,
-            0.30651888251304626, -0.20068734884262085,
-          ];
+          // Captured baseline values, loaded per-profile in beforeAll.
+          expect(r.audioHash).toBe(expectedAudioHash);
           for (let i = 0; i < 10; i++) {
-            expect(r.sampleValues[i]).toBeCloseTo(expectedSamples[i]!, 8);
+            expect(r.sampleValues[i]).toBeCloseTo(expectedAudioSamples[i]!, 8);
           }
         });
       },

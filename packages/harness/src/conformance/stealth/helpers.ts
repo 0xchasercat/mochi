@@ -23,7 +23,8 @@
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { defaultProfileForHost, mochi, type Page, type Session } from "@mochi.js/core";
-import { loadProfile } from "../../run";
+import type { CapturedProbeManifest } from "../../capture";
+import { loadBaseline, loadProfile } from "../../run";
 
 /**
  * Default profile id for the conformance suite — host-OS-matched.
@@ -79,6 +80,16 @@ export async function launchSharedSession(): Promise<Session> {
  * pin the same profile across all hosts. The launched session still honors
  * `MOCHI_CHROMIUM_PATH` and `MOCHI_PROXY`.
  */
+/**
+ * Load the captured baseline (probe manifest) for the host-OS-matched
+ * `CONFORMANCE_PROFILE`. Tests use this to assert byte-exact replay of the
+ * captured audio / canvas / etc. without hardcoding values from one
+ * device's capture.
+ */
+export async function loadConformanceBaseline(): Promise<CapturedProbeManifest> {
+  return loadBaseline(profileDir(CONFORMANCE_PROFILE));
+}
+
 export async function launchSessionForProfile(profileId: string): Promise<Session> {
   const profile = await loadProfile(profileDir(profileId));
   const binary = process.env.MOCHI_CHROMIUM_PATH;
