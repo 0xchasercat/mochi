@@ -40,7 +40,18 @@ export {
   mochi,
   type ProfileId,
   type ProxyConfig,
+  resolveHeadlessMode,
 } from "./launch";
+// Linux-server environment detection. Pure helpers for users who want to
+// introspect what mochi inferred (and override `headlessMode` from there).
+// Task 0258 — `mochi.detectLinuxServerEnv()` calls `probeLinuxServerEnv`.
+export {
+  detectLinuxServerEnv,
+  type LinuxServerEnv,
+  type LinuxServerProbes,
+  probeLinuxServerEnv,
+  snapshotProbes,
+} from "./linux-server";
 export {
   ALL_BROWSER_PERMISSIONS,
   type BrowserPermission,

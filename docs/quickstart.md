@@ -8,6 +8,8 @@ Five minutes from zero to a spoofed Chrome session driving a page.
 - ~400 MB free for the bundled Chromium-for-Testing download (cached after the first install).
 - macOS, Linux, or Windows on x64 / arm64. Stock Chrome is not used; mochi pins its own CfT build.
 
+> **Running on a Linux server?** mochi auto-detects the no-DISPLAY case and defaults `headlessMode` to `"new"` (`--headless=new`, full rendering, near-byte-identical to headful for fingerprinting). You don't need xvfb for stealth. Full guide — including the `headlessMode` option, container setup, and when xvfb is actually needed — at [Linux server deployment](https://mochijs.com/docs/getting-started/linux-server).
+
 > **Linux gotcha — Chromium and root.** Chromium refuses to start as root unless its user-namespace sandbox is disabled or replaced. **mochi auto-handles this** as of v0.1.5: if `mochi.launch()` detects `process.platform === "linux" && process.getuid() === 0` and `--no-sandbox` isn't already set, it injects the flag with a one-line warning naming the fingerprint trade-off (`--no-sandbox` is a fingerprint leak per PLAN §8.6). The launch then succeeds.
 >
 > If you'd rather keep the sandbox under root (e.g. you've configured the SUID `chrome-sandbox` helper), pass `allowRootWithSandbox: true` to `mochi.launch()` to opt out. The launch will crash with `EPIPE` if the SUID setup is wrong, but you keep stealth posture intact.

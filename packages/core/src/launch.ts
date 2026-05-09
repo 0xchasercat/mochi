@@ -14,6 +14,7 @@ import { deriveMatrix, type ProfileV1 } from "@mochi.js/consistency";
 import { resolveBinary } from "./binary";
 import { type GeoConsistencyMode, reconcileGeoConsistency } from "./geo-consistency";
 import { probeExitGeo } from "./geo-probe";
+import { type LinuxServerEnv, probeLinuxServerEnv } from "./linux-server";
 import { spawnChromium } from "./proc";
 import { parseProxyUrl } from "./proxy-auth";
 import { Session } from "./session";
@@ -88,7 +89,42 @@ export interface LaunchOptions {
   profile: ProfileId | ProfileV1;
   seed: string;
   proxy?: string | ProxyConfig;
+  /**
+   * Legacy boolean knob — `true` runs Chromium under `--headless=new`,
+   * `false` (default in v0.1) runs headful. New code should prefer
+   * {@link headlessMode}, which is more expressive AND env-aware.
+   *
+   * Resolution priority (task 0258):
+   *
+   *   1. `headlessMode` if set.
+   *   2. Else `headless: true → "new"`, `headless: false → "off"`.
+   *   3. Else env-aware default — Linux without DISPLAY / WAYLAND_DISPLAY
+   *      auto-resolves to `"new"` (the common server case); everywhere else
+   *      defaults to `"off"` (headful, requires a display).
+   */
   headless?: boolean;
+  /**
+   * Headless dispatch mode (task 0258). One of:
+   *
+   *   - `"new"`    — modern Chromium headless (`--headless=new`). Full
+   *                  rendering, near-byte-identical to headful for
+   *                  fingerprinting. The right default on a server.
+   *   - `"legacy"` — legacy `--headless` (no `=new`). Separate, more-
+   *                  detectable code path; only useful for parity with
+   *                  older tooling. Documented but not recommended.
+   *   - `"off"`    — run headful. Requires a real display server (DISPLAY
+   *                  on X11, WAYLAND_DISPLAY on Wayland) or xvfb.
+   *
+   * When unset, mochi infers the default from the live env: Linux without
+   * DISPLAY / WAYLAND_DISPLAY → `"new"`; otherwise `"off"`. The legacy
+   * `headless: boolean` knob (when set) overrides the env default but is
+   * itself overridden by an explicit `headlessMode`.
+   *
+   * Use `mochi.detectLinuxServerEnv()` to introspect what mochi inferred.
+   *
+   * @see docs/getting-started/linux-server.md
+   */
+  headlessMode?: "new" | "legacy" | "off";
   binary?: string;
   args?: string[];
   out?: { traceDir?: string };
@@ -237,10 +273,36 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
     }
   }
 
+  // Resolve headless dispatch BEFORE the spawn call so we can log the
+  // env-derived default and let the user introspect via
+  // `mochi.detectLinuxServerEnv()`. Task 0258 — the "Linux server, no
+  // DISPLAY" case is the common deployment failure mode for `mochi.launch()`,
+  // and the previous default (`opts.headless ?? false` → headful) crashed
+  // immediately on a fresh Ubuntu / Debian host because there was no display
+  // to attach to. We now infer `"new"` on that environment.
+  const linuxEnv = probeLinuxServerEnv();
+  const resolvedHeadlessMode = resolveHeadlessMode(opts, linuxEnv);
+  if (
+    resolvedHeadlessMode === "new" &&
+    opts.headlessMode === undefined &&
+    opts.headless === undefined
+  ) {
+    // Only chatter when the launcher had to infer (caller said nothing). An
+    // explicit `headlessMode: "new"` from the caller is silent — they know
+    // what they asked for. The container/root signals are surfaced too so
+    // the diagnostic is one log line, not three.
+    console.warn(
+      `[mochi] Linux server detected (no DISPLAY / WAYLAND_DISPLAY) — defaulting to ` +
+        `--headless=new. ${linuxEnv.rationale}. Set headlessMode: "off" to override; ` +
+        `see docs/getting-started/linux-server.md for the xvfb path.`,
+    );
+  }
+
   const proc = await spawnChromium({
     binary,
     extraArgs: opts.args,
     headless: opts.headless ?? false,
+    headlessMode: resolvedHeadlessMode,
     // Opt-out for the auto-no-sandbox-as-root fallback (default: fallback
     // is on so first-run on a Linux server box doesn't crash).
     ...(opts.allowRootWithSandbox === true ? { allowRootWithSandbox: true } : {}),
@@ -306,11 +368,41 @@ export const mochi = {
   version: VERSION,
   /** Launch a browser session. */
   launch,
+  /**
+   * Inspect what mochi would infer about the current process environment for
+   * Linux-server detection (drives `headlessMode` defaulting). Pure read of
+   * `process.platform`, `process.env.DISPLAY`, `process.env.WAYLAND_DISPLAY`,
+   * `process.getuid?.()`, and the container probe paths. Task 0258.
+   */
+  detectLinuxServerEnv: probeLinuxServerEnv,
 } as const;
 
 export type Mochi = typeof mochi;
 
 // ---- helpers ----------------------------------------------------------------
+
+/**
+ * Resolve the effective {@link LaunchOptions.headlessMode} given a snapshot
+ * of `(opts, env)`. Pure / synchronous so tests can drive both axes without
+ * stubbing globals. Resolution order — task 0258:
+ *
+ *   1. Explicit `opts.headlessMode` wins.
+ *   2. Else legacy `opts.headless: true | false` maps to `"new"` / `"off"`.
+ *   3. Else env-aware default — Linux without DISPLAY / WAYLAND_DISPLAY →
+ *      `"new"`; otherwise `"off"`.
+ *
+ * Exported so the unit tests can lock the resolution table without spawning
+ * a Chromium or stubbing `process.platform`.
+ */
+export function resolveHeadlessMode(
+  opts: Pick<LaunchOptions, "headless" | "headlessMode">,
+  env: LinuxServerEnv,
+): "new" | "legacy" | "off" {
+  if (opts.headlessMode !== undefined) return opts.headlessMode;
+  if (opts.headless === true) return "new";
+  if (opts.headless === false) return "off";
+  return env.serverNoDisplay ? "new" : "off";
+}
 
 /**
  * Reconcile the two `LaunchOptions.proxy` shapes (URL string and

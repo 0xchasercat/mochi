@@ -108,8 +108,35 @@ export interface SpawnConfig {
   binary: string;
   /** User-supplied extra flags appended after the defaults. Null to skip. */
   extraArgs?: readonly string[];
-  /** Run headless via Chromium's modern `--headless=new` flag. */
+  /**
+   * Legacy boolean knob. `true` → emit `--headless=new`. Retained for
+   * backward compatibility with v0.1 callers. New code should set
+   * {@link headlessMode} instead — it carries strictly more information
+   * (`"new" | "legacy" | "off"`) and supersedes this field when both are set.
+   */
   headless: boolean;
+  /**
+   * Headless dispatch mode. Takes precedence over {@link headless} when set.
+   *
+   *   - `"new"`    → emit `--headless=new` (modern headless: full rendering,
+   *                  near-byte-identical to headful for fingerprinting).
+   *   - `"legacy"` → emit bare `--headless` (legacy headless code path; more
+   *                  detectable but useful for parity with older tooling).
+   *   - `"off"`    → emit no headless flag (run headful — requires a display
+   *                  server / xvfb).
+   *
+   * Resolution at the launch layer:
+   *
+   *   1. If the caller passes `headlessMode` explicitly, it wins.
+   *   2. Else if the caller passes the legacy `headless: true | false`, it
+   *      maps to `"new"` / `"off"` respectively.
+   *   3. Else the launcher inspects the live env: Linux without DISPLAY /
+   *      WAYLAND_DISPLAY → `"new"`; everywhere else → `"off"`.
+   *
+   * @see tasks/0258 (Linux server env auto-detection)
+   * @see docs/getting-started/linux-server.md
+   */
+  headlessMode?: "new" | "legacy" | "off";
   /** Optional proxy server, e.g. "http://host:port" or "socks5://host:port". */
   proxy?: string;
   /**
@@ -389,12 +416,28 @@ export function buildChromiumArgs(
   if (cfg.hermetic === true) {
     args.push(...HERMETIC_ONLY_CHROMIUM_FLAGS);
   }
-  if (cfg.headless) {
-    // Modern headless mode (matches stable Chrome behavior more closely than
-    // legacy --headless). The `=new` is critical — old `--headless` is
-    // detectable.
+  // Headless dispatch.
+  //
+  // `headlessMode` (task 0258) supersedes the legacy `headless: boolean` knob
+  // when both are set. When `headlessMode` is unset, fall back to the v0.1
+  // mapping (`headless: true → "new"`, `false → "off"`). The launcher in
+  // `launch.ts` is responsible for the env-aware default ("new" on Linux
+  // server, "off" on dev workstation with DISPLAY); by the time we reach
+  // here, `headlessMode` is the resolved decision.
+  //
+  // `--headless=new` is the modern code path (full rendering, near-byte-
+  // identical to headful for fingerprinting). The bare `--headless` is the
+  // legacy mode — separate, more-detectable code path; we expose it for
+  // parity-with-older-tooling needs but never default to it. Source-cited
+  // from Chromium HeadlessShell `--headless=new` migration notes (Chromium
+  // M118+).
+  const mode = cfg.headlessMode ?? (cfg.headless ? "new" : "off");
+  if (mode === "new") {
     args.push("--headless=new");
+  } else if (mode === "legacy") {
+    args.push("--headless");
   }
+  // mode === "off" → no headless flag.
   if (cfg.proxy !== undefined && cfg.proxy.length > 0) {
     args.push(`--proxy-server=${cfg.proxy}`);
   }
