@@ -69,24 +69,29 @@ export const ONLINE_ENABLED = E2E_ENABLED && process.env.MOCHI_ONLINE === "1";
  * Runs headless by default.
  */
 export async function launchSharedSession(): Promise<Session> {
-  const profile = await loadProfile(profileDir(CONFORMANCE_PROFILE));
+  return launchSessionForProfile(CONFORMANCE_PROFILE);
+}
+
+/**
+ * Launch a Mochi `Session` for a specific profile id, bypassing the
+ * host-OS-matched `CONFORMANCE_PROFILE` default. Used by tests that assert
+ * byte-exact captured-baseline replay (audio/canvas) and therefore need to
+ * pin the same profile across all hosts. The launched session still honors
+ * `MOCHI_CHROMIUM_PATH` and `MOCHI_PROXY`.
+ */
+export async function launchSessionForProfile(profileId: string): Promise<Session> {
+  const profile = await loadProfile(profileDir(profileId));
   const binary = process.env.MOCHI_CHROMIUM_PATH;
   const proxy = process.env.MOCHI_PROXY;
   const launchOpts: Parameters<typeof mochi.launch>[0] = {
     profile,
     seed: CONFORMANCE_SEED,
     headless: true,
-    // Conformance runs are hermetic: re-apply the harness-only flags so
-    // updater/sync traffic doesn't pollute the stealth surface or destabilise
-    // reruns. Production `mochi.launch()` callers get the cleaner default
-    // flag set (no command-line bot-tells).
     hermetic: true,
   };
   if (binary !== undefined && binary.length > 0) {
     (launchOpts as { binary?: string }).binary = binary;
   }
-  // Empty-string check is load-bearing — fork PRs / dev envs without the
-  // secret get an empty value here, and the test must still run unproxied.
   if (proxy !== undefined && proxy.length > 0) {
     (launchOpts as { proxy?: string }).proxy = proxy;
   }

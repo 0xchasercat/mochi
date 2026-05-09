@@ -16,22 +16,22 @@
   "device": {
     "vendor": "generic",
     "model": "generic-x64",
-    "cpuFamily": "intel-core",
-    "cores": 32,
-    "memoryGB": 64
+    "cpuFamily": "intel-core-i7",
+    "cores": 8,
+    "memoryGB": 16
   },
   "display": {
-    "width": 1280,
-    "height": 800,
+    "width": 1920,
+    "height": 1080,
     "dpr": 1,
     "colorDepth": 24,
     "pixelDepth": 24
   },
   "gpu": {
-    "vendor": "Google Inc.",
-    "renderer": "Generic Renderer",
-    "webglUnmaskedVendor": "Google Inc.",
-    "webglUnmaskedRenderer": "ANGLE (Generic)",
+    "vendor": "Intel Inc.",
+    "renderer": "Intel Iris Xe Graphics",
+    "webglUnmaskedVendor": "Google Inc. (Intel Inc.)",
+    "webglUnmaskedRenderer": "ANGLE (Intel Inc., Intel Iris Xe Graphics, OpenGL 4.1)",
     "webglMaxTextureSize": 16384,
     "webglMaxColorAttachments": 8,
     "webglExtensions": []
@@ -72,15 +72,14 @@
   "wreqPreset": "chrome_147_linux",
   "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
   "uaCh": {
-    "sec-ch-ua": "\"Chromium\";v=\"147\", \"Not.A/Brand\";v=\"8\"",
+    "sec-ch-ua": "\"Google Chrome\";v=\"147\", \"Not.A/Brand\";v=\"8\", \"Chromium\";v=\"147\"",
     "sec-ch-ua-mobile": "?0",
     "sec-ch-ua-platform": "\"Linux\"",
     "sec-ch-ua-platform-version": "\"22\"",
     "sec-ch-ua-arch": "\"x86\"",
     "sec-ch-ua-bitness": "\"64\"",
     "sec-ch-ua-model": "\"\"",
-    "sec-ch-ua-full-version": "\"147\"",
-    "sec-ch-ua-os": "\"linux\""
+    "sec-ch-ua-full-version": "\"147.0.7727.138\""
   },
   "entropyBudget": {
     "fixed": [],

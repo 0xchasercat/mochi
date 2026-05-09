@@ -16,16 +16,17 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import type { Session } from "@mochi.js/core";
-import {
-  CONFORMANCE_PROFILE,
-  E2E_ENABLED,
-  evalExpr,
-  launchSharedSession,
-  withPage,
-} from "../helpers";
+import { E2E_ENABLED, evalExpr, launchSessionForProfile, withPage } from "../helpers";
 
 const TEST_TIMEOUT_MS = 20_000;
 const SUITE_TIMEOUT_MS = 60_000;
+
+/**
+ * This suite asserts byte-exact replay of the `mac-m4-chrome-stable` capture's
+ * audio + canvas blobs. It MUST stay pinned to that profile regardless of
+ * `CONFORMANCE_PROFILE` (which is host-OS-matched for the rest of the suite).
+ */
+const REPLAY_PROFILE = "mac-m4-chrome-stable";
 
 const describeOrSkip = E2E_ENABLED ? describe : describe.skip;
 
@@ -42,12 +43,12 @@ const HASH_STRING_SRC = `
 `;
 
 describeOrSkip(
-  `stealth conformance / Layer 1 — audio + canvas fingerprint (profile=${CONFORMANCE_PROFILE})`,
+  `stealth conformance / Layer 1 — audio + canvas fingerprint (profile=${REPLAY_PROFILE})`,
   () => {
     let session: Session;
 
     beforeAll(async () => {
-      session = await launchSharedSession();
+      session = await launchSessionForProfile(REPLAY_PROFILE);
     }, SUITE_TIMEOUT_MS);
 
     afterAll(async () => {
