@@ -35,32 +35,43 @@ function run(cmd: string, args: readonly string[]): RunResult {
   };
 }
 
+// `bun run codegen` shells out to `bun --filter '*' codegen` which spawns a
+// child Bun per workspace package. On slow CI runners the cumulative wall-clock
+// can exceed Bun's default 5s test timeout. 60s is well clear of any realistic
+// codegen run on the slowest GH-runner we see and still trips quickly enough
+// to flag a genuine hang.
+const CODEGEN_TIMEOUT_MS = 60_000;
+
 describe("codegen idempotency contract", () => {
-  it("running `bun run codegen` produces no diff under packages/*/src/generated/", () => {
-    const codegen = run("bun", ["run", "codegen"]);
-    expect(codegen.exitCode).toBe(0);
+  it(
+    "running `bun run codegen` produces no diff under packages/*/src/generated/",
+    () => {
+      const codegen = run("bun", ["run", "codegen"]);
+      expect(codegen.exitCode).toBe(0);
 
-    // `git diff --exit-code` returns 0 when no diff exists, non-zero when a diff
-    // is detected. This is the same gate the brief specifies in its Validation
-    // section (and the same one CI runs).
-    const diff = run("git", [
-      "diff",
-      "--exit-code",
-      "--",
-      "packages/consistency/src/generated/",
-      "packages/profiles/src/generated/",
-      "packages/harness/src/generated/",
-    ]);
+      // `git diff --exit-code` returns 0 when no diff exists, non-zero when a diff
+      // is detected. This is the same gate the brief specifies in its Validation
+      // section (and the same one CI runs).
+      const diff = run("git", [
+        "diff",
+        "--exit-code",
+        "--",
+        "packages/consistency/src/generated/",
+        "packages/profiles/src/generated/",
+        "packages/harness/src/generated/",
+      ]);
 
-    if (diff.exitCode !== 0) {
-      // Surface the offending diff in the failure message — much faster than
-      // re-running the command by hand.
-      throw new Error(
-        `codegen produced a diff. Either re-run \`bun run codegen\` and commit\n` +
-          `the result, or stop hand-editing files under packages/*/src/generated/.\n\n` +
-          `--- diff (truncated to 4 KiB) ---\n${diff.stdout.slice(0, 4096)}`,
-      );
-    }
-    expect(diff.exitCode).toBe(0);
-  });
+      if (diff.exitCode !== 0) {
+        // Surface the offending diff in the failure message — much faster than
+        // re-running the command by hand.
+        throw new Error(
+          `codegen produced a diff. Either re-run \`bun run codegen\` and commit\n` +
+            `the result, or stop hand-editing files under packages/*/src/generated/.\n\n` +
+            `--- diff (truncated to 4 KiB) ---\n${diff.stdout.slice(0, 4096)}`,
+        );
+      }
+      expect(diff.exitCode).toBe(0);
+    },
+    CODEGEN_TIMEOUT_MS,
+  );
 });
