@@ -86,7 +86,7 @@ You should see a Chrome-shaped UA string and a locale matching the profile. If t
 
 - A CDP transport over `--remote-debugging-pipe` FDs — no TCP port, no `Runtime.enable`.
 - A 40-rule consistency engine that derives a coherent fingerprint matrix from `(profile, seed)`.
-- A JIT-friendly inject payload installed via `Page.addScriptToEvaluateOnNewDocument({ runImmediately: true })` before any page script runs.
+- A JIT-friendly inject payload delivered via `Fetch.fulfillRequest` body splice on Document responses (with an `addScriptToEvaluateOnNewDocument({ runImmediately: true, worldName: "" })` fallback for `about:blank` and other non-HTTP nav targets) before any page script runs. See [The inject pipeline](/docs/concepts/inject-pipeline).
 - A behavioral synth (Bezier+Fitts trajectories, lognormal digraph delays) wired into `Page.humanClick`/`humanType`/`humanScroll`.
 - A Rust-backed `Session.fetch` that mirrors the spoofed Chrome's TLS/H2 fingerprint.
 

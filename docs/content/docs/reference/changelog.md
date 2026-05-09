@@ -6,8 +6,26 @@ category: reference
 lastUpdated: 2026-05-09
 ---
 
-## TODO
+The canonical changelog is [`CHANGELOG.md`](https://github.com/0xchasercat/mochi/blob/main/CHANGELOG.md) at the repo root, with per-package detail under [`packages/<name>/CHANGELOG.md`](https://github.com/0xchasercat/mochi/tree/main/packages). The summary below mirrors the latest releases.
 
-The changelog page will load and render the per-package `CHANGELOG.md` files (`packages/*/CHANGELOG.md`) at build time. Until that's wired, browse the [GitHub Releases](https://github.com/0xchasercat/mochi/releases) page or the per-package changelogs in the repo.
+## v0.1.4 — 2026-05-09 (v0.2 wave-4)
 
-Latest release: **v0.1.2** (2026-05-09).
+`@mochi.js/core` 0.1.4. The wave-4 surface drop:
+
+- **`Page.screenshot`** — PNG / JPEG / WebP via CDP `Page.captureScreenshot`. Options: `format`, `quality`, `fullPage`, `clip`, `omitBackground`, `encoding`. Discriminated overloads narrow the return type by `encoding`. Element-bounded capture is a separate brief. See [Screenshots](/docs/guides/screenshots).
+- **DX cluster.** `Session.cookies.{save,load}` with a versioned JSON file format and a regex domain filter that applies on both sides. `Page.localStorage.{get,set}` and `Page.sessionStorage.{get,set}` backed by CDP `DOMStorage`, frame-scoped to the page's main-frame origin by default. `Page.grantAllPermissions(opts?)` wraps `Browser.grantPermissions` with the full descriptor list. See [Cookies & storage](/docs/guides/cookies-and-storage) and [`@mochi.js/core`](/docs/api/core).
+- **Init-script dual mechanism.** `Fetch.fulfillRequest` body splice on Document responses (CSP-rewritten) plus a `Page.addScriptToEvaluateOnNewDocument({ runImmediately: true, worldName: "" })` fallback for `about:blank` and other non-HTTP nav targets. Idempotency via `__mochi_inject_marker`. See [The inject pipeline](/docs/concepts/inject-pipeline).
+- **Audio + canvas precomputed fingerprint blobs.** Per-(profile, sample-rate) audio capture and per-profile canvas data-URL synthesis — consumed by R-047 / R-048 inject modules. The audio spoof distributes the residual across 489 samples in `[4510..4999)` so the page-side digest is byte-exact on every host architecture.
+- **Turnstile auto-click.** `@mochi.js/challenges` opt-in via `challenges: { turnstile: { autoClick: true } }`. Visible-checkbox only; image / audio / managed escalations fire `onEscalation`. See [Cloudflare Turnstile](/docs/guides/turnstile).
+
+## v0.1.2 — 2026-05-08
+
+First wide-availability release. Six real-device profile baselines from the harvester corpus, behavioral synth wired through `humanClick` / `humanType` / `humanScroll`, JA4-coherent `session.fetch` via Bun:FFI → Rust [`wreq`](https://github.com/0x676e67/wreq), proxy auth (HTTP/HTTPS/SOCKS5) via `Fetch.authRequired`, prebuilt cdylibs for darwin-{arm64,x64} / linux-{x64,arm64} / win32-x64.
+
+## v0.1.1 — 2026-05-08
+
+Hot-fix for the v0.1.0 `workspace:*` publish bug. `scripts/rewrite-workspace-deps.ts` runs as a publish-time pre-hook, rewriting `workspace:*` → `^<sibling-version>` from the local workspace map.
+
+## v0.1.0 — 2026-05-08
+
+First public npm release. Foundations: pipe-mode CDP transport, relational fingerprint Matrix (40-rule DAG), JIT-friendly inject payload, behavioral synthesis, JA4-coherent `session.fetch`, proxy auth, `mochi browsers install` for stock Chromium-for-Testing.

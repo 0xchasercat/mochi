@@ -3,14 +3,15 @@
 // shiki integration so the dual-theme palette stays in sync. Tabs are
 // vanilla JS — see the inline <script> at the bottom.
 //
-// Snippets target the v0.1.2 API surface:
+// Snippets target the v0.1.4 API surface (v0.2 wave-4):
 //   • mochi.launch()  — shipped
 //   • Page.goto()     — shipped
+//   • Page.screenshot — v0.1.4 (PNG/JPEG/WebP, fullPage, clip)
+//   • Session.cookies.{save,load} — v0.1.4
+//   • Page.localStorage.{get,set} — v0.1.4
+//   • Page.grantAllPermissions — v0.1.4
 //   • LaunchOptions.challenges.turnstile.autoClick — v0.1.2
 //   • Page.addInitScript / removeInitScript — v0.1.2
-//
-// Anything not yet shipped (humanClick, session.fetch wreq path) is in
-// the API-shape narrative but rendered with `// shipped via …` comments.
 
 import { Code } from "astro:components";
 
