@@ -59,3 +59,9 @@ docs/site/dist/
 docs/site/.astro/
 docs/site/node_modules/
 docs/site/.cache/
+
+# Internal: agent harness operating manual + per-task briefs.
+# These document orchestrator-side workflow that contributors don't need.
+# See CONTRIBUTING.md for the public contributor guide.
+AGENTS.md
+tasks/

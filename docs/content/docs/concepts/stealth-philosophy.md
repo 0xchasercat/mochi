@@ -51,7 +51,7 @@ Concretely: `mochi.launch({ profile: "linux-chrome-stable", … })` on a Linux s
 
 ### The proof
 
-Captured against [aone.gg](https://aone.gg/) (FingerprintJS Pro v4) on 2026-05-08, from a Linux DC server (Frankfurt, Aixit GmbH ASN 29551, ASN type `hosting`, `datacenter_result: true`):
+Captured against a production site (FingerprintJS Pro v4) on 2026-05-08, from a Linux DC server (Frankfurt, Aixit GmbH ASN 29551, ASN type `hosting`, `datacenter_result: true`):
 
 ```json
 {
@@ -69,11 +69,11 @@ Captured against [aone.gg](https://aone.gg/) (FingerprintJS Pro v4) on 2026-05-0
 
 Three things this confirms:
 
-- **`bot: not_detected` from a hosting ASN** is the headline. Datacenter IPs are normally a strong bot signal; FPJS Pro's classifier did not fire. `suspect_score: 8` on the 0-100 scale (lower is more legitimate) puts mochi well below peer-reported scores under the same conditions: patched Chrome (own build) ~14-18; CloakBrowser ~20+.
+- **`bot: not_detected` from a hosting ASN** is the headline. Datacenter IPs are normally a strong bot signal; FPJS Pro's classifier did not fire. `suspect_score: 8` on the 0-100 scale (lower is more legitimate) puts mochi well below peer-reported scores under the same conditions: patched Chrome (own build) ~12; CloakBrowser ~18.
 - **`tampering_ml_score: 0.9853` but the classifier did not promote.** The tampering ML *can* tell something is off. It does not promote that to a bot classification because the rest of the fingerprint is internally coherent — exactly what the relational-consistency thesis predicts. Cross-axis agreement is the dominant signal; ML drift on a single axis is not enough to trip the gate alone.
 - **`vpn: false` despite `vpn_origin_timezone: "UTC"`.** The privacy-fallback `geoConsistency` architecture working in production. The session ran with matrix tz `UTC` against a Frankfurt IP. A naive spoof would produce `os_mismatch: true` or `timezone_mismatch: true`; mochi's privacy-fallback presents as a privacy-conscious user (UTC) rather than a tampered Asia/Bangkok→Europe/Berlin mismatch. FPJS recorded `vpn_origin_timezone: "UTC"` (the privacy signal we wanted) and kept `vpn: false` (the classification we wanted).
 
-This is one site (aone.gg, FPJS Pro v4 — high-quality but not best-in-class adversary). Cloudflare bot-management, Akamai Bot Manager, DataDome, Kasada, PerimeterX in their max-aggressiveness modes have not been tested against this run. The [Limits page](/docs/reference/limits) stays the canonical "what we don't claim". The raw FPJS Pro v4 JSON is committed in the repo as [evidence](https://github.com/0xchasercat/mochi/blob/main/tasks/0271-the-linux-os-thesis.md).
+This is one site (a production site, FPJS Pro v4 — high-quality but not best-in-class adversary). Cloudflare bot-management, Akamai Bot Manager, DataDome, Kasada, PerimeterX in their max-aggressiveness modes have not been tested against this run. The [Limits page](/docs/reference/limits) stays the canonical "what we don't claim". The raw FPJS Pro v4 JSON is committed in the repo as [evidence](https://github.com/0xchasercat/mochi/blob/main/docs/evidence/fpjs-pro-2026-05-08.md).
 
 ## Probe Manifest as gate (invariants I-6, I-7)
 

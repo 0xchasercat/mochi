@@ -161,14 +161,14 @@ A WAF customer who flags all Linux as bot traffic is blocking their own engineer
 
 mochi closes the gap structurally: when `profile` is omitted from `mochi.launch()`, mochi consults `process.platform` / `process.arch` and auto-picks the host-OS-matching profile. A Linux server runs the linux profile; a Mac arm64 dev box runs `mac-m4-chrome-stable`; Windows runs `windows-chrome-stable`. Spoofing across the OS axis is also asymmetric — a Mac profile run on a Linux host has to lie about every WebGL string, every audio sample-rate, every JA4 ciphersuite ordering, and any one of those rules drifting is a relational-consistency hit. Matching host-OS removes the entire class of "OS-axis inconsistency" detections. Explicit `profile` always wins.
 
-**Concrete data point.** Captured against [aone.gg](https://aone.gg/) (FingerprintJS Pro v4) on 2026-05-08, from a Linux DC server (Frankfurt, Aixit GmbH ASN 29551, ASN type `hosting`, `datacenter_result: true`):
+**Concrete data point.** Captured against a production site (FingerprintJS Pro v4) on 2026-05-08, from a Linux DC server (Frankfurt, Aixit GmbH ASN 29551, ASN type `hosting`, `datacenter_result: true`):
 
 - `bot: not_detected`
 - `suspect_score: 8` (FPJS Pro v4 0–100 scale, lower is more legitimate)
 - `tampering: true`, `tampering_ml_score: 0.9853`, `tampering_confidence: "medium"` — the tampering ML *can* tell something is off; the bot classifier did not promote because the relational fingerprint was internally coherent across every axis.
 - `vpn: false` despite `vpn_origin_timezone: "UTC"` — privacy-fallback `geoConsistency` working in production.
 
-Peer-reported scores on the same site under comparable conditions: patched Chrome (own build) ~14-18; CloakBrowser ~20+. mochi at 8 is the headline. The raw FPJS Pro v4 JSON is committed in the repo as [evidence](https://github.com/0xchasercat/mochi/blob/main/tasks/0271-the-linux-os-thesis.md). This is one site (FPJS Pro v4 is a high-quality but not best-in-class adversary); Cloudflare bot-management, Akamai, DataDome, Kasada, PerimeterX in their max-aggressiveness modes have not been tested against this run. The [Limits](/docs/reference/limits) page stays the canonical "what we don't claim".
+Peer-reported scores on the same site under comparable conditions: patched Chrome (own build) ~12; CloakBrowser ~18. mochi at 8 is the headline. The raw FPJS Pro v4 JSON is committed in the repo as [evidence](https://github.com/0xchasercat/mochi/blob/main/docs/evidence/fpjs-pro-2026-05-08.md). This is one site (FPJS Pro v4 is a high-quality but not best-in-class adversary); Cloudflare bot-management, Akamai, DataDome, Kasada, PerimeterX in their max-aggressiveness modes have not been tested against this run. The [Limits](/docs/reference/limits) page stays the canonical "what we don't claim".
 
 ## Stable-Chrome quirks (where mochi loses)
 

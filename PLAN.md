@@ -2,9 +2,9 @@
 
 > Sticky on the outside. Untouchable on the inside.
 
-**Status:** v0 design lock — 2026-05-08. Brainstorming complete. All foundational decisions locked. This document is the contract for every subagent, PR, and CI gate. If a change conflicts with anything written here, the change is wrong; if reality has drifted from this doc, fix the doc *in the same PR*.
+**Status:** v0 design lock — 2026-05-08. Brainstorming complete. All foundational decisions locked. This document is the design contract for every PR and CI gate. If a change conflicts with anything written here, the change is wrong; if reality has drifted from this doc, fix the doc *in the same PR*.
 
-**Audience:** the orchestrator session and every subagent that touches code. Read top-to-bottom once, then come back to the section you need. Section 5 (Packages), Section 7 (Public API), and Section 15 (Dev harness) are the most frequently referenced.
+**Audience:** every contributor. Read top-to-bottom once, then come back to the section you need. Section 5 (Packages) and Section 7 (Public API) are the most frequently referenced.
 
 ---
 
@@ -24,9 +24,8 @@
 12. Profile schema and capture protocol
 13. Validation harness specification
 14. Implementation phases
-15. Dev harness (parallelized agent workflow)
-16. Open questions deferred to v2
-17. Glossary
+15. Open questions deferred to v2
+16. Glossary
 
 ---
 
@@ -85,7 +84,7 @@ Every locked decision, traceable to the brainstorm round that locked it. No deci
 | 9 | C++ work | **Forbidden in this repo** | R1 (clarified) |
 | 10 | Behavioral playback (v1) | Bezier + Fitts + jitter synthesis only; recording API in v1.x | R3 |
 | 11 | Harness gate criteria | Probe Manifest diff against captured baselines; PR-fast smoke + nightly full | R3 |
-| 12 | Dev harness shape | `mochi-work` CLI + per-package contract tests + PR template | R3 |
+| 12 | Dev harness shape | per-package contract tests + PR template + pre-push gate | R3 |
 | 13 | License | MIT (entire repo, including Rust crate) | inferred from R1 |
 | 14 | Versioning | Independent per-package semver via Changesets; `@mochi.js/core` is the public entry point (no umbrella package on npm) | inferred from R7 |
 | 15 | Commit format | Conventional Commits with package scope (e.g. `feat(core): ...`) | R3 |
@@ -927,7 +926,7 @@ Each phase is a meaningful milestone — works end-to-end at the level of the su
 
 | # | Phase | Deliverable | Gate |
 |---|---|---|---|
-| **0.0** | Foundation | Repo skeleton, Bun workspace, biome, tsconfig base, CI green on empty, AGENTS.md, mochi-work CLI v0, PR template, conventional commits enforced. | CI passes on empty PRs |
+| **0.0** | Foundation | Repo skeleton, Bun workspace, biome, tsconfig base, CI green on empty, contributor docs, PR template, conventional commits enforced. | CI passes on empty PRs |
 | **0.1** | CDP transport | `@mochi.js/core` can launch Chromium-for-Testing via pipe FDs, send/receive CDP messages, navigate to a URL, dump the page HTML, close cleanly. **No spoofing yet.** | Unit tests on the transport; integration test that launches Chrome and reads `document.title` |
 | **0.2** | Consistency engine v0 | `@mochi.js/consistency` implements ~30 of the 80 rules (navigator, screen, simple GPU strings). `MatrixV1` round-trips JSON cleanly. Schema validated. | CI: schema validation, rule DAG acyclicity, golden-file tests for matrix derivation |
 | **0.3** | Inject engine v0 | `@mochi.js/inject` builds a payload that overrides the v0.2 surface. `@mochi.js/core` injects via `addScriptToEvaluateOnNewDocument(runImmediately:true)`. | Manual probe-page check shows spoofed values; no `Runtime.enable` ever sent |
@@ -947,276 +946,7 @@ Phases 0.0–0.5 are sequential. 0.6 + 0.7 can run in parallel after 0.5. 0.8 ca
 
 ---
 
-## 15. Dev harness (parallelized agent workflow)
-
-This section is how we *actually build* mochi with a small number of agents in parallel without stepping on each other. The orchestrator (the developer + their main Claude session) plans tasks, dispatches them into worktrees, reviews PRs, merges. Subagents work the worktrees.
-
-### 15.1 Monorepo layout
-
-```
-mochi/
-├── PLAN.md                          # this file
-├── AGENTS.md                        # operating manual for subagents
-├── README.md                        # public-facing brief
-├── LICENSE                          # MIT
-├── package.json                     # bun workspace root
-├── tsconfig.base.json               # shared TS config
-├── biome.json                       # lint + format
-├── .github/
-│   ├── PULL_REQUEST_TEMPLATE.md
-│   └── workflows/
-│       ├── pr-fast.yml              # typecheck + lint + unit + contract + harness-fast
-│       └── nightly.yml              # full harness across profiles + online suite
-├── .changeset/                      # changesets-driven versioning
-├── packages/
-│   ├── core/
-│   ├── consistency/
-│   ├── inject/
-│   ├── net/
-│   ├── net-rs/                      # Rust crate; cargo workspace member
-│   ├── behavioral/
-│   ├── profiles/
-│   ├── harness/
-│   └── cli/
-├── schemas/
-│   ├── profile.schema.json
-│   ├── matrix.schema.json
-│   ├── probe-manifest.schema.json   # vendored from Peekaboo
-│   └── diff-report.schema.json
-├── tests/
-│   ├── contract/                    # cross-package contract tests
-│   └── fixtures/
-│       └── probe-page.html
-├── tasks/                           # active task briefs (one MD per task)
-│   ├── _template.md
-│   └── 0001-cdp-transport-pipe-mode.md  # example
-├── worktrees/                       # gitignored; mochi-work writes here
-├── scripts/
-│   ├── mochi-work.ts                # the dev harness CLI source
-│   └── codegen.ts                   # JSON schema → TS type generation
-├── docs/
-│   ├── limits.md                    # what we don't cover (live document)
-│   ├── architecture.md
-│   ├── api.md
-│   └── ...
-└── Cargo.toml                       # Rust workspace root for net-rs
-```
-
-### 15.2 The `mochi-work` CLI
-
-A small Bun TypeScript program at `scripts/mochi-work.ts`. Subcommands:
-
-```sh
-mochi-work create <task-id> <package> [--brief tasks/<task-id>.md]
-  # 1. validate task-id is unique and tasks/<task-id>.md exists
-  # 2. git worktree add worktrees/<task-id> -b task/<package>/<task-id> origin/main
-  # 3. cd into the worktree, run `bun install`
-  # 4. print the brief and the command to dispatch a subagent
-
-mochi-work list
-  # prints active worktrees with branch + last-commit summary
-
-mochi-work open <task-id>
-  # cd into worktrees/<task-id>; spawn a shell
-
-mochi-work submit <task-id> [--draft]
-  # 1. cd into worktree
-  # 2. run gates: bun typecheck, bun lint, bun test, bun test:contract --pkg=<package>, bun harness:smoke (if applicable)
-  # 3. if all green, push branch and `gh pr create` with template prefilled
-  # 4. if --draft, opens as draft PR
-
-mochi-work clean [--merged-only]
-  # remove worktrees whose branches have been merged
-```
-
-### 15.3 Task brief format
-
-Every parallelized task has a `tasks/<id>.md` file before being dispatched. The file is committed to `main` *first* (in a small docs PR), then the worktree is created against `origin/main` containing that brief.
-
-Template (`tasks/_template.md`):
-
-```markdown
-# <id>: <short title>
-
-**Package:** `<package>`
-**Phase:** `0.x`
-**Estimated size:** S | M | L
-**Dependencies:** <list of task-ids that must merge first, or "none">
-
-## Goal
-
-<2–4 sentences. What this task delivers. Why now.>
-
-## Success criteria
-
-- [ ] <concrete bullet>
-- [ ] <concrete bullet>
-- [ ] All package gates green
-- [ ] PROVENANCE updated if profile changes
-- [ ] `docs/limits.md` updated if any new limit discovered
-
-## Out of scope
-
-<bullets — what this task explicitly does NOT do>
-
-## Implementation notes
-
-<links to PLAN.md sections, sketch of approach, gotchas the brief author already knows>
-
-## Validation
-
-<exact commands the author should run to verify locally before submitting>
-```
-
-### 15.4 Commit format
-
-Conventional Commits with package scope. Allowed types: `feat`, `fix`, `chore`, `docs`, `test`, `refactor`, `perf`, `build`, `ci`. Allowed scopes: `core`, `consistency`, `inject`, `net`, `net-rs`, `behavioral`, `profiles`, `harness`, `cli`, `repo`, `docs`, `schemas`.
-
-Examples:
-```
-feat(core): pipe-mode CDP transport with Bun.spawn pipe FDs
-fix(consistency): hardware concurrency must mirror device.cores exactly
-chore(profiles): bump mac-m2-chrome-stable to chrome 132
-test(harness): add brotector to nightly suite
-```
-
-The footer of every PR-merging commit must include `Refs: #<task-id>` referencing the task brief or a GH issue.
-
-Enforced by a `commit-msg` git hook installed by `bun install` postinstall via [@commitlint/cli](https://commitlint.js.org/).
-
-### 15.5 PR template
-
-`.github/PULL_REQUEST_TEMPLATE.md`:
-
-```markdown
-## What
-
-<1–3 sentences. What this PR does.>
-
-## Why
-
-<1–3 sentences. Why now. Links to PLAN.md / task brief.>
-
-## Package(s) touched
-
-- [ ] @mochi.js/core
-- [ ] @mochi.js/consistency
-- [ ] @mochi.js/inject
-- [ ] @mochi.js/net
-- [ ] @mochi.js/net-rs
-- [ ] @mochi.js/behavioral
-- [ ] @mochi.js/profiles
-- [ ] @mochi.js/harness
-- [ ] @mochi.js/cli
-- [ ] repo / docs / schemas
-
-## Task brief
-
-Closes #<task-id> (path: `tasks/<task-id>.md`)
-
-## Gates
-
-- [ ] `bun typecheck` clean
-- [ ] `bun lint` clean
-- [ ] `bun test` per package: pass
-- [ ] `bun test:contract --pkg=<...>`: pass
-- [ ] `bun harness:smoke` (if profile or consistency/inject touched): Zero-Diff
-- [ ] `docs/limits.md` updated if new limit discovered: yes / N/A
-- [ ] No new C++ work introduced: confirmed (I-1)
-- [ ] No proprietary integrations introduced: confirmed (I-2)
-
-## Probe Manifest diff (paste output)
-
-```
-<paste output of `bun harness:diff <profile>` here>
-```
-
-## Notes for review
-
-<gotchas, tradeoffs, follow-ups>
-```
-
-### 15.6 CI gates
-
-`.github/workflows/pr-fast.yml`:
-
-```
-on: [pull_request]
-jobs:
-  pr-fast:
-    runs-on: ubuntu-latest (and macos-latest matrix for darwin packages)
-    steps:
-      - bun install --frozen-lockfile
-      - bun typecheck
-      - bun lint
-      - bun test
-      - bun test:contract --affected
-      - bun harness:smoke --affected   # only if @mochi.js/inject, @mochi.js/consistency, or @mochi.js/profiles touched
-```
-
-`.github/workflows/nightly.yml`:
-
-```
-on:
-  schedule: cron '17 3 * * *'  # 03:17 UTC
-  workflow_dispatch:
-jobs:
-  nightly:
-    runs-on: macos-14 (for mac profiles), ubuntu-22.04 (for linux), windows-2022 (for win)
-    matrix: profile in [all]
-    steps:
-      - bun harness:full --profile=${{matrix.profile}} --include-online
-      - if failure: gh issue create
-```
-
-### 15.7 Quality bars — none of these are aspirational
-
-- `bun typecheck` is `tsc --noEmit` with `strict: true`, `noImplicitAny: true`, `noUncheckedIndexedAccess: true`. Zero `any`. Every `// @ts-expect-error` has a comment with rationale.
-- `bun lint` is `biome check`. No warnings. Errors fail the build.
-- `bun test` is `bun test`. Coverage gate per package set in package.json (e.g., `@mochi.js/consistency` requires 90%+ branch coverage; `@mochi.js/cli` is 70%+).
-- The `harness:smoke` gate must pass on the developer's machine *before* PR submission (mochi-work submit enforces).
-- No commented-out code in `main`.
-- No `console.log` outside of `@mochi.js/cli` and explicit logger modules.
-
-### 15.8 Versioning + release
-
-- Changesets manages independent semver per package.
-- Every PR that ships a user-visible change requires a changeset file (`bun changeset` enforced by CI).
-- Releases: when changesets are flushed (`bun changeset version`), a release PR is opened that updates package.json versions + CHANGELOGs. Merging it tags + publishes to npm via the release workflow.
-- `@mochi.js/core` is the public entry point version users care about; we don't lockstep all packages, but `@mochi.js/core` increments are the user-visible "release" cadence.
-
-### 15.9 Orchestrator-subagent communication protocol
-
-The orchestrator (the developer + their primary Claude session) is the sole party that:
-- Authors `tasks/<id>.md` briefs
-- Dispatches subagents into worktrees via `mochi-work create`
-- Reviews PRs (using the PR template + the diff + the harness output)
-- Merges PRs (squash-merge into `main`)
-
-Subagents:
-- Receive a task brief (committed in main)
-- Work *only* in their worktree
-- Touch only their declared package + its direct contract consumers
-- Commit using the conventional format
-- Submit via `mochi-work submit` (which runs gates locally first)
-- Address review feedback in additional commits in the same worktree
-- Never directly merge or push to `main`
-
-If a subagent realizes the task brief is wrong, it stops, posts a comment on the (draft) PR explaining what's wrong, and waits for the orchestrator to amend the brief.
-
-### 15.10 Bootstrapping order (the meta-task)
-
-1. **Orchestrator (this session) writes:** `PLAN.md`, `AGENTS.md`, `README.md`, `LICENSE`, `.gitignore`, `.github/PULL_REQUEST_TEMPLATE.md`, `tasks/_template.md`. (This is happening now.)
-2. **Initial commit** to `main`: "chore(repo): foundational documents". Push to origin.
-3. **Task 0001:** scaffold the monorepo. (`tasks/0001-monorepo-scaffold.md`.) Delegated to a subagent.
-4. **Task 0002:** `mochi-work` CLI. Delegated.
-5. **Task 0003:** schemas + codegen. Delegated.
-6. **Task 0004:** `@mochi.js/core` pipe transport (phase 0.1). Delegated.
-7. ... (see Section 14 for phasing)
-
----
-
-## 16. Open questions deferred to v2
+## 15. Open questions deferred to v2
 
 These are real open questions that we're consciously NOT answering in v1. Each has a v2-tracking note in `docs/v2-deferrals.md` to revisit post-1.0.
 
@@ -1232,7 +962,7 @@ These are real open questions that we're consciously NOT answering in v1. Each h
 
 ---
 
-## 17. Glossary
+## 16. Glossary
 
 - **Probe Manifest** — Peekaboo's canonical JSON schema describing a page's full capture surface. mochi vendors it.
 - **Matrix** — a `ProfileV1` instantiated for a specific seed; the relationally-locked fingerprint snapshot consumed by the injector.

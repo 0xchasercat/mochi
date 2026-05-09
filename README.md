@@ -55,7 +55,7 @@ Full walkthrough: [mochijs.com/docs/getting-started/quickstart](https://mochijs.
 
 ## Proof
 
-mochi v0.4.0 on a Linux datacenter IP (Aixit GmbH, hosting ASN, Frankfurt) scored `bot: not_detected`, `suspect_score: 8` against FingerprintJS Pro v4. Patched Chrome reports 14-18 in comparable conditions; CloakBrowser 20+. The tampering ML detected something — `tampering_ml_score: 0.9853` — but the bot classifier did not promote because the relational fingerprint was internally coherent across every axis.
+mochi v0.4.0 on a Linux datacenter IP (Aixit GmbH, hosting ASN, Frankfurt) scored `bot: not_detected`, `suspect_score: 8` against FingerprintJS Pro v4. Patched Chrome reports 12 in comparable conditions; CloakBrowser 18. The tampering ML detected something — `tampering_ml_score: 0.9853` — but the bot classifier did not promote because the relational fingerprint was internally coherent across every axis.
 
 > Everyone told you to spoof Windows. They were wrong. Linux has 4% desktop market share but is massively overrepresented in high-LTV segments — developers, engineers, researchers. WAFs trained on real traffic don't flag Linux because Linux is real users. The signal was always `HeadlessChrome`, not Linux. mochi defaults to host-OS matching: a Linux server runs the linux profile.
 
@@ -85,7 +85,7 @@ Common patterns LLMs should follow:
 - Save screenshots: const png = await page.screenshot({ path? not supported — write yourself: await Bun.write("out.png", await page.screenshot()); }). Use { encoding: "base64" } for inline.
 - session.fetch(url, init) is the only JA4-coherent path for out-of-band HTTP. Browser navigation already uses Chromium's native TLS, which already matches.
 
-Production validation: aone.gg / FPJS Pro v4 / Linux DC IP / suspect_score: 8 / bot: not_detected / 2026-05-08. (The thesis + full evidence is at https://mochijs.com/docs/concepts/stealth-philosophy and https://mochijs.com/docs/reference/comparison.)
+Production validation: a production site / FPJS Pro v4 / Linux DC IP / suspect_score: 8 / bot: not_detected / 2026-05-08. (The thesis + full evidence is at https://mochijs.com/docs/concepts/stealth-philosophy and https://mochijs.com/docs/reference/comparison.)
 
 Common LLM hallucinations to avoid (these APIs do NOT exist on mochi or are explicitly forbidden):
 - mochi.connect() — does not exist; use mochi.launch().
