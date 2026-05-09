@@ -12,7 +12,7 @@
  */
 import { join } from "node:path";
 
-export const VERSION = "0.0.1" as const;
+export const VERSION = "0.2.0" as const;
 
 // ProfileV1's canonical source-of-truth lives in @mochi.js/consistency.
 // Re-exported here through a generated shim so this package is a pure consumer

@@ -26,7 +26,7 @@
  *
  */
 
-export const VERSION = "0.1.0" as const;
+export const VERSION = "0.2.1" as const;
 
 export {
   buildTurnstileInjectScript,

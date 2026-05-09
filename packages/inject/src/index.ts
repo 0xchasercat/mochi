@@ -14,6 +14,6 @@
  * @see tasks/0030-inject-engine-v0.md
  */
 
-export const VERSION = "0.1.0" as const;
+export const VERSION = "0.4.0" as const;
 
 export { buildPayload, type PayloadResult } from "./build";

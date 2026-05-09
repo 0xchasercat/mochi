@@ -20,7 +20,7 @@
  * @see PLAN.md §5.7, §13
  */
 
-export const VERSION = "0.5.0" as const;
+export const VERSION = "0.1.11" as const;
 
 // ---- generated types --------------------------------------------------------
 export type { DiffEntry, DiffReportV1, JsonValue } from "./generated/diff-report";
