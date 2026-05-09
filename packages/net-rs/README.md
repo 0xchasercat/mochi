@@ -14,3 +14,9 @@ cargo build --release --manifest-path packages/net-rs/Cargo.toml
 ```
 
 See [PLAN.md §10](https://github.com/0xchasercat/mochi/blob/main/PLAN.md) for the C ABI surface.
+
+## Documentation
+
+- Package reference: <https://mochijs.com/docs/api/net>
+- Concept deep-dive: <https://mochijs.com/docs/concepts/network-ffi>
+- Cookbook: <https://mochijs.com/docs/guides/pick-a-scenario>

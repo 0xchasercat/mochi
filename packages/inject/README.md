@@ -11,4 +11,10 @@ Internal package consumed by `@mochi.js/core`.
 
 Delivery is dual-mechanism per task 0266: `Fetch.fulfillRequest` body splice on Document responses (CSP-rewritten), with `Page.addScriptToEvaluateOnNewDocument({ runImmediately: true, worldName: "" })` as fallback for `about:blank` / `data:` / other non-HTTP nav targets. Idempotency via `globalThis.__mochi_inject_marker`.
 
-See [PLAN.md §5.3 and §8.4](https://github.com/0xchasercat/mochi/blob/main/PLAN.md) and [`docs/limits.md`](https://github.com/0xchasercat/mochi/blob/main/docs/limits.md).
+See [PLAN.md §5.3 and §8.4](https://github.com/0xchasercat/mochi/blob/main/PLAN.md) and <https://mochijs.com/docs/reference/limits>.
+
+## Documentation
+
+- Package reference: <https://mochijs.com/docs/api/inject>
+- Concept deep-dive: <https://mochijs.com/docs/concepts/inject-pipeline>
+- Cookbook: <https://mochijs.com/docs/guides/pick-a-scenario>

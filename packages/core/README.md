@@ -32,7 +32,7 @@ The full [v0.1.4 → v0.2] surface lands as additive minor bumps. See [`CHANGELO
 - `Session` and `Page` — the runtime objects you drive.
 - `page.humanClick / humanType / humanScroll` — biomechanically-shaped input synthesis (Bezier + Fitts + Gaussian jitter).
 - `session.fetch` — out-of-band requests with profile-matching JA3/JA4/H2 via the Rust+wreq backend.
-- `page.screenshot(opts?)` — PNG / JPEG / WebP via CDP `Page.captureScreenshot`. Options: `format`, `quality`, `fullPage`, `clip`, `omitBackground`, `encoding`. Element-bounded capture (`{ element: handle }`) is deferred — see [`docs/limits.md`](https://github.com/0xchasercat/mochi/blob/main/docs/limits.md).
+- `page.screenshot(opts?)` — PNG / JPEG / WebP via CDP `Page.captureScreenshot`. Options: `format`, `quality`, `fullPage`, `clip`, `omitBackground`, `encoding`. Element-bounded capture (`{ element: handle }`) is deferred — see <https://mochijs.com/docs/reference/limits>.
 - `session.cookies.{save,load}(path, { pattern? })` — JSON cookie jar with version header + regex domain filter. Round-trips losslessly via `Storage.getCookies` / `Storage.setCookies` (task 0257).
 - `page.localStorage.{get,set}` and `page.sessionStorage.{get,set}` — direct `DOMStorage` CDP access, frame-scoped (defaults to current main-frame origin; pass `{ origin }` for cross-origin).
 - `page.grantAllPermissions(opts?)` — wraps `Browser.grantPermissions` with the full `ALL_BROWSER_PERMISSIONS` descriptor list (task 0257).
@@ -54,5 +54,9 @@ MIT.
 
 - [Repo](https://github.com/0xchasercat/mochi)
 - [PLAN.md](https://github.com/0xchasercat/mochi/blob/main/PLAN.md) — the full design contract
-- [Quickstart](https://github.com/0xchasercat/mochi/blob/main/docs/quickstart.md) — 5-minute walkthrough
-- [Limits](https://github.com/0xchasercat/mochi/blob/main/docs/limits.md) — what the JS-only ceiling honestly does and doesn't cover
+
+## Documentation
+
+- Package reference: <https://mochijs.com/docs/api/core>
+- Concept deep-dive: <https://mochijs.com/docs/concepts/stealth-philosophy>
+- Cookbook: <https://mochijs.com/docs/guides/pick-a-scenario>

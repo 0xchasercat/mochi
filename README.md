@@ -122,7 +122,7 @@ llm-context:end -->
 
 ## What works / what doesn't
 
-Direct port from [`docs/limits.md`](docs/limits.md) — the architectural-honesty page. Every entry there has a root cause and a tracking link. mochi gives you the best possible JS-layer answer for stealth automation against Chromium-family WAFs; some things genuinely require a Chromium patch and we name them.
+Direct port from the [Limits page](https://mochijs.com/docs/reference/limits) — the architectural-honesty document. Every entry there has a root cause and a tracking link. mochi gives you the best possible JS-layer answer for stealth automation against Chromium-family WAFs; some things genuinely require a Chromium patch and we name them.
 
 | Surface | v0.1 status | Notes |
 |---|---|---|
@@ -152,7 +152,7 @@ Direct port from [`docs/limits.md`](docs/limits.md) — the architectural-honest
 | Cross-engine FPU / JIT divergence (Safari-from-Chromium) | out of v1 scope | v1 is Chromium-family only. |
 | Mobile / touch profiles | out of v1 scope | v2 roadmap. |
 
-The [full limits document](docs/limits.md) has the per-vector root-cause analysis. Read it before opening an issue saying "X site detects mochi" — half the answers are already there.
+The [full limits document](https://mochijs.com/docs/reference/limits) has the per-vector root-cause analysis. Read it before opening an issue saying "X site detects mochi" — half the answers are already there.
 
 ## Comparison
 
@@ -234,7 +234,7 @@ const session = await mochi.launch({
 // Every page from this session auto-clicks visible Turnstile checkboxes.
 ```
 
-v0.2 covers: Cloudflare Turnstile (visible-checkbox variants only). Image/audio/managed escalations fire an `onEscalation` callback rather than clicking blindly. See [`packages/challenges/README.md`](packages/challenges/README.md) and [`docs/limits.md`](docs/limits.md).
+v0.2 covers: Cloudflare Turnstile (visible-checkbox variants only). Image/audio/managed escalations fire an `onEscalation` callback rather than clicking blindly. See [`packages/challenges/README.md`](packages/challenges/README.md) and the [Limits page](https://mochijs.com/docs/reference/limits).
 
 ## Why Bun-only?
 
