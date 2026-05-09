@@ -37,6 +37,33 @@ Relevant files: `packages/profiles/src/index.ts`, possibly a new `packages/profi
 
 Test addition: `packages/profiles/src/__tests__/get-profile.test.ts` covering each of the 6 real profiles + the placeholder fallback.
 
+### G-6. `darwin/x64 → mac-chrome-stable` serves arm64 profile to Intel Macs
+
+Surfaced by integration agent (`dd9a3c9`) for task 0272. Every Mac profile
+in the v1 catalog (`mac-chrome-stable`, `mac-chrome-beta`,
+`mac-m4-chrome-stable`, `mac-brave-stable`) declares `os.arch: "arm64"`.
+The current `defaultProfileForHost()` mapping routes `darwin/x64` to
+`mac-chrome-stable` — meaning Intel Mac users get an arm64 profile.
+
+The page-side fingerprint reports arm64 (correct, internally consistent),
+but the host is running an x64 Chromium binary. Native rendering
+(WebGL strings, audio f32 bytes, font fallback paths) doesn't match the
+captured arm64 baseline byte-exact. Any surface that falls through to
+native rendering on the Intel Mac host will leak the arch mismatch.
+
+Fix options:
+- (a) Capture `mac-intel-chrome-stable` and update the mapping. Right
+  long-term answer; needs an Intel Mac to capture from.
+- (b) Until (a) lands, change `darwin/x64` to return `null` from
+  `defaultProfileForHost()` so Intel Mac users hit the "pick explicitly"
+  diagnostic. Honest > silently wrong.
+- (c) Document as a known limit in `docs/limits.md` and `reference/limits.md`
+  (the integration agent left a JSDoc note on the helper).
+
+Recommendation: ship (b) NOW (one-line change) + (c) in the same PR;
+queue (a) as a separate capture-task brief once Intel Mac hardware is
+available.
+
 ### G-5. CHANGELOG.md is stale (only documents 0.1.0 / 0.1.1)
 
 `packages/core/package.json` is at v0.4.0 on local main (the npm view earlier showed 0.3.0; release pipeline keeps moving). CHANGELOG.md last documents 0.1.1. Every minor bump from 0.1.2 → 0.4.0 happened via Changesets but the rendered CHANGELOG is missing the entries for those bumps.
