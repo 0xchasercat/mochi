@@ -1,0 +1,9 @@
+# Cloudflare Pages redirect rules.
+# Format: <from>  <to>  <status>
+# https://developers.cloudflare.com/pages/configuration/redirects/
+
+# /docs → first getting-started page. Replaces the legacy meta-refresh
+# stub at pages/docs/index.astro (which still ships as a fallback in
+# case _redirects isn't honored, e.g. local `astro preview` where
+# Cloudflare's redirect engine isn't running).
+/docs   /docs/getting-started/install   302

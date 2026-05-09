@@ -98,17 +98,43 @@ const indexJson = JSON.stringify(index);
     active = 0;
     render();
   }
+  let lastFocused: Element | null = null;
+
   function open() {
     if (!overlay) return;
+    lastFocused = document.activeElement;
     overlay.hidden = false;
+    document.body.style.overflow = "hidden"; // lock background scroll
     filter("");
     setTimeout(() => input?.focus(), 30);
   }
   function close() {
     if (!overlay) return;
     overlay.hidden = true;
+    document.body.style.overflow = "";
     if (input) input.value = "";
+    // Restore focus to the trigger that opened the modal so keyboard
+    // users land back on the search button instead of <body>.
+    if (lastFocused instanceof HTMLElement) lastFocused.focus();
   }
+
+  // Focus trap — Tab cycles within the modal while it's open.
+  overlay?.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab" || !overlay || overlay.hidden) return;
+    const focusables = overlay.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    if (focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
   triggers.forEach((t) => t.addEventListener("click", open));
   overlay?.addEventListener("click", (e) => {
     if (e.target === overlay) close();

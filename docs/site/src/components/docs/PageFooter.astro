@@ -11,15 +11,15 @@ const { prev, next } = Astro.props;
 ---
 <div class="d-pagefooter">
   {prev ? (
-    <a class="d-pf" href={`/docs/${prev.id}`}>
+    <a class="d-pf" href={`/docs/${prev.id}`} rel="prev">
       <span class="d-pf-label">← Previous</span>
       <span class="d-pf-title"><span class="d-pf-arr">‹</span> {prev.title}</span>
     </a>
-  ) : (<span></span>)}
+  ) : (<span aria-hidden="true"></span>)}
   {next ? (
-    <a class="d-pf is-next" href={`/docs/${next.id}`}>
+    <a class="d-pf is-next" href={`/docs/${next.id}`} rel="next">
       <span class="d-pf-label">Next →</span>
       <span class="d-pf-title">{next.title} <span class="d-pf-arr">›</span></span>
     </a>
-  ) : (<span></span>)}
+  ) : (<span aria-hidden="true"></span>)}
 </div>

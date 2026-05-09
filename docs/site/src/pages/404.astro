@@ -5,18 +5,75 @@ import Footer from "../components/landing/Footer.astro";
 ---
 <BaseLayout title="404 — leaves no crumbs" description="That page leaves no crumbs.">
   <Nav />
-  <main id="main" style="max-width: 720px; margin: 80px auto 120px; padding: 0 32px; text-align: center">
+  <main id="main" class="not-found">
     <div class="m-eyebrow">404</div>
-    <h1 class="m-h1" style="font-size: 60px; margin: 12px 0 16px">
-      No crumbs <span class="m-h1-honey">here.</span>
-    </h1>
-    <p class="m-lede" style="margin: 0 auto 28px; max-width: 520px">
-      That page either doesn't exist or hasn't shipped yet. Try the docs index, or head back to the landing page.
+    <h1 class="nf-title">No crumbs <span class="m-h1-honey">here.</span></h1>
+    <p class="m-lede nf-lede">
+      That page either doesn't exist or hasn't shipped yet. Try the docs index, search, or head back to the landing page.
     </p>
-    <div class="m-hero-ctas" style="justify-content: center">
+    <div class="m-hero-ctas nf-ctas">
       <a class="m-btn m-btn-primary" href="/">Back to home</a>
       <a class="m-btn m-btn-secondary" href="/docs/getting-started/install">Open the docs →</a>
     </div>
+    <ul class="nf-suggest">
+      <li><a href="/docs/getting-started/quickstart">Quickstart</a> — five minutes from zero to a spoofed Chrome session</li>
+      <li><a href="/docs/api/core">API reference</a> — every public symbol on <code>@mochi.js/core</code></li>
+      <li><a href="/docs/concepts/stealth-philosophy">Stealth philosophy</a> — why mochi is built the way it's built</li>
+      <li><a href="/docs/reference/limits">Known limits</a> — every gap, with root cause and workaround</li>
+    </ul>
   </main>
   <Footer />
 </BaseLayout>
+
+<style>
+  .not-found {
+    max-width: 720px;
+    margin: 80px auto 120px;
+    padding: 0 32px;
+    text-align: center;
+  }
+  .nf-title {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: clamp(36px, 8vw, 60px);
+    letter-spacing: -0.035em;
+    line-height: 1.05;
+    color: var(--mochi-navy-900);
+    margin: 12px 0 16px;
+    text-wrap: balance;
+  }
+  .nf-lede { margin: 0 auto 28px; max-width: 520px; }
+  .nf-ctas { justify-content: center; }
+  .nf-suggest {
+    list-style: none;
+    margin: 56px auto 0;
+    max-width: 540px;
+    text-align: left;
+    padding: 0;
+  }
+  .nf-suggest li {
+    padding: 14px 18px;
+    border-top: 1px solid var(--border);
+    font-size: 14px;
+    color: var(--fg-muted);
+    line-height: 1.5;
+  }
+  .nf-suggest li:last-child { border-bottom: 1px solid var(--border); }
+  .nf-suggest a {
+    color: var(--mochi-honey-600);
+    font-weight: 600;
+    border-bottom: 1px solid color-mix(in srgb, var(--mochi-honey-500) 40%, transparent);
+  }
+  .nf-suggest a:hover { color: var(--mochi-honey-500); }
+  .nf-suggest code {
+    font-family: var(--font-mono); font-size: 0.86em;
+    background: var(--code-bg); color: var(--fg);
+    padding: 1px 6px; border-radius: var(--r-xs);
+    border: 1px solid var(--border);
+  }
+  @media (max-width: 600px) {
+    .not-found { margin: 40px auto 64px; padding: 0 16px; }
+    .nf-suggest { margin-top: 36px; }
+    .nf-suggest li { padding: 12px 4px; font-size: 13.5px; }
+  }
+</style>

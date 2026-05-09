@@ -19,5 +19,9 @@
     "@astrojs/mdx": "^4.0.0",
     "@astrojs/sitemap": "^3.2.0",
     "shiki": "^1.24.0"
+  },
+  "devDependencies": {
+    "rehype-autolink-headings": "^7.1.0",
+    "rehype-slug": "^6.0.0"
   }
 }

@@ -3,7 +3,9 @@
    Sticky on the outside, untouchable on the inside.
    ========================================================================== */
 
-@import url("https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap");
+/* Fonts loaded via <link> in BaseLayout.astro for preconnect priority +
+ * non-blocking render. Keeping this comment here so designers searching
+ * for the font import find the new location. */
 
 :root {
   /* ---------- Brand core ---------------------------------------------------

@@ -1,7 +1,7 @@
 ---
 // Hero — pixel-faithful port of docs_site/Hero.jsx. The copy button uses a
-// tiny inline script (no framework) to copy the install command. v0.8.0 is
-// the live release as of 2026-05-09 (post-wreq drop); we install via @mochi.js/core.
+// tiny inline script (no framework) to copy the install command. The current
+// release version is sourced from site.config.ts (single source of truth).
 const installCmd = "bun add @mochi.js/core";
 ---
 <section class="m-hero">
@@ -17,12 +17,13 @@ const installCmd = "bun add @mochi.js/core";
         <strong>mochi.js</strong> is a Bun-native, raw-CDP browser automation framework. Pass a seed and a profile; get a relationally-coherent fingerprint that survives a <code>getParameter(0x9245)</code> probe. JIT-friendly inject payload, Chromium-native fetch (real Chrome JA4 by definition), behavioral synth on top of Bezier+Fitts. Leaves no crumbs.
       </p>
       <div class="m-hero-ctas">
-        <button class="m-btn m-btn-primary" data-copy={installCmd} type="button">
+        <button class="m-btn m-btn-primary" data-copy={installCmd} type="button" aria-label={`Copy install command: ${installCmd}`}>
           <span class="m-mono">$ {installCmd}</span>
-          <span class="m-copy-ic" data-copy-icon>⧉</span>
+          <span class="m-copy-ic" data-copy-icon aria-hidden="true">⧉</span>
         </button>
         <a class="m-btn m-btn-secondary" href="/docs/getting-started/install">Read the docs →</a>
       </div>
+      <div class="m-sr" aria-live="polite" data-copy-announce></div>
       <div class="m-hero-meta">
         <span class="m-chip-light">bun ≥ 1.1</span>
         <span class="m-chip-light">macOS · Linux · Windows</span>
@@ -41,17 +42,21 @@ const installCmd = "bun add @mochi.js/core";
   // Falls back gracefully if Clipboard API is unavailable.
   const btn = document.querySelector<HTMLButtonElement>("button[data-copy]");
   const icon = btn?.querySelector<HTMLElement>("[data-copy-icon]");
+  const announce = document.querySelector<HTMLElement>("[data-copy-announce]");
   btn?.addEventListener("click", async () => {
     if (!btn || !icon) return;
     const text = btn.dataset.copy ?? "";
     try {
       await navigator.clipboard?.writeText(text);
       icon.textContent = "✓";
+      if (announce) announce.textContent = "Install command copied to clipboard";
       setTimeout(() => {
         icon.textContent = "⧉";
+        if (announce) announce.textContent = "";
       }, 1400);
     } catch (_err) {
       icon.textContent = "—";
+      if (announce) announce.textContent = "Copy failed";
     }
   });
 </script>

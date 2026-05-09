@@ -192,12 +192,20 @@ button { font: inherit; }
 }
 .d-prose p { color: var(--fg); }
 .d-prose p strong { font-weight: 700; }
-.d-prose a { color: var(--mochi-honey-600); border-bottom: 1px solid color-mix(in srgb, var(--mochi-honey-500) 40%, transparent); transition: border-color var(--dur-fast); }
-.d-prose a:hover { border-bottom-color: var(--mochi-honey-500); }
+/* Body links — darkened from --mochi-honey-600 (#c5791a, ~3.6:1 on cream) to
+   a deeper honey that hits WCAG AA (4.5:1) for body text. Hover/focus
+   restores the brighter honey. */
+.d-prose a {
+  color: #a05f0e;
+  border-bottom: 1px solid color-mix(in srgb, var(--mochi-honey-500) 50%, transparent);
+  transition: border-color var(--dur-fast), color var(--dur-fast);
+}
+.d-prose a:hover { color: var(--mochi-honey-600); border-bottom-color: var(--mochi-honey-500); }
+.d-prose a:focus-visible { color: var(--mochi-honey-600); }
 .d-prose code:not(pre code) {
   font-family: var(--font-mono); font-size: 0.86em;
   background: var(--code-bg); color: var(--fg);
-  padding: 2px 7px; border-radius: var(--r-xs);
+  padding: 1px 6px; border-radius: var(--r-xs);
   border: 1px solid var(--border);
 }
 .d-prose ul, .d-prose ol { padding-left: 22px; }
@@ -564,8 +572,9 @@ button { font: inherit; }
   position: fixed; inset: 0; z-index: 100;
   background: rgba(27, 36, 71, 0.45);
   backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex; align-items: flex-start; justify-content: center;
-  padding-top: 12vh;
+  padding-top: max(56px, 12vh);
   animation: d-fade-in .12s var(--ease-out);
 }
 /* The `display: flex` above unconditionally overrides the user-agent
@@ -666,5 +675,546 @@ button { font: inherit; }
 }
 
 /* ==========================================================================
-   Theme toggle small detail — show stealth surfaces correctly
+   Markdown prose enhancements — styles for HTML emitted by the markdown
+   renderer (Shiki, GFM tables, blockquotes, h4-h6, etc.). Without these
+   rules anything past h2/h3/p/inline-code falls back to user-agent default
+   and looks like raw HTML on a cream background.
    ========================================================================== */
+
+/* Heading levels 4-6 (h2/h3 are styled higher up). */
+.d-prose h4 {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: 16px; line-height: 1.35; letter-spacing: -0.01em;
+  color: var(--fg);
+  margin-top: 28px; margin-bottom: 4px;
+  scroll-margin-top: 80px;
+}
+.d-prose h5 {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: 14.5px; line-height: 1.4;
+  color: var(--fg-muted);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  margin-top: 22px; margin-bottom: 4px;
+}
+.d-prose h6 {
+  font-family: var(--font-mono); font-size: 11.5px;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--fg-subtle);
+  margin-top: 20px; margin-bottom: 2px;
+}
+
+/* Anchor link emitted by rehype-autolink-headings (behavior: "prepend").
+   The anchor wraps a "#" sigil that floats to the left of the heading
+   and only shows on hover or keyboard focus. */
+.d-prose .d-h-anchor {
+  color: inherit;
+  border-bottom: 0;
+  position: relative;
+  text-decoration: none;
+}
+.d-prose .d-h-anchor::before {
+  content: "#";
+  position: absolute;
+  left: -0.95em;
+  top: 0;
+  color: var(--mochi-honey-500);
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.d-prose h2:hover .d-h-anchor::before,
+.d-prose h3:hover .d-h-anchor::before,
+.d-prose h4:hover .d-h-anchor::before,
+.d-prose .d-h-anchor:focus-visible::before { opacity: 1; }
+
+/* Generic horizontal rule */
+.d-prose hr {
+  border: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border) 30%, var(--border) 70%, transparent);
+  margin: 36px 0;
+}
+
+/* ----------------------------------------------------------------------------
+   Block code — markdown <pre><code> output from Shiki.
+   ---------------------------------------------------------------------------- */
+
+/* The wrapper inserted client-side by enhance-code.ts to chrome each <pre>
+   with a header bar (language label + copy button). The <pre> itself sits
+   below the bar and carries the dark stealth surface. */
+.d-md-code {
+  margin: 22px 0;
+  background: var(--stealth-900);
+  border: 1px solid var(--stealth-700);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+}
+.d-md-code-bar {
+  display: flex; align-items: center;
+  background: var(--stealth-800);
+  border-bottom: 1px solid var(--stealth-700);
+  padding: 0 6px 0 14px;
+  min-height: 36px;
+}
+.d-md-code-lang {
+  font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: 0.04em; text-transform: lowercase;
+  color: #5b6178;
+}
+.d-md-code-lang:empty { display: none; }
+.d-md-code-copy {
+  margin-left: auto;
+  background: transparent; border: 0;
+  color: #9aa0b3; cursor: pointer;
+  padding: 6px 12px;
+  border-radius: var(--r-xs);
+  font-family: var(--font-mono); font-size: 11px;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.d-md-code-copy:hover { color: var(--mochi-honey-400); background: var(--stealth-700); }
+.d-md-code-copy:focus-visible {
+  outline: 2px solid var(--mochi-honey-400);
+  outline-offset: -2px;
+}
+.d-md-code-copy.is-copied { color: var(--success); }
+.d-md-code-copy svg { flex: none; }
+
+/* The actual <pre> emitted by Shiki sits inside .d-md-code when wrapped,
+   and styles standalone for any pre that hasn't been enhanced yet (no
+   FOUC if JS is slow / disabled). */
+.d-prose pre,
+.d-md-code pre {
+  background: var(--stealth-900) !important;
+  color: #ece6d6;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  line-height: 1.7;
+  padding: 18px 22px;
+  margin: 22px 0;
+  border-radius: var(--r-md);
+  border: 1px solid var(--stealth-700);
+  overflow-x: auto;
+  white-space: pre;
+  tab-size: 2;
+}
+.d-md-code pre {
+  margin: 0;            /* the wrapper provides the outer margin */
+  border: 0;            /* the wrapper provides the border */
+  border-radius: 0;     /* the wrapper provides the radius */
+}
+.d-prose pre code,
+.d-md-code pre code {
+  background: transparent !important;
+  border: 0;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  white-space: inherit;
+}
+
+/* Custom scrollbar for the dark surface. */
+.d-prose pre::-webkit-scrollbar,
+.d-md-code pre::-webkit-scrollbar { height: 8px; }
+.d-prose pre::-webkit-scrollbar-thumb,
+.d-md-code pre::-webkit-scrollbar-thumb {
+  background: var(--stealth-700);
+  border-radius: 4px;
+}
+.d-prose pre::-webkit-scrollbar-track,
+.d-md-code pre::-webkit-scrollbar-track { background: transparent; }
+
+/* ----------------------------------------------------------------------------
+   Tables — GFM markdown emits <table> with <thead> + <tbody>.
+   ---------------------------------------------------------------------------- */
+.d-prose table {
+  display: block;          /* allow horizontal overflow on mobile */
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 14px;
+  margin: 22px 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.d-prose table thead {
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border);
+}
+.d-prose table th {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mochi-honey-600);
+  padding: 10px 14px;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.d-prose table td {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  vertical-align: top;
+  color: var(--fg);
+  line-height: 1.55;
+}
+.d-prose table tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--bg-subtle) 50%, transparent);
+}
+.d-prose table code:not(pre code) {
+  font-size: 0.86em;
+  white-space: nowrap;
+}
+
+/* ----------------------------------------------------------------------------
+   Blockquotes — markdown `>` becomes a soft callout with an honey bar.
+   ---------------------------------------------------------------------------- */
+.d-prose blockquote {
+  margin: 22px 0;
+  padding: 14px 18px 14px 20px;
+  background: var(--mochi-honey-50);
+  border: 1px solid color-mix(in srgb, var(--mochi-honey-500) 25%, transparent);
+  border-left: 3px solid var(--mochi-honey-500);
+  border-radius: var(--r-md);
+  color: var(--fg);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.d-prose blockquote p { margin: 0; }
+.d-prose blockquote p + p { margin-top: 8px; }
+.d-prose blockquote strong { color: var(--mochi-honey-600); }
+.d-prose blockquote a { color: var(--mochi-honey-600); }
+
+/* Definition lists. */
+.d-prose dl { margin: 16px 0; }
+.d-prose dt {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  margin-top: 14px;
+}
+.d-prose dd {
+  margin: 4px 0 12px 16px;
+  color: var(--fg-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+/* Keyboard keys. */
+.d-prose kbd {
+  font-family: var(--font-mono);
+  font-size: 0.84em;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: var(--r-xs);
+  padding: 1px 6px;
+  color: var(--fg-muted);
+}
+
+/* Inline images. */
+.d-prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  display: block;
+  margin: 22px auto;
+  background: var(--bg-elevated);
+}
+
+/* Native <details>/<summary>. */
+.d-prose details {
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  border-radius: var(--r-md);
+  padding: 0;
+  margin: 22px 0;
+}
+.d-prose details > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 12px 16px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14.5px;
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+}
+.d-prose details > summary::-webkit-details-marker { display: none; }
+.d-prose details > summary::before {
+  content: "▸";
+  font-size: 11px;
+  color: var(--mochi-honey-500);
+  transition: transform var(--dur-fast) var(--ease-out);
+  display: inline-block;
+}
+.d-prose details[open] > summary::before { transform: rotate(90deg); }
+.d-prose details > *:not(summary) {
+  padding: 0 16px;
+}
+.d-prose details > *:nth-last-child(1):not(summary) { padding-bottom: 14px; }
+
+/* Cascade fixes. */
+.d-prose li code:not(pre code) { white-space: nowrap; }
+
+/* Smooth-scroll anchor jumps. Reduced-motion override lives in global.css. */
+html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+
+/* Focus rings — visible on keyboard nav. */
+:focus-visible {
+  outline: 2px solid var(--mochi-honey-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.d-side-link:focus-visible,
+.d-toc-link:focus-visible { outline-offset: 0; }
+
+/* ==========================================================================
+   Mobile drawer infrastructure — sidebar slides in from left on <900px.
+   ========================================================================== */
+.d-hamburger {
+  display: none;
+  width: 36px; height: 36px;
+  align-items: center; justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--fg);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+  flex: none;
+}
+.d-hamburger:hover { background: var(--bg-subtle); }
+.d-hamburger svg { width: 18px; height: 18px; }
+
+.d-side-close {
+  display: none;
+  position: absolute;
+  top: 12px; right: 12px;
+  width: 32px; height: 32px;
+  align-items: center; justify-content: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--fg-muted);
+  cursor: pointer;
+  z-index: 1;
+}
+.d-side-close:hover { color: var(--fg); }
+
+.d-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: rgba(27, 36, 71, 0.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+body[data-drawer-open] {
+  overflow: hidden;
+}
+body[data-drawer-open] .d-backdrop {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* "On this page" mobile collapse — desktop hidden, mobile shown. */
+.d-toc-mobile { display: none; }
+
+/* ==========================================================================
+   Mobile breakpoints — docs shell + nav
+   ========================================================================== */
+
+/* < 1100px — hide right TOC rail; mobile TOC appears above article. */
+@media (max-width: 1100px) {
+  .d-shell { grid-template-columns: var(--doc-side-w) minmax(0, 1fr); }
+  .d-toc { display: none; }
+  .d-toc-mobile {
+    display: block;
+    margin: 0 0 28px;
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    border-radius: var(--r-md);
+  }
+  .d-toc-mobile > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 12px 16px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--mochi-honey-600);
+    display: flex; align-items: center; gap: 8px;
+    user-select: none;
+  }
+  .d-toc-mobile > summary::-webkit-details-marker { display: none; }
+  .d-toc-mobile > summary::before {
+    content: "▸";
+    font-size: 10px;
+    color: var(--mochi-honey-500);
+    transition: transform var(--dur-fast) var(--ease-out);
+  }
+  .d-toc-mobile[open] > summary::before { transform: rotate(90deg); }
+  .d-toc-mobile-list {
+    display: flex; flex-direction: column;
+    padding: 0 8px 12px;
+    gap: 0;
+  }
+  .d-toc-mobile-list a {
+    padding: 6px 12px;
+    font-size: 13.5px;
+    color: var(--fg-muted);
+    border-left: 2px solid var(--border);
+  }
+  .d-toc-mobile-list a.is-sub { padding-left: 22px; font-size: 12.5px; }
+  .d-toc-mobile-list a:hover { color: var(--fg); border-left-color: var(--border-strong); }
+  .d-main { padding: 36px 36px 72px; }
+}
+
+/* < 900px — collapse sidebar into a slide-in drawer. */
+@media (max-width: 900px) {
+  .d-shell { grid-template-columns: minmax(0, 1fr); }
+
+  .d-side {
+    position: fixed;
+    top: 0; left: 0;
+    height: 100vh; height: 100dvh;
+    width: min(320px, 86vw);
+    z-index: 70;
+    background: var(--bg);
+    border-right: 1px solid var(--border);
+    box-shadow: 0 8px 30px rgba(27, 36, 71, 0.18);
+    transform: translateX(-100%);
+    transition: transform var(--dur-base) var(--ease-out);
+    padding: 56px 12px 32px 24px;
+  }
+  body[data-drawer-open] .d-side { transform: translateX(0); }
+  .d-side-close { display: inline-flex; }
+
+  .d-hamburger { display: inline-flex; }
+
+  .d-nav { padding: 0 16px; gap: 12px; }
+  .d-nav-links { display: none; }     /* drawer surfaces them via sidebar */
+  .d-nav-actions { gap: 6px; }
+  .d-search { min-width: 0; flex: 1; padding: 6px 10px; }
+  .d-search-text { display: none; }
+  .d-search .d-kbd { display: none; }
+  .d-version { display: none; }       /* free up nav real estate */
+
+  .d-main { padding: 28px 20px 64px; }
+  .d-page-title { font-size: 34px; }
+  .d-page-lede { font-size: 16px; margin-bottom: 24px; }
+  .d-prose { font-size: 15px; }
+  .d-prose h2 { font-size: 22px; margin-top: 40px; }
+  .d-prose h3 { font-size: 17px; margin-top: 26px; }
+  .d-prose pre, .d-md-code pre { padding: 14px 16px; font-size: 12.5px; }
+
+  /* Card grids reflow. */
+  .d-card-grid.cols-3 { grid-template-columns: repeat(2, 1fr); }
+
+  /* Page footer prev/next stack on mobile. */
+  .d-pagefooter { grid-template-columns: 1fr; }
+
+  /* Pillars grid stacks. */
+  .d-pillars { grid-template-columns: 1fr; }
+}
+
+/* < 600px — compact phones. Tighten everything. */
+@media (max-width: 600px) {
+  .d-main { padding: 22px 16px 56px; }
+  .d-page-title { font-size: 28px; line-height: 1.1; }
+  .d-page-lede { font-size: 15px; }
+  .d-prose { font-size: 14.5px; line-height: 1.65; }
+  .d-prose h2 { font-size: 20px; margin-top: 32px; }
+  .d-prose h3 { font-size: 16.5px; }
+  .d-prose pre, .d-md-code pre { padding: 12px 14px; font-size: 12px; }
+  .d-prose table { font-size: 13px; }
+  .d-prose table th, .d-prose table td { padding: 8px 10px; }
+
+  .d-card-grid.cols-3,
+  .d-card-grid.cols-2 { grid-template-columns: 1fr; }
+
+  .d-icon-btn { width: 32px; height: 32px; }
+  .d-search { padding: 6px 8px; font-size: 12px; }
+
+  .d-crumbs { font-size: 10.5px; margin-bottom: 14px; }
+
+  .d-step { grid-template-columns: 28px 1fr; gap: 12px; }
+  .d-step-num { width: 28px; height: 28px; font-size: 13px; }
+
+  .d-md-code-bar { min-height: 32px; padding: 0 4px 0 12px; }
+  .d-md-code-copy { padding: 5px 8px; }
+  .d-md-code-copy span { display: none; } /* icon-only on phones */
+
+  .d-search-modal { width: 96vw; }
+  .d-search-foot { gap: 10px; padding: 8px 14px; }
+}
+
+/* ==========================================================================
+   Long-form prose hygiene
+   ========================================================================== */
+
+/* Long URLs / inline tokens shouldn't blow out the column. */
+.d-prose p,
+.d-prose li,
+.d-prose dd,
+.d-prose blockquote {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.d-prose a { word-break: break-word; }
+
+/* Reveal the hover anchor when keyboard focus is inside the heading. */
+.d-prose h2:focus-within .d-h-anchor::before,
+.d-prose h3:focus-within .d-h-anchor::before,
+.d-prose h4:focus-within .d-h-anchor::before { opacity: 1; }
+
+/* Inline code inside table cells gets the elevated bg so the alt-row
+   tint doesn't double up on the code chip's cream background. */
+.d-prose td code, .d-prose th code { background: var(--bg-elevated); }
+
+/* Inline code in headings — shrink so the display font doesn't dwarf it. */
+.d-prose h2 code:not(pre code),
+.d-prose h3 code:not(pre code),
+.d-prose h4 code:not(pre code) { font-size: 0.78em; padding: 1px 5px; }
+
+/* ==========================================================================
+   Print
+   ========================================================================== */
+@media print {
+  .d-nav, .d-side, .d-toc, .d-toc-mobile, .d-pagefooter, .d-hamburger,
+  .d-side-close, .d-backdrop, .d-search-overlay, .d-callout-icon { display: none !important; }
+  .d-shell { display: block; max-width: none; }
+  .d-main { padding: 0; }
+  .d-prose { max-width: none; font-size: 11pt; line-height: 1.5; }
+  .d-prose pre, .d-md-code, .d-md-code pre {
+    background: #fff !important;
+    color: #000 !important;
+    border: 1px solid #ddd !important;
+    box-shadow: none !important;
+    page-break-inside: avoid;
+  }
+  .d-prose pre code, .d-md-code pre code { color: #000 !important; }
+  .d-prose a { color: #000; text-decoration: underline; border-bottom: 0; }
+  .d-prose a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.85em;
+    color: #444;
+    word-break: break-all;
+  }
+}
+

@@ -1,5 +1,6 @@
 ---
 import "../styles/global.css";
+import { DEFAULT_OG_IMAGE, SITE_DESCRIPTION, SITE_URL } from "../site.config.ts";
 
 export interface Props {
   title: string;
@@ -9,27 +10,44 @@ export interface Props {
 
 const {
   title,
-  description = "Bun-native, raw-CDP browser automation. Relational fingerprint locking, JIT-installed spoofing, JA4-coherent fetch. Leaves no crumbs.",
-  ogImage,
+  description = SITE_DESCRIPTION,
+  ogImage = DEFAULT_OG_IMAGE,
 } = Astro.props;
 
 const siteName = "mochi.js";
 const fullTitle = title === siteName ? title : `${title} — ${siteName}`;
+const ogImageAbs = ogImage?.startsWith("http") ? ogImage : `${SITE_URL}${ogImage ?? ""}`;
 ---
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#fffaf2" />
+    <meta name="color-scheme" content="light" />
     <title>{fullTitle}</title>
     <meta name="description" content={description} />
     <meta property="og:title" content={fullTitle} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content={Astro.url.href} />
+    <meta property="og:site_name" content={siteName} />
+    {ogImageAbs && <meta property="og:image" content={ogImageAbs} />}
     <meta name="twitter:card" content="summary_large_image" />
-    {ogImage && <meta property="og:image" content={ogImage} />}
+    <meta name="twitter:title" content={fullTitle} />
+    <meta name="twitter:description" content={description} />
+    {ogImageAbs && <meta name="twitter:image" content={ogImageAbs} />}
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="canonical" href={Astro.url.href} />
+    {/* Preconnect to Google Fonts before the @import lands — saves a
+        ~150ms round-trip on first paint. The actual font @import was
+        moved out of tokens.css to here so we control the priority. */}
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    />
     {/*
       No theme bootstrap — the site is cream-only. Dark mode was
       removed wholesale after design review (the original mockup is

@@ -21,14 +21,24 @@ for (const list of grouped.values()) {
   list.sort((a, b) => a.data.order - b.data.order);
 }
 ---
-<aside class="d-side" aria-label="Docs navigation">
+<aside class="d-side" id="docs-sidebar" aria-label="Docs navigation">
+  <button
+    class="d-side-close"
+    type="button"
+    data-drawer-close
+    aria-label="Close navigation drawer"
+  >
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  </button>
   {DOC_CATEGORIES.map((cat) => {
     const entries = grouped.get(cat) ?? [];
     if (entries.length === 0) return null;
     return (
       <div class="d-side-section">
         <div class="d-side-h">
-          <span class="d-side-h-emoji">{CATEGORY_EMOJI[cat]}</span>
+          <span class="d-side-h-emoji" aria-hidden="true">{CATEGORY_EMOJI[cat]}</span>
           {CATEGORY_LABELS[cat]}
         </div>
         {entries.map((entry) => (
@@ -44,3 +54,15 @@ for (const list of grouped.values()) {
     );
   })}
 </aside>
+
+<script>
+  // Auto-scroll the active sidebar link into view on page load. The
+  // sticky-overflow sidebar otherwise renders the active link below the
+  // fold for late-alphabet pages.
+  const active = document.querySelector<HTMLElement>(".d-side .is-active");
+  if (active) {
+    // `scrollIntoView({ block: "nearest" })` keeps the sidebar from
+    // jumping; only scrolls the side aside itself, not the page.
+    active.scrollIntoView({ block: "nearest" });
+  }
+</script>

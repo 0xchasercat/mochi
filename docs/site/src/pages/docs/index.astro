@@ -1,18 +1,64 @@
 ---
-// /docs → first getting-started page. Hard redirect at the HTTP layer would
-// require a server; we emit a static page that meta-refreshes. Cloudflare
-// Pages will also honor a _redirects file added in 0241.
+// /docs → first getting-started page.
+//
+// Production traffic is redirected at the HTTP layer via
+// `public/_redirects` (Cloudflare Pages, 302). This page exists as a
+// graceful fallback for `astro preview` / static-host setups that
+// don't honor `_redirects`. We deliberately do NOT meta-refresh — the
+// 0-second variant violates WCAG 2.2.1/2.2.4. The visible CTA below
+// is the accessible path; production users never see this page
+// because Cloudflare's redirect engine catches `/docs` first.
+import BaseLayout from "../../layouts/BaseLayout.astro";
 const target = "/docs/getting-started/install";
 ---
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>mochi.js docs</title>
-    <meta http-equiv="refresh" content={`0;url=${target}`} />
-    <link rel="canonical" href={target} />
-  </head>
-  <body>
-    <p>Redirecting to <a href={target}>{target}</a>…</p>
-  </body>
-</html>
+<BaseLayout title="mochi.js docs" description="mochi.js documentation entry — heading to Quickstart.">
+  <main id="main" class="docs-redirect">
+    <h1>Heading to the docs…</h1>
+    <p>
+      The docs index lives at <a href={target}>{target}</a>. If your browser doesn't redirect automatically, use the link.
+    </p>
+    <a class="cta" href={target}>Open the docs →</a>
+  </main>
+</BaseLayout>
+
+<style>
+  .docs-redirect {
+    max-width: 540px;
+    margin: 80px auto;
+    padding: 0 24px;
+    text-align: center;
+    font-family: var(--font-sans);
+  }
+  .docs-redirect h1 {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: clamp(28px, 5vw, 36px);
+    letter-spacing: -0.03em;
+    color: var(--mochi-navy-900);
+    margin-bottom: 16px;
+  }
+  .docs-redirect p {
+    color: var(--fg-muted);
+    font-size: 16px;
+    line-height: 1.6;
+    margin-bottom: 24px;
+  }
+  .docs-redirect p a {
+    color: var(--mochi-honey-600);
+    border-bottom: 1px solid currentColor;
+  }
+  .docs-redirect .cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 22px;
+    background: var(--mochi-honey-500);
+    color: var(--mochi-navy-900);
+    border-radius: var(--r-pill);
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 15px;
+    transition: background var(--dur-fast);
+  }
+  .docs-redirect .cta:hover { background: var(--mochi-honey-600); color: var(--mochi-cream-50); }
+</style>

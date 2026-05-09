@@ -24,10 +24,14 @@ export interface Props {
 
 const { title, description, category, currentId, headings, prev, next, editUrl, lastUpdated } = Astro.props;
 const categoryLabel = CATEGORY_LABELS[category];
+
+// Mobile-TOC items (h2 + h3 only, mirroring the desktop right-rail TOC).
+const mobileTocItems = headings.filter((h) => h.depth === 2 || h.depth === 3);
 ---
 <BaseLayout title={title} description={description}>
   <TopNav />
   <SearchModal />
+  <div class="d-backdrop" data-drawer-backdrop aria-hidden="true"></div>
   <div class="d-shell">
     <Sidebar current={currentId} />
     <main class="d-main" id="main">
@@ -40,6 +44,16 @@ const categoryLabel = CATEGORY_LABELS[category];
       </div>
       <h1 class="d-page-title">{title}</h1>
       {description && <p class="d-page-lede">{description}</p>}
+      {mobileTocItems.length > 0 && (
+        <details class="d-toc-mobile" aria-label="On this page">
+          <summary>On this page</summary>
+          <div class="d-toc-mobile-list">
+            {mobileTocItems.map((it) => (
+              <a class={it.depth === 3 ? "is-sub" : ""} href={`#${it.slug}`}>{it.text}</a>
+            ))}
+          </div>
+        </details>
+      )}
       <article class="d-prose">
         <slot />
       </article>
@@ -48,3 +62,9 @@ const categoryLabel = CATEGORY_LABELS[category];
     <Toc headings={headings} editUrl={editUrl} lastUpdated={lastUpdated} />
   </div>
 </BaseLayout>
+
+<script>
+  // Side-effect modules — bundled by Astro's Vite, executed once per page.
+  import "../lib/enhance-code";
+  import "../lib/mobile-drawer";
+</script>

@@ -171,10 +171,9 @@ a { color: inherit; text-decoration: none; }
 .m-features-grid {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
 }
-.m-features-grid .m-feat:nth-child(4) { grid-column: 1 / 2; grid-column-start: 1; }
-.m-features-grid .m-feat:nth-child(4) { grid-column-start: 1; }
-/* span the last two across the full row, centered */
-.m-features-grid .m-feat:nth-child(4) { grid-column: 1 / span 1; }
+/* (Previously had a broken set of nth-child(4) overrides that tried to center
+   items 4-5 in a 3-column grid — they were no-ops. With 5 cards in a 3-col
+   grid the last row sits 4-5-empty, which is fine.) */
 .m-feat {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
@@ -267,7 +266,79 @@ a { color: inherit; text-decoration: none; }
   max-width: 1200px; margin: 40px auto 0;
   border-top: 1px solid var(--border);
   padding-top: 18px;
-  display: flex; justify-content: space-between;
+  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
   font-size: 12px; color: var(--fg-subtle);
 }
 .m-footer-bottom .m-mono { font-family: var(--font-mono); font-size: 12px; color: var(--fg-muted); }
+
+/* Inline <code> in lede / hero copy — outside the .d-prose tree so the
+   prose code rule never applies. Mirror the same chip aesthetic. */
+.m-lede code, .m-feat-body code {
+  font-family: var(--font-mono); font-size: 0.86em;
+  background: var(--code-bg); color: var(--fg);
+  padding: 1px 6px; border-radius: var(--r-xs);
+  border: 1px solid var(--border);
+}
+
+/* ==========================================================================
+   Mobile breakpoints — landing page (hero / features / code-showcase / footer)
+   ========================================================================== */
+
+@media (max-width: 1024px) {
+  .m-nav { padding: 14px 24px; gap: 24px; }
+  .m-hero { padding: 64px 24px 80px; }
+  .m-hero-inner { gap: 40px; }
+  .m-h1 { font-size: 56px; }
+  .m-features { padding: 64px 24px; }
+  .m-features-grid { grid-template-columns: repeat(2, 1fr); }
+  .m-h2 { font-size: 36px; }
+  .m-code-show { padding: 64px 24px 80px; }
+  .m-code-body { padding: 18px 22px; font-size: 13px; }
+  .m-footer { padding: 48px 24px 16px; }
+  .m-footer-inner { gap: 40px; }
+}
+
+@media (max-width: 720px) {
+  .m-nav { padding: 12px 16px; gap: 12px; }
+  .m-nav-links { display: none; }
+  .m-nav-actions { gap: 6px; }
+  .m-search { display: none; }
+
+  .m-hero { padding: 40px 16px 56px; }
+  .m-hero-inner { grid-template-columns: 1fr; gap: 28px; }
+  .m-h1 { font-size: clamp(38px, 8vw, 56px); line-height: 1.04; }
+  .m-lede { font-size: 16px; }
+  .m-hero-mascot { height: 280px; }
+  .m-hero-mascot img { width: 220px; }
+  .m-hero-ctas { gap: 10px; }
+  .m-btn { padding: 11px 18px; font-size: 14px; }
+
+  .m-features { padding: 48px 16px; }
+  .m-features-head { margin-bottom: 36px; }
+  .m-features-grid { grid-template-columns: 1fr; gap: 14px; }
+  .m-feat { padding: 22px; }
+  .m-feat-emoji { font-size: 28px; }
+  .m-feat-title { font-size: 18px; }
+  .m-h2 { font-size: 30px; }
+
+  .m-code-show { padding: 48px 16px 64px; }
+  .m-code-tabs { padding: 6px 8px; flex-wrap: wrap; }
+  .m-code-tab { padding: 6px 10px; font-size: 12px; }
+  .m-code-copy { margin-left: auto; }
+  .m-code-body { padding: 14px 16px; font-size: 12px; }
+
+  .m-footer { padding: 40px 16px 16px; }
+  .m-footer-inner { grid-template-columns: 1fr; gap: 32px; }
+  .m-footer-cols { grid-template-columns: repeat(2, 1fr); gap: 20px; }
+}
+
+@media (max-width: 460px) {
+  .m-h1 { font-size: clamp(34px, 9vw, 44px); }
+  .m-h2 { font-size: 26px; }
+  .m-hero-mascot { height: 220px; }
+  .m-hero-mascot img { width: 180px; }
+  .m-hero-meta { gap: 6px; }
+  .m-chip-light { font-size: 10.5px; padding: 3px 8px; }
+
+  .m-footer-cols { grid-template-columns: 1fr; gap: 20px; }
+}
