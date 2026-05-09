@@ -122,7 +122,7 @@ interface ScrollEvent {
 }
 ```
 
-### `interface BehaviorProfile` + `DEFAULT_BEHAVIOR_PROFILE`
+### `interface BehaviorProfile` + `DEFAULT_BEHAVIOR_PROFILE` + `DEFAULT_BEHAVIOR`
 
 ```ts
 interface BehaviorProfile {
@@ -138,9 +138,21 @@ const DEFAULT_BEHAVIOR_PROFILE: BehaviorProfile = {
   wpm: 65,
   scrollStyle: "smooth",
 };
+
+const DEFAULT_BEHAVIOR: BehaviorProfile = {
+  hand: "right",
+  tremor: 0.18,
+  wpm: 60,
+  scrollStyle: "smooth",
+};
 ```
 
-Mirrors `MatrixV1.behavior`. The matrix is the single source of truth (PLAN.md I-5); `Page.humanClick` etc. read `session.profile.behavior` and pass it through. `DEFAULT_BEHAVIOR_PROFILE` is the fallback when no matrix is supplied (e.g. unit tests).
+`BehaviorProfile` mirrors `MatrixV1.behavior`. The matrix is the single source of truth (PLAN.md I-5); `Page.humanClick` etc. read `session.profile.behavior` and pass it through.
+
+Two distinct default constants ship — they live on different contract surfaces:
+
+- **`DEFAULT_BEHAVIOR_PROFILE`** — the in-band fallback for matrix-derived sessions when neither a matrix nor `opts.profile` is supplied. Used by the synth functions (`synthesizeMouseTrajectory`, etc.) when called directly without an explicit profile (e.g. unit tests). `wpm: 65`.
+- **`DEFAULT_BEHAVIOR`** — the no-spoof-mode default. Used by `@mochi.js/core/page.ts` as the fallback when `Session.profile` is `null` (i.e. the session was launched / connected with `profile: null`) and per-page `behavior` is also unset. `wpm: 60`. Conservative-default; the brief pins the lower wpm so the no-spoof contract surface is independent from the matrix-default baseline.
 
 ### Lower-level helpers
 
@@ -208,11 +220,12 @@ for (const ev of events) {
 Package: @mochi.js/behavioral
 Public surface (verbatim from packages/behavioral/src/index.ts as of 2026-05-09):
 
-  VERSION                                            (const string, "0.1.0")
+  VERSION                                            (const string)
 
 Types:
   BehaviorProfile, Box, KeystrokeEvent, Point, ScrollEvent, TrajectoryEvent
-  DEFAULT_BEHAVIOR_PROFILE                           (const BehaviorProfile)
+  DEFAULT_BEHAVIOR_PROFILE                           (const BehaviorProfile — wpm: 65, in-band default)
+  DEFAULT_BEHAVIOR                                   (const BehaviorProfile — wpm: 60, no-spoof default for profile: null sessions)
 
 Synth functions + their option types:
   KeystrokeOptions

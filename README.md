@@ -25,7 +25,7 @@
 | | mochi | patchright | puppeteer-real-browser | nodriver | undetected-chromedriver |
 |---|---|---|---|---|---|
 | Relational `(profile, seed)` matrix | yes | no | no | no | no |
-| JA4-coherent `session.fetch` | yes (browser-routed) | no | no | no | no |
+| Chromium-native `session.fetch` | yes (browser-routed) | no | no | no | no |
 | Behavioral synthesis (Bezier+Fitts+jitter) | yes | no | mouse-helper only | mouse-only | no |
 | Single-runtime stack | yes (Bun) | yes (Node) | yes (Node) | yes (Python) | yes (Python) |
 | Probe-Manifest harness as CI gate | yes | no | no | no | no |

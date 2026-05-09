@@ -58,8 +58,8 @@ interface ProfileV1 {
   timezone: string;                        // IANA, "America/Los_Angeles"
   locale: string;                          // BCP-47, "en-US"
   languages: string[];
-  behavior: { hand: "left" | "right"; tremor: number; wpm: number; scrollStyle: "smooth" | "step" };
-  wreqPreset: string;                      // DEPRECATED in 0.7 — runtime no longer reads. Removed in 0.8.
+  behavior: { hand: "left" | "right"; tremor: number; wpm: number; scrollStyle: "smooth" | "stepped" | "inertial" };
+  wreqPreset: string;                      // DEPRECATED in 0.7 — runtime ignores; kept in the schema for back-compat.
   userAgent: string;
   uaCh: Record<string, string>;
   entropyBudget: { fixed: string[]; perSeed: string[] };
@@ -119,7 +119,7 @@ Three checks turn a raw capture into a committed profile:
 
 1. **Provenance verified.** `PROVENANCE.md` names the capturer, the machine model, the date. A maintainer reviews at PR time; CI cannot verify provenance.
 2. **FingerprintJS Pro `suspectScore <= 20`.** The capture session is run through FingerprintJS Pro; the suspectScore (a residual-trust metric) must be below 20. A residential IP, a real device, and a session with browsing history pre-warmed clear this.
-3. **Harness round-trip.** The capture produces a `baseline.manifest.json`. A subsequent `mochi.launch({ profile: <id>, seed: "harness-canary" })` followed by `capture(session, { fixturePath: ... })` produces a manifest that differs from the baseline by zero material entries (only `guid-class` and `intentional` allowed).
+3. **Harness round-trip.** The capture produces a `baseline.manifest.json`. A subsequent `mochi.launch({ profile: <id>, seed: "harness-canary" })` followed by `capture(session, { fixtureUrl: ... })` produces a manifest that differs from the baseline by zero material entries (only `guid-class` and `intentional` allowed).
 
 Profiles that fail any of these don't ship. The catalog is small on purpose. PLAN.md I-8 — honesty over marketing.
 
@@ -180,7 +180,9 @@ This page covers @mochi.js/profiles — the captured-baseline data fixtures.
 Key API symbols (source: packages/profiles/src/index.ts):
 - KNOWN_PROFILE_IDS: readonly string[]
 - type ProfileId = (typeof KNOWN_PROFILE_IDS)[number]
-- getProfile(id: ProfileId): Promise<ProfileV1>  // throws "not yet implemented" in v0.0.1; lands phase 0.4
+- getProfile(id: ProfileId): Promise<ProfileV1>  // loads data/<id>/profile.json; throws UnknownProfileIdError / ProfileBaselineMissingError
+- hasProfile(id: string): Promise<boolean>       // true when getProfile would succeed
+- UnknownProfileIdError, ProfileBaselineMissingError (error classes)
 - type ProfileV1 (re-exported from @mochi.js/consistency — that package is the canonical source)
 - VERSION: string
 

@@ -55,6 +55,8 @@ The binary lives in `~/.mochi/browsers/`. `mochi.launch()` auto-resolves it; you
 
 There is no native code to compile, no FFI bridge to install. `Session.fetch` rides Chromium's own network stack via CDP — install the browser, you have JA4-coherent fetch.
 
+> **Already have a Chromium running?** `mochi.connect({ wsEndpoint })` attaches to a CDP browser mochi did NOT spawn — BrowserBase, Browserless, a docker container you manage, a re-attach to a previously-launched session, or your own patched Chrome. Pass `profile: null` to skip the spoof entirely (mochi just drives the browser). See [Connect to an existing Chrome](/docs/guides/connect-existing-chrome) and [`connect`](/docs/api/core#function-connectopts-connectoptions-promisesession).
+
 ## 3. First session
 
 Create `hello-mochi.ts`:
@@ -192,7 +194,7 @@ const session = await mochi.launch({
 });
 try {
   const manifest = await capture(session, {
-    fixturePath: "tests/fixtures/probe-page.html",
+    fixtureUrl: "file:///absolute/path/to/tests/fixtures/probe-page.html",
   });
   await Bun.write("manifest.json", JSON.stringify(manifest, null, 2));
   console.log("manifest entries:", Object.keys(manifest).length);
@@ -306,7 +308,7 @@ Verified API symbols (source: packages/core/src/index.ts, packages/harness/):
 - page.localStorage.{get(opts?), set(items, opts?)}: Promise<...>
 - page.sessionStorage.{get(opts?), set(items, opts?)}: Promise<...>
 - page.grantAllPermissions(opts?): Promise<void>
-- capture(session, { fixturePath }): Promise<ProbeManifestV1>  // from @mochi.js/harness
+- capture(session, { fixtureUrl }): Promise<CapturedProbeManifest>  // from @mochi.js/harness
 
 Profile ids that work TODAY with real-device baselines (use these verbatim):
 - mac-m4-chrome-stable, mac-chrome-stable, mac-chrome-beta, windows-chrome-stable, linux-chrome-stable, mac-brave-stable

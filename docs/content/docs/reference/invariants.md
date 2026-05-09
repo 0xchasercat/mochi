@@ -12,7 +12,7 @@ See also: [Limits](/docs/reference/limits), [FAQ](/docs/reference/faq), [Compari
 
 ## I-1. No C++ work in this repo
 
-Ever. No Chromium patches, no V8 patches, no native-code work that touches the browser binary. Everything mochi does is solvable from (a) JS injection, (b) Bun-native CDP control, or (c) the Rust FFI networking layer. When a problem genuinely requires a C++ patch we document it in [Limits](/docs/reference/limits) and move on.
+Ever. No Chromium patches, no V8 patches, no native-code work that touches the browser binary. Everything mochi does is solvable from (a) JS injection or (b) Bun-native CDP control. When a problem genuinely requires a C++ patch we document it in [Limits](/docs/reference/limits) and move on.
 
 **In action:** the `bot.incolumitas.com` and `deviceandbrowserinfo.com` anti-debugger traps are marked as expected-failures in `packages/harness/src/conformance/stealth/expected-failures.ts`. The fix would be a Chromium source patch that disables `Debugger.enable`'s probe surface; we refuse it and document the ceiling.
 
@@ -20,13 +20,13 @@ Ever. No Chromium patches, no V8 patches, no native-code work that touches the b
 
 mochi never reaches for proprietary infrastructure, never branches on env-var trapdoors that light up paid features. It is fully open-source, MIT-licensed, and equally useful to a solo developer with a laptop and to an enterprise with infrastructure.
 
-**In action:** `mochi.launch()` accepts a `proxy` URL and a `geoConsistency` mode but never special-cases a vendor; the prebuilt cdylib platform list is driven by community demand, not a sponsorship; the [README acknowledgements](https://github.com/0xchasercat/mochi/blob/main/README.md#acknowledgements) credit upstream OSS work without a "powered-by-X" branding tier.
+**In action:** `mochi.launch()` accepts a `proxy` URL and a `geoConsistency` mode but never special-cases a vendor; `mochi.connect()` works equally well against BrowserBase, Browserless, your own Docker container, or a localhost Chromium with no vendor-specific shim; the [README acknowledgements](https://github.com/0xchasercat/mochi/blob/main/README.md#acknowledgements) credit upstream OSS work without a "powered-by-X" branding tier.
 
 ## I-3. Bun-only runtime
 
-Engines = `bun >= 1.1`. Node is not a target. Deno is not a target. We use Bun:FFI, `Bun.spawn`, Bun's WebSocket and file-descriptor APIs natively. The `package.json` engines field rejects non-Bun installs.
+Engines = `bun >= 1.1`. Node is not a target. Deno is not a target. We use `Bun.spawn`'s FD-passing, `Bun.SQL`, `Bun.serve`, and Bun's `Bun.file` / `Bun.write` ergonomics natively. The `package.json` engines field rejects non-Bun installs.
 
-**In action:** pipe-mode CDP (`--remote-debugging-pipe`) needs file descriptors 3+4 exposed to user code, which `Bun.spawn` does and Node's `child_process` doesn't. The JA4-coherent `session.fetch` calls a Rust cdylib via `bun:ffi` — Node would need a Neon / N-API / napi-rs wrapper. See [the FAQ](/docs/reference/faq#why-bun-only-why-not-node).
+**In action:** pipe-mode CDP (`--remote-debugging-pipe`) needs file descriptors 3 + 4 exposed to user code, which `Bun.spawn` does and Node's `child_process` doesn't. Cookie-jar persistence rides `Bun.SQL` for the on-disk format. The harness's local probe-page server is `Bun.serve`. `Bun.file` / `Bun.write` are the ergonomic backbone of every read/write path. See [the FAQ](/docs/reference/faq#why-bun-only-why-not-node).
 
 ## I-4. Stock Chromium binary
 

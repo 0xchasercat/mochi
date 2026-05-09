@@ -44,35 +44,35 @@ See [`concepts/profiles`](/docs/concepts/profiles) for the full schema and captu
 - **When to pick.** You want the macOS shape but don't care which Apple Silicon generation. Default for darwin/arm64 hosts in the auto-pick table when an M4-specific posture would be over-fitting.
 - **User base.** macOS users on stable Chrome — broad demographic. Note the catalog ships this as a darwin/arm64 capture; users on Intel Macs who want a strict arch match should hold for `mac-intel-chrome-stable` (placeholder until captured).
 - **Fingerprint trade-offs.** Less specific than `mac-m4-chrome-stable` — `gpu.renderer` is generic Apple GPU strings, fonts list is the macOS baseline, no chip-specific quirks.
-- **JA4 preset.** `chrome_131_macos`.
+- **JA4: Chromium-native** (real Chrome JA4 of the resolved version, no preset). `Session.fetch` rides Chromium's own network stack via CDP — same JA4 as `page.goto`.
 
 ### `mac-chrome-beta`
 
 - **When to pick.** The site you're hitting fingerprints by version-pinning ("only Chrome 132+"), or you're deliberately testing posture against a beta-channel UA.
 - **User base.** Tighter — Chrome beta channel macOS users are early-adopters / developers. Lower baseline volume; higher per-user trust.
 - **Fingerprint trade-offs.** UA carries the beta version range. `Sec-CH-UA-Full-Version-List` reflects the beta tip. Sites doing "ban known-vulnerable old versions" treat beta favorably.
-- **JA4 preset.** `chrome_<beta-floor>_macos`. The beta tip is pinned at capture time; check `profile.browser.minVersion` / `maxVersion` in `profile.json`.
+- **JA4: Chromium-native** (real Chrome beta JA4, no preset). The beta tip is pinned at capture time; check `profile.browser.minVersion` / `maxVersion` in `profile.json`.
 
 ### `windows-chrome-stable`
 
 - **When to pick.** US-broad consumer sites where Windows is the volume majority (~60% of stable Chrome traffic). Or you're running on a Windows host (`win32/x64`) and want to match.
 - **User base.** Massive — Chrome stable on Windows is the largest single Chrome user class. Anonymity in the crowd.
 - **Fingerprint trade-offs.** `gpu.renderer` is platform-typical Windows GPU strings (NVIDIA / Intel / AMD families), `display.dpr` skews to 1.0 (Windows users skew non-Retina), fonts list is the Windows baseline.
-- **JA4 preset.** `chrome_131_windows`.
+- **JA4: Chromium-native** (real Chrome JA4 of the resolved version, no preset).
 
 ### `linux-chrome-stable`
 
 - **When to pick.** You're running on a Linux server or container (`linux/x64`) and want to match. Or your target site has a strong developer / engineer / researcher demographic where Linux is over-represented (GitHub, HN, Stack Overflow, technical blogs, dev-tool dashboards).
 - **User base.** Smaller volume than Windows / macOS but real. Linux desktops at home, devcontainers, WSL-via-X-server, real Linux laptops. Massively over-represented in high-LTV technical segments.
 - **Fingerprint trade-offs.** `gpu.renderer` defaults to a SwiftShader / Mesa string under headless. `userAgent` is the `X11; Linux x86_64` shape. Fonts list is the Linux baseline (DejaVu, Liberation, etc.) — distinctive but real.
-- **JA4 preset.** `chrome_131_linux`.
+- **JA4: Chromium-native** (real Chrome JA4 of the resolved version, no preset).
 
 ### `mac-brave-stable`
 
 - **When to pick.** Privacy-aware sites that explicitly accommodate Brave (most modern e-commerce, fintech, dev-tooling). Or sites where the Tor/Brave/hardened-FF "privacy-conscious user" cluster is benign.
 - **User base.** Brave on macOS — small but stable. Distinguishable from Chrome via the `Sec-CH-UA` brand list (Brave brands appear) and a few Brave-specific quirks (Goog-shield headers stripped, fingerprinting-protection mode sometimes randomizes canvas).
 - **Fingerprint trade-offs.** Sites that don't see meaningful Brave traffic will treat the brand list as suspicious. Don't pick Brave for a site that tracks "browser brand" as a primary axis (some banking flows do this).
-- **JA4 preset.** Same network preset as Chrome `chrome_131_macos` — Brave's TLS is Chromium's, network-layer is identical to Chrome stable.
+- **JA4: Chromium-native** (real Brave JA4 — Brave's TLS stack IS Chromium's, so JA4 matches Chrome on macOS by construction).
 
 ## Decision tree
 

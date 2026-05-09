@@ -15,7 +15,7 @@ lastUpdated: 2026-05-09
 - `canvas/*.json` (where applicable) — precomputed canvas hash maps
 - `PROVENANCE.md` — capturer + machine + date
 
-The package's JS surface is intentionally tiny: a list of shipped IDs and a `getProfile()` placeholder that throws until a future minor wires real lookup. `mochi.launch({ profile: "<id>", seed })` resolves the id by reading `<repo-root>/packages/profiles/data/<id>/profile.json` directly via the harness's `loadProfile` (when running in-tree) or via `@mochi.js/core`'s placeholder profile (when the id doesn't match a shipped profile yet).
+The package's JS surface is intentionally tiny: a list of shipped IDs, the `getProfile(id) → ProfileV1` async lookup, the `hasProfile(id) → boolean` predicate, and two error classes. `mochi.launch({ profile: "<id>", seed })` resolves the id by calling `getProfile(id)` internally; if the id is in `KNOWN_PROFILE_IDS` but no captured baseline ships, the launcher catches `ProfileBaselineMissingError` and falls back to a synthesized placeholder profile.
 
 ## Installation
 
@@ -43,7 +43,7 @@ const KNOWN_PROFILE_IDS = [
 ] as const satisfies readonly string[];
 ```
 
-The IDs that ship in the v1 catalog. Pass any of these as `LaunchOptions.profile`. The first batch (`mac-m4-chrome-stable`, `linux-chrome-stable`, `windows-chrome-stable`) was captured natively on real hardware; the second cohort (`mac-chrome-stable`, `mac-chrome-beta`, `windows-chrome-stable`, `mac-brave-stable`) was imported from a real-user telemetry corpus (see PROVENANCE.md).
+The IDs that ship in the v1 catalog. Pass any of these as `LaunchOptions.profile`. **Six** of the eleven ship with a captured baseline (`profile.json` + `baseline.manifest.json` on disk): `linux-chrome-stable`, `mac-brave-stable`, `mac-chrome-beta`, `mac-chrome-stable`, `mac-m4-chrome-stable`, `windows-chrome-stable`. The other five (`mac-m2-chrome-stable`, `mac-m1-chrome-stable`, `mac-intel-chrome-stable`, `win11-chrome-stable`, `win11-edge-stable`) are declared in the catalog so the type system tracks them, but `getProfile` throws `ProfileBaselineMissingError` for those — `mochi.launch` catches the error and falls back to a synthesized placeholder profile.
 
 ### `type ProfileId`
 
@@ -57,29 +57,69 @@ A string-literal union of every shipped id. Use when you want autocomplete in yo
 
 Re-exported from `@mochi.js/consistency` through a generated shim. The canonical source-of-truth lives in `@mochi.js/consistency` (see [API → consistency](/docs/api/consistency)). Re-exported here so consumers of this package can type the JSON they load without pulling in the rule DAG.
 
-### `function getProfile(id: ProfileId): never`
+### `function getProfile(id: ProfileId): Promise<ProfileV1>`
 
 ```ts
-function getProfile(_id: ProfileId): never;
+function getProfile(id: ProfileId): Promise<ProfileV1>;
 ```
 
-**Phase 0.4 placeholder — currently throws.** Lands in a future minor as the canonical lookup function. For now, if you need to load a profile from disk programmatically:
+Resolve a profile by id, loading the captured `data/<id>/profile.json` baseline that ships with this package. Uses `Bun.file().json()` under the hood and works both in-source (running from `packages/profiles/src/`) and after publish (the `data/` dir ships as a sibling of `src/`).
+
+Throws:
+
+- `UnknownProfileIdError` if `id` isn't in `KNOWN_PROFILE_IDS` at all (defensive — callers using `as ProfileId` may sneak unknown values past the type system).
+- `ProfileBaselineMissingError` if `id` is known but no captured baseline ships in the package — callers may catch this and fall back to a placeholder synthesis. `mochi.launch` does exactly that internally.
 
 ```ts
-import { loadProfile } from "@mochi.js/harness";
-import { defaultProfilesDir } from "@mochi.js/harness";
-import { join } from "node:path";
+import { getProfile, ProfileBaselineMissingError } from "@mochi.js/profiles";
+import { deriveMatrix } from "@mochi.js/consistency";
 
-const profile = await loadProfile(
-  join(defaultProfilesDir(), "linux-chrome-stable"),
-);
+try {
+  const profile = await getProfile("linux-chrome-stable");
+  const matrix = deriveMatrix(profile, "harness");
+  console.log(matrix.userAgent);
+} catch (err) {
+  if (err instanceof ProfileBaselineMissingError) {
+    // Known catalog id, no baseline yet — fall back to a synthesized placeholder.
+  } else {
+    throw err;
+  }
+}
 ```
 
-The standard path — `mochi.launch({ profile: "linux-chrome-stable", seed: "x" })` — does this for you internally; you only need `loadProfile` when you want the `ProfileV1` object in hand (e.g. to derive a Matrix ahead of launch for a contract test).
+### `function hasProfile(id: string): Promise<boolean>`
+
+```ts
+function hasProfile(id: string): Promise<boolean>;
+```
+
+True when `getProfile(id)` would successfully load — i.e. the id is in `KNOWN_PROFILE_IDS` AND a captured baseline ships AND the file exists on disk. Useful for callers that want to decide between the real-baseline path and a placeholder synthesis without catching exceptions. Accepts `string`, not `ProfileId`, so unknown ids return `false` rather than narrowing.
+
+### `class UnknownProfileIdError extends Error`
+
+```ts
+class UnknownProfileIdError extends Error {
+  readonly name: "UnknownProfileIdError";
+  readonly id: string;
+}
+```
+
+Thrown by `getProfile` when `id` isn't in `KNOWN_PROFILE_IDS`. Carries the bad id on `.id` for diagnostics. The error message lists every known id verbatim so a typo's fix is in the stack trace.
+
+### `class ProfileBaselineMissingError extends Error`
+
+```ts
+class ProfileBaselineMissingError extends Error {
+  readonly name: "ProfileBaselineMissingError";
+  readonly id: ProfileId;
+}
+```
+
+Thrown by `getProfile` when `id` is a valid catalog entry but no captured baseline (`data/<id>/profile.json`) ships in the package — typically a declared-but-not-yet-captured device class. `mochi.launch` catches this internally and falls back to a synthesized placeholder profile so end users see a working session even on the placeholder ids.
 
 ### `const VERSION: string`
 
-The npm package version (`"0.0.1"` — claim release).
+The npm package version.
 
 ## Profile directory layout
 
@@ -115,13 +155,26 @@ const session = await mochi.launch({ profile: pickProfile(), seed: "x" });
 ### Load a `ProfileV1` for a contract test
 
 ```ts
-import { loadProfile, defaultProfilesDir } from "@mochi.js/harness";
+import { getProfile } from "@mochi.js/profiles";
 import { deriveMatrix } from "@mochi.js/consistency";
-import { join } from "node:path";
 
-const profile = await loadProfile(join(defaultProfilesDir(), "linux-chrome-stable"));
+const profile = await getProfile("linux-chrome-stable");
 const matrix = deriveMatrix(profile, "harness");
 console.log(matrix.userAgent);
+```
+
+### Probe whether a profile has a captured baseline
+
+```ts
+import { hasProfile, KNOWN_PROFILE_IDS } from "@mochi.js/profiles";
+
+for (const id of KNOWN_PROFILE_IDS) {
+  console.log(id, await hasProfile(id));
+}
+// linux-chrome-stable     true
+// mac-m4-chrome-stable    true
+// mac-m2-chrome-stable    false   ← placeholder; launcher synthesizes
+// ...
 ```
 
 ### Enumerate the catalog
@@ -136,9 +189,10 @@ for (const id of KNOWN_PROFILE_IDS) {
 
 ## Errors
 
-| Call | Behavior |
-| --- | --- |
-| `getProfile(id)` | Always throws at v0.0.1 with a "not yet implemented" message; lands in a future minor |
+| Call | When it fires | How to recover |
+| --- | --- | --- |
+| `getProfile(id)` → `UnknownProfileIdError` | `id` is not in `KNOWN_PROFILE_IDS` (typo, custom id) | Pick from `KNOWN_PROFILE_IDS`, or use an inline `ProfileV1` |
+| `getProfile(id)` → `ProfileBaselineMissingError` | `id` is in the catalog but no captured baseline ships yet | Catch and fall back to a placeholder, or pick a profile in the captured-baseline list |
 
 ## See also
 
@@ -151,33 +205,34 @@ for (const id of KNOWN_PROFILE_IDS) {
 
 <!-- llm-context:start
 Package: @mochi.js/profiles
-Public surface (verbatim from packages/profiles/src/index.ts as of 2026-05-09):
+Public surface (verbatim from packages/profiles/src/index.ts):
 
-  VERSION                                          (const "0.0.1")
+  VERSION                                          (const string)
   ProfileV1                                        (type, re-exported from @mochi.js/consistency via generated shim)
   KNOWN_PROFILE_IDS                                (readonly tuple of profile ids)
   ProfileId = (typeof KNOWN_PROFILE_IDS)[number]
-  getProfile(_id: ProfileId): never                — PLACEHOLDER, throws at v0.0.1, lands in a future minor
+  getProfile(id: ProfileId): Promise<ProfileV1>
+  hasProfile(id: string): Promise<boolean>
+  UnknownProfileIdError                            (class, thrown by getProfile for unknown ids)
+  ProfileBaselineMissingError                      (class, thrown by getProfile for declared-but-unsupplied baselines)
 
-Shipped IDs (verbatim):
+Shipped IDs (verbatim, 11 total):
   mac-m4-chrome-stable, mac-m2-chrome-stable, mac-m1-chrome-stable, mac-intel-chrome-stable,
   win11-chrome-stable, win11-edge-stable, linux-chrome-stable,
   mac-chrome-stable, mac-chrome-beta, windows-chrome-stable, mac-brave-stable
 
-Common LLM hallucinations (DO NOT USE):
-- `getProfile("linux-chrome-stable")` returns a Profile — it THROWS at v0.0.1; use `loadProfile` from @mochi.js/harness instead
-- `loadProfile(id)` exported here — NOT exported from @mochi.js/profiles; lives in @mochi.js/harness
-- `Profile` (without V1 suffix) — the type is `ProfileV1`, re-exported through a generated shim
-- `import profile from "@mochi.js/profiles/data/linux-chrome-stable"` — there is no per-id import path; load via `loadProfile`
-- `getBaseline(id)` / `getProvenance(id)` — not exposed; use `loadBaseline` from @mochi.js/harness
-- `KNOWN_PROFILE_IDS.includes(s)` returns boolean — true, but TS narrowing requires `s as ProfileId` because the tuple is a const-narrowed readonly array
-- A `getProfileSync(id)` — does not exist
-- `addProfile(id, profile)` / mutation API — profiles are file-system fixtures; mutate via mochi capture / mochi profiles import
+Of those 11, exactly 6 ship with a captured baseline:
+  linux-chrome-stable, mac-brave-stable, mac-chrome-beta, mac-chrome-stable,
+  mac-m4-chrome-stable, windows-chrome-stable
+The other 5 throw `ProfileBaselineMissingError` from getProfile; mochi.launch catches and falls back to a synthesized placeholder.
 
-To programmatically load a ProfileV1 today:
-  import { loadProfile, defaultProfilesDir } from "@mochi.js/harness";
-  import { join } from "node:path";
-  const p = await loadProfile(join(defaultProfilesDir(), "<id>"));
+Common LLM hallucinations (DO NOT USE):
+- `getProfile(id)` is sync — false; it returns Promise<ProfileV1>
+- `loadProfile(id)` exported here — NOT exported; use `getProfile`
+- `Profile` (without V1 suffix) — the type is `ProfileV1`, re-exported through a generated shim
+- `import profile from "@mochi.js/profiles/data/linux-chrome-stable"` — there is no per-id import path; use `getProfile`
+- `getBaseline(id)` / `getProvenance(id)` — not exposed in this package
+- `addProfile(id, profile)` / mutation API — profiles are file-system fixtures; mutate via `mochi capture` / `mochi profiles import`
 
 Cross-references:
 - /docs/concepts/profiles

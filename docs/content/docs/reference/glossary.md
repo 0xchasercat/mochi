@@ -72,7 +72,7 @@ See also: [FAQ](/docs/reference/faq), [Invariants](/docs/reference/invariants), 
 
 **R-001..R-048.** The rule-numbering convention for `@mochi.js/consistency`. R-001 through ~R-048 cover navigator, screen, UA-CH, WebGL, WebGPU, MediaDevices, Permissions, NetworkInformation, screen.orientation, matchMedia, storage.estimate, audio fingerprint (R-047), canvas fingerprint (R-048), etc. Cited in commit messages, task briefs, and limits entries.
 
-**Real-device profile.** A profile whose `baseline.manifest.json` was captured by `mochi capture` on real hardware. Six ship in v0.1. Distinct from the three placeholder entries (`mac-m2-chrome-stable`, `mac-intel-chrome-stable`, `win11-edge-stable`) which resolve to a generic synthesis.
+**Real-device profile.** A profile whose `baseline.manifest.json` was captured by `mochi capture` on real hardware. Six ship today. Distinct from the five placeholder entries (`mac-m2-chrome-stable`, `mac-m1-chrome-stable`, `mac-intel-chrome-stable`, `win11-chrome-stable`, `win11-edge-stable`) which resolve to a generic synthesis.
 
 **Relational consistency.** Invariant I-5. Every fingerprint surface mochi spoofs derives from a single `(profile, seed)` pair through the rule DAG. No surface is set independently. The opposite of randomization.
 

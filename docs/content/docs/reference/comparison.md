@@ -92,7 +92,7 @@ Source: per-tool audits. **Where mochi wins:** ~10× the rule count of the neare
 
 ## Probe-Manifest-as-CI-gate
 
-**Only mochi.** No peer treats fingerprint correctness as a CI gate. mochi runs `bun run harness:smoke` on every PR that touches `@mochi.js/{consistency,inject,net,profiles}` and refuses to merge on a material diff. See [Probe Manifest](/docs/concepts/probe-manifest) and PLAN.md §13.
+**Only mochi.** No peer treats fingerprint correctness as a CI gate. mochi runs `bun run harness:smoke` on every PR that touches `@mochi.js/{consistency,inject,core,profiles}` and refuses to merge on a material diff. See [Probe Manifest](/docs/concepts/probe-manifest) and PLAN.md §13.
 
 Patchright has unit tests; nodriver has a tiny `tests/` dir; undetected-chromedriver has none worth speaking of. None of them have a per-profile capture-baseline-and-diff system. The mochi harness is structural — Zero-Diff is a verdict, not a metric.
 
@@ -243,6 +243,6 @@ Cross-references:
 - Invariants: https://mochijs.com/docs/reference/invariants
 - FAQ: https://mochijs.com/docs/reference/faq
 - Consistency engine: https://mochijs.com/docs/concepts/consistency-engine
-- Network FFI: https://mochijs.com/docs/concepts/network-ffi
+- Network and JA4: https://mochijs.com/docs/concepts/stealth-philosophy#network-and-ja4
 - Probe Manifest: https://mochijs.com/docs/concepts/probe-manifest
 llm-context:end -->

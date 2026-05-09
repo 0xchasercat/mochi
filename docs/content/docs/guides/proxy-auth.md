@@ -34,7 +34,7 @@ const session = await mochi.launch({
 
 ## What's covered
 
-Both forms work for HTTP, HTTPS, SOCKS5, SOCKS4 proxies. Credentials are forwarded to the network FFI as well, so out-of-band `Session.fetch` traffic shares the same authenticated egress.
+Both forms work for HTTP, HTTPS, SOCKS5, SOCKS4 proxies. `Session.fetch` rides Chromium's own network stack via CDP, so it automatically shares the same `--proxy-server=` egress — no separate HTTP layer to wire creds into.
 
 ## Known gaps
 

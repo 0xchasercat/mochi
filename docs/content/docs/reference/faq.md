@@ -16,10 +16,10 @@ See also: [Limits](/docs/reference/limits), [Comparison](/docs/reference/compari
 
 Bun is invariant I-3 in [PLAN.md §2](https://github.com/0xchasercat/mochi/blob/main/PLAN.md). The reasons are concrete and load-bearing:
 
-- **Bun:FFI** binds the Rust `cdylib` for `session.fetch` directly — no Neon/napi-rs glue layer.
-- **`Bun.spawn`** exposes file descriptors 3 + 4 to user code, which is what `--remote-debugging-pipe` needs. Node's `child_process` doesn't — every Node-based stealth tool falls back to TCP, and a listening CDP port is a fingerprintable surface.
-- **`Bun.SQL`** powers the offline profile lookup and the `bun work` orchestrator without `better-sqlite3` native deps.
-- **`Bun.serve`** drives the harness fixture server with no zero-cost Node equivalent.
+- **`Bun.spawn`** exposes file descriptors 3 + 4 to user code, which is what `--remote-debugging-pipe` needs for the CDP pipe transport. Node's `child_process` doesn't — every Node-based stealth tool falls back to TCP, and a listening CDP port is a fingerprintable surface.
+- **`Bun.SQL`** powers the cookie-jar persistence layer without `better-sqlite3` native deps.
+- **`Bun.serve`** drives the harness probe-page fixture server with no zero-cost Node equivalent.
+- **`Bun.file` / `Bun.write`** are the ergonomic backbone of every read/write path — captured profiles, baseline manifests, expected-divergences, screenshots, the cookie jar.
 
 If you need a Node-runtime tool today, [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright) and [puppeteer-real-browser](https://github.com/zfcsoftware/puppeteer-real-browser) are the live options. See the [Comparison](/docs/reference/comparison#stack--runtime) for axis-by-axis differences.
 
@@ -57,7 +57,7 @@ If your threat model is "don't get traced," mochi is the wrong tool. It's open s
 
 ### **Why is my profile resolving to a placeholder?**
 
-Three IDs in the catalog are placeholders, not captures: `mac-m2-chrome-stable`, `mac-intel-chrome-stable`, `win11-edge-stable`. They resolve to a generic synthesis that's consistency-clean but doesn't match any specific captured device.
+Five IDs in the catalog are placeholders, not captures: `mac-m2-chrome-stable`, `mac-m1-chrome-stable`, `mac-intel-chrome-stable`, `win11-chrome-stable`, `win11-edge-stable`. They resolve to a generic synthesis that's consistency-clean but doesn't match any specific captured device — `getProfile(id)` throws `ProfileBaselineMissingError` for these and `mochi.launch` falls back to a synthesized placeholder.
 
 Six IDs are **real-device baselines** captured by `mochi capture` on real hardware, filtered by FingerprintJS Pro `suspectScore <= 20`: `mac-m4-chrome-stable`, `mac-chrome-stable`, `mac-chrome-beta`, `windows-chrome-stable`, `linux-chrome-stable`, `mac-brave-stable`. Use one of these for production. See [Profiles](/docs/concepts/profiles) and the [Migration page](/docs/reference/migration#profile-id-stability).
 
@@ -203,7 +203,7 @@ Cross-references:
 - Consistency engine: https://mochijs.com/docs/concepts/consistency-engine
 - Inject pipeline: https://mochijs.com/docs/concepts/inject-pipeline
 - Behavioral synth: https://mochijs.com/docs/concepts/behavioral-synth
-- Network FFI: https://mochijs.com/docs/concepts/network-ffi
+- Network and JA4: https://mochijs.com/docs/concepts/stealth-philosophy#network-and-ja4
 - Probe Manifest: https://mochijs.com/docs/concepts/probe-manifest
 - Profiles: https://mochijs.com/docs/concepts/profiles
 - Linux server: https://mochijs.com/docs/getting-started/linux-server

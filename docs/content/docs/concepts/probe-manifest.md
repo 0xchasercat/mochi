@@ -20,8 +20,8 @@ The manifest is JSON-Schema-validated. The schema lives at [`schemas/probe-manif
   "capturedAt": "2026-05-09T07:00:00Z",
   "profile": "mac-m4-chrome-stable",
   "seed": "user-12345",
-  "consistencyEngineVersion": "0.2.1",
-  "userAgent": "Mozilla/5.0 (Macintosh; ...) Chrome/131.0.0.0 Safari/537.36",
+  "consistencyEngineVersion": "0.2.0",
+  "userAgent": "Mozilla/5.0 (Macintosh; ...) Chrome/148.0.0.0 Safari/537.36",
   "navigator": { /* Object.fromEntries of every spec'd navigator key */ },
   "screen": { "width": 2560, "height": 1664, "dpr": 2, "colorDepth": 30, "pixelDepth": 30, "availWidth": 2560, "availHeight": 1664 },
   "webgl": { "unmaskedVendor": "...", "unmaskedRenderer": "...", "maxTextureSize": 16384, "extensions": [...] },
@@ -60,7 +60,7 @@ const session = await mochi.launch({
 });
 try {
   const manifest = await capture(session, {
-    fixturePath: "tests/fixtures/probe-page.html",
+    fixtureUrl: "file:///absolute/path/to/tests/fixtures/probe-page.html",
   });
   await Bun.write("manifest.json", JSON.stringify(manifest, null, 2));
 } finally {
@@ -114,7 +114,7 @@ The output shape:
   "verdict": "EQUIVALENT" | "DIVERGED",
   "counts": { "material": 0, "intentional": 3, "guidClass": 14 },
   "structuralMatchPct": 99.4,
-  "diffs": [ /* DiffEntry[] */ ]
+  "diffs": [ /* DiffEntry[] — { path, category, expected, actual, rule? } */ ]
 }
 ```
 
@@ -158,10 +158,11 @@ A manifest-diff CI gate is structurally different from the patch-based posture o
 This page covers the Probe Manifest schema, the @mochi.js/harness capture flow, and the Zero-Diff CI gate.
 
 Key API symbols (source: packages/harness/src/):
-- capture(session, opts: { fixturePath: string }): Promise<ProbeManifestV1>
-- diff(manifest: ProbeManifestV1, baseline: ProbeManifestV1, expectedDivergences: string[]): DiffReportV1
+- capture(session, opts?: { fixtureUrl?: string, probeTimeoutMs?: number, cwd?: string }): Promise<CapturedProbeManifest>
+- diff(manifest, baseline, expectedDivergences: string[]): DiffReportV1
 - type ProbeManifestV1 — schema at schemas/probe-manifest.schema.json
 - type DiffReportV1 = { reportVersion: "1", generatedAt: string, profile: string, verdict: "EQUIVALENT" | "DIVERGED", counts: { material: number, intentional: number, guidClass: number }, structuralMatchPct: number, diffs: DiffEntry[] }
+- type DiffEntry = { path: string, category: "guid-class" | "intentional" | "material", expected: JsonValue, actual: JsonValue, rule?: string }
 
 CLI surface (source: packages/cli/):
 - mochi capture --profile-id <id> --browser <path> --out <dir>

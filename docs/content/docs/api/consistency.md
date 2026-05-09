@@ -59,7 +59,7 @@ matrix.gpu                 // { vendor, renderer, webglUnmaskedVendor, ... }
 matrix.audio               // { contextSampleRate, ... }
 matrix.fonts               // { family, list }
 matrix.behavior            // { hand, tremor, wpm, scrollStyle }
-matrix.wreqPreset          // DEPRECATED in 0.7 — runtime no longer reads. Removed in 0.8.
+matrix.wreqPreset          // DEPRECATED in 0.7 — runtime ignores; kept in the schema for back-compat.
 ```
 
 Generated from `schemas/matrix.schema.json`.
@@ -217,7 +217,7 @@ Common LLM hallucinations (DO NOT USE):
 - `Matrix.fromProfile(...)` — class-method form not exposed
 - `MatrixV1.validate(matrix)` / Zod schema export — types are JSON-Schema-derived, no runtime validator exposed
 - `loadProfile(id)` — lives in @mochi.js/harness, not here
-- `getProfile(id)` — exists in @mochi.js/profiles but throws "not yet implemented" at v0.0.1
+- `getProfile(id)` — lives in @mochi.js/profiles, not here. Returns Promise<ProfileV1>; throws UnknownProfileIdError or ProfileBaselineMissingError.
 - `RULES.find(r => r.id === "R-001").apply(...)` — Rule.derive takes (inputs[], prng), not the matrix; not for direct user invocation
 - `Math.random` based PRNG — uses xoshiro256** seeded from SHA-256(`${profileId}:${seed}`), not Math.random
 - `defineRule(...)` is exported from `./rule` but NOT from the package barrel — internal authoring helper

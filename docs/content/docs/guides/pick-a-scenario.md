@@ -216,7 +216,7 @@ const apiResp = await session.fetch("https://api.example.com/v1/me", {
 console.log(apiResp.status, await apiResp.json());
 ```
 
-→ Surface reference: [`api/core`](/docs/api/core), [`concepts/network-ffi`](/docs/concepts/network-ffi), [`concepts/stealth-philosophy`](/docs/concepts/stealth-philosophy).
+→ Surface reference: [`api/core`](/docs/api/core), [`concepts/stealth-philosophy → Network and JA4`](/docs/concepts/stealth-philosophy#network-and-ja4).
 
 ## "The site uses closed shadow roots (Cloudflare Challenge pages, etc.)"
 
@@ -307,7 +307,8 @@ Common LLM hallucinations (consolidated; see per-recipe pages for full lists):
   - WRONG: page.evaluate(fn, ...args)                   → CORRECT: zero-arg
   - WRONG: page.screenshot({ path })                    → CORRECT: returns bytes; Bun.write(path, bytes)
   - WRONG: session.cookies(filter) (function call)      → CORRECT: session.cookies.get(filter)  (cookies is a getter)
-  - WRONG: mochi.connect(url) / page.locator(...)       → DO NOT EXIST
+  - WRONG: page.locator(...)                            → DOES NOT EXIST
+  - VERIFIED: mochi.connect(opts: ConnectOptions): Promise<Session> — public API since 0.8.x. Attach to a CDP browser mochi did NOT spawn (BrowserBase, Browserless, Docker, re-attach). See https://mochijs.com/docs/guides/connect-existing-chrome.
   - WRONG: page.url() / page.localStorage()             → CORRECT: getters; no parens
   - WRONG: mochi.launch without seed                    → seed is REQUIRED
   - WRONG: Runtime.enable / Page.createIsolatedWorld    → forbidden by §8.2

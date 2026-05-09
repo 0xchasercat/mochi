@@ -175,26 +175,31 @@ Render a one-line `verdict + counts` summary.
 
 ```ts
 interface DiffReportV1 {
-  profileId: string;
-  generatedAt: string;
-  verdict: Verdict;
-  counts: { guid: number; intentional: number; material: number; total: number };
-  entries: DiffEntry[];
-  structuralMatchPct: number;
+  reportVersion: "1";
+  generatedAt: string;            // ISO-8601
+  profile: string;                // ProfileV1.id this report targets
+  verdict: "EQUIVALENT" | "DIVERGED";
+  counts: {
+    material: number;             // non-allowlisted, non-intentional. PR-blocking.
+    intentional: number;          // listed in expected-divergences.json
+    guidClass: number;            // per-session GUID-class entropy that matched the allowlist regex
+  };
+  structuralMatchPct: number;     // % of fields whose paths AND values both matched
+  diffs: DiffEntry[];             // path-sorted, then category-sorted
 }
 
 interface DiffEntry {
-  path: string;
-  expected: JsonValue | undefined;
-  actual: JsonValue | undefined;
-  kind: "added" | "removed" | "changed";
-  category?: "guid-class" | "intentional" | "material";
+  path: string;                   // dotted path, e.g. "page.tls.ja4"
+  category: "guid-class" | "intentional" | "material";
+  expected: JsonValue;            // baseline value at this path (any JSON, including null)
+  actual: JsonValue;              // captured value at this path
+  rule?: string;                  // optional human-readable id of the categorization rule
 }
 
 type Verdict = DiffReportV1["verdict"]; // "EQUIVALENT" | "DIVERGED"
 ```
 
-Generated from `schemas/diff-report.schema.json`.
+Generated from `schemas/diff-report.schema.json`. `verdict === "EQUIVALENT"` iff `counts.material === 0`.
 
 ### `function match(pattern, path): boolean`
 

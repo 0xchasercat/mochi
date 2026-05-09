@@ -51,6 +51,8 @@ interface LaunchOptions {
 
 `headlessMode` defaults to `"new"` on Linux without a display, `"off"` everywhere else. See [Linux server deployment](/docs/getting-started/linux-server) for the full table.
 
+> **Connecting to an existing browser?** `mochi.connect({ wsEndpoint, profile, seed })` is the sibling entry point — attach to a CDP browser mochi did NOT spawn (BrowserBase, Browserless, Docker, re-attach). Pass `profile: null` to skip the spoof entirely. See [Connect to an existing Chrome](/docs/guides/connect-existing-chrome).
+
 ## Read the resolved Matrix
 
 `session.profile` exposes the resolved [`MatrixV1`](/docs/concepts/consistency-engine):
@@ -203,7 +205,7 @@ The harness drives a [Probe Manifest](/docs/concepts/probe-manifest) capture aga
 import { capture } from "@mochi.js/harness";
 
 const manifest = await capture(session, {
-  fixturePath: "tests/fixtures/probe-page.html",
+  fixtureUrl: "file:///absolute/path/to/tests/fixtures/probe-page.html",
 });
 await Bun.write("manifest.json", JSON.stringify(manifest, null, 2));
 ```

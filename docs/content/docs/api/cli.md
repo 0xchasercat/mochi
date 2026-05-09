@@ -54,10 +54,10 @@ Manages CfT installs under `~/.mochi/browsers/` (or `$MOCHI_BROWSERS_ROOT`). `mo
 ```sh
 mochi browsers install                         # latest stable, current platform
 mochi browsers install --channel beta
-mochi browsers install --version 131.0.6778.85 --sha256 e3b0c44...
+mochi browsers install --version 148.0.7778.97 --sha256 e3b0c44...
 mochi browsers list
 mochi browsers path                             # → /Users/.../mochi/browsers/.../chrome
-mochi browsers uninstall 130.0.6723.91 --yes
+mochi browsers uninstall 147.0.7390.66 --yes
 ```
 
 `MOCHI_CHROMIUM_PATH` overrides every other resolution rule when set.
@@ -285,7 +285,7 @@ The dispatch entry point. `bin.ts` calls `main(Bun.argv.slice(2))`. Returns the 
 | `MOCHI_E2E` | `harness` | `=1` enables E2E gates (otherwise tests skip) |
 | `MOCHI_ONLINE` | `harness` | `=1` enables network-gated probes (requires `MOCHI_E2E=1`) |
 | `MOCHI_PROXY` | `harness` | Proxy URL for `launchStealthSession` |
-| `MOCHI_NET_DYLIB_PATH` | `net` | Override the resolved cdylib path |
+| `MOCHI_PROBE_PAGE` | `harness`, `capture` | Absolute path to a `probe-page.html` fixture; overrides the repo-root walk |
 
 ## Common patterns
 

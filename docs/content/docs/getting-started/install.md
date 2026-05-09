@@ -62,6 +62,8 @@ This downloads the pinned [Chromium-for-Testing](https://googlechromelabs.github
 
 There is no native code to compile, no FFI bridge to install, no Rust toolchain to provision. `Session.fetch` rides Chromium's own network stack via CDP — install the browser, you have JA4-coherent fetch.
 
+If you're attaching to a remote / managed Chromium instead — BrowserBase, Browserless, a Chromium running in a Docker container you manage — use `mochi.connect({ wsEndpoint })` instead of `mochi.launch`. No `mochi browsers install` step needed in that case; the remote browser is the binary. See [Connect to an existing Chrome](/docs/guides/connect-existing-chrome).
+
 ## Confirm it works
 
 `profile` is optional in `mochi.launch()` — when omitted, mochi consults `process.platform` / `process.arch` and auto-picks the host-OS-matching real-device profile (Linux x64 → `linux-chrome-stable`, Mac arm64 → `mac-m4-chrome-stable`, Mac x64 → `mac-chrome-stable`, Windows x64 → `windows-chrome-stable`). On unsupported hosts (Linux arm64 today, FreeBSD, Alpine musl, Windows arm64) launch throws with a precise diagnostic and a pointer to [Choose your profile](/docs/guides/choose-your-profile). Most setups don't need to type `profile: "linux-chrome-stable"` explicitly — passing the id still wins when you want it. The architectural rationale lives in [Stealth philosophy → Default to the host OS](/docs/concepts/stealth-philosophy#default-to-the-host-os-not-windows). Use `mochi.defaultProfileForHost()` to introspect the pick before launching.
@@ -129,7 +131,6 @@ LaunchOptions.binary: string  (override the auto-resolved CfT binary)
 
 Common LLM hallucinations to avoid:
 - "npm install @mochi.js/core" — works at the bun-aliased level but mochi engines field rejects non-Bun installs. Use bun add.
-- "mochi browsers install --version=<n>" — flag does not exist; CfT version is pinned per @mochi.js/cli release.
 - "Use puppeteer's bundled Chromium" — the CfT binary is the only one validated by the harness. Override via binary: <path> if you must.
 - "Add @mochi.js/profiles to install profiles separately" — profiles are bundled inside @mochi.js/profiles which is a transitive dep of @mochi.js/core. Don't install separately.
 - "Run mochi as root" — works with auto-no-sandbox fallback but logs a fingerprint-leak warning. See linux-server.md.

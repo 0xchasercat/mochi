@@ -78,7 +78,7 @@ See also: [FAQ](/docs/reference/faq), [Comparison](/docs/reference/comparison), 
 
 **Status:** covered
 **Root cause (closed):** for tests / dev sessions, granting individual permissions one-by-one through `Browser.grantPermissions` is tedious.
-**Mitigation:** `page.grantAllPermissions()` (or with `{ origin? }`) wraps `Browser.grantPermissions` with the full `Browser.PermissionDescriptor` list (~25 entries: geolocation, camera, microphone, notifications, clipboard, sensors, …). Pairs with R-036: the Browser-domain grant is unconditional, but page-side `navigator.permissions.query()` still returns per-permission state per the matrix's spoofed defaults. Production users typically don't need this; tests do.
+**Mitigation:** `page.grantAllPermissions()` (or with `{ origin? }`) wraps `Browser.grantPermissions` with the full `Browser.PermissionDescriptor` list (39 entries on the Chromium 148 pin: geolocation, camera, microphone, notifications, clipboard, sensors, the XR cluster, …). Pairs with R-036: the Browser-domain grant is unconditional, but page-side `navigator.permissions.query()` still returns per-permission state per the matrix's spoofed defaults. Production users typically don't need this; tests do.
 **Affected probes:** none — DX feature.
 **User workaround:** none needed.
 
@@ -185,7 +185,7 @@ JS-side timezone is delivered via CDP `Emulation.setTimezoneOverride` per-target
 **Status:** covered
 **Root cause:** Chromium's `--proxy-server=` flag accepts the address but rejects inline credentials; the historical workaround (`--load-extension <proxy-auth-extension>`) is itself a fingerprint leak (`chrome.runtime` weirdness, observable extension ids). mochi instead attaches a CDP `Fetch.authRequired` listener (empty patterns, `handleAuthRequests: true`) — no extension, no `Runtime.enable`, no `Page.createIsolatedWorld`.
 **Affected probes:** none — feature gap closure.
-**Mitigation:** pass credentials either as an inline URL (`mochi.launch({ proxy: "http://user:pass@host:port" })`) or via the explicit `ProxyConfig` shape (`{ server, username, password }`). Both forms work for HTTP, HTTPS, SOCKS5, SOCKS4. Credentials are forwarded to the network FFI as well so out-of-band `Session.fetch` shares the same authenticated egress.
+**Mitigation:** pass credentials either as an inline URL (`mochi.launch({ proxy: "http://user:pass@host:port" })`) or via the explicit `ProxyConfig` shape (`{ server, username, password }`). Both forms work for HTTP, HTTPS, SOCKS5, SOCKS4. `Session.fetch` rides Chromium's own network stack via CDP, so it automatically shares the same `--proxy-server=` egress — no separate HTTP layer to wire creds into.
 **Known gaps:**
   - **proxy-PAC scripts** are NOT yet supported — there is no `--proxy-pac-url` plumbing today (separate task, low priority).
   - **SOCKS5 auth at the SOCKS handshake layer** depends on Chromium surfacing the challenge through `Fetch.authRequired`. Tested in modern Chrome stable; some older / patched builds may fail to fire the event cleanly.
@@ -292,7 +292,7 @@ Both paths share Chromium's network stack with `page.goto`, so JA4/JA3/H2 are re
 
 **Status:** documented surface
 
-The shipped profile catalog has six **real-device** baselines and three **placeholder** entries. The placeholders resolve to a generic synthesis that is consistency-clean but does not match any specific captured device. See [Profiles](/docs/concepts/profiles).
+The shipped profile catalog has six **real-device** baselines and five **placeholder** entries. The placeholders resolve to a generic synthesis that is consistency-clean but does not match any specific captured device. See [Profiles](/docs/concepts/profiles).
 
 **Real-device baselines (stable IDs — depend on these):**
 - `mac-m4-chrome-stable`
@@ -306,7 +306,9 @@ Each is filtered by FingerprintJS Pro `suspectScore <= 20` and validated by the 
 
 **Placeholders (do NOT depend on the IDs — they may flip to real captures or be renamed):**
 - `mac-m2-chrome-stable`
+- `mac-m1-chrome-stable`
 - `mac-intel-chrome-stable`
+- `win11-chrome-stable`
 - `win11-edge-stable`
 
 **Tracking:** v0.3+ — additional captures as the harvester corpus expands.

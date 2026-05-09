@@ -44,6 +44,24 @@ v1.0 is the production-ready inflection point. Targeted changes:
 
 Anything that would violate an invariant (PLAN.md §2 / I-1 through I-8) is by definition not in the v1.0 plan. Migrations across major-bumps will get a dedicated section here when they exist.
 
+## Upgrade from v0.7 → v0.8 (mochi.connect, profile: null, final wreqPreset removal)
+
+`@mochi.js/core@0.8.x` lands four user-visible changes. None break existing call sites; everything is additive at the API surface.
+
+**1. New: `mochi.connect(opts: ConnectOptions): Promise<Session>`.** Attach to a CDP browser mochi did NOT spawn — BrowserBase, Browserless, dockerised Chromium, re-attach, your own patched Chrome. Mirrors `puppeteer.connect`'s shape: takes a `wsEndpoint` (direct WebSocket URL) or a `browserURL` (HTTP base, mochi GETs `/json/version` to discover the WS URL). `session.close()` disconnects the WebSocket without killing the browser. See [Connect to an existing Chrome](/docs/guides/connect-existing-chrome) and [`api/core` → `function connect`](/docs/api/core#function-connectopts-connectoptions-promisesession).
+
+**2. New: `profile: null` no-spoof mode.** Both `mochi.launch` and `mochi.connect` now accept `profile: null` to skip the matrix derivation, the inject pipeline, and every CDP override (`Network.setUserAgentOverride`, `Emulation.setTimezoneOverride`, `Emulation.setLocaleOverride`, every `addScriptToEvaluateOnNewDocument`). `Session.profile` surfaces as `null`. Behavioral synth falls back to `DEFAULT_BEHAVIOR` from `@mochi.js/behavioral`. The right shape when you've layered your own stealth elsewhere (a patched binary, your own inject pipeline, a remote browser that already spoofs) or when you want to drive a bare browser through mochi's `Page` / `Session` API.
+
+**3. New: `DEFAULT_BEHAVIOR` constant.** Distinct from the longstanding `DEFAULT_BEHAVIOR_PROFILE`. `DEFAULT_BEHAVIOR` is the no-spoof-mode default (`wpm: 60`); `DEFAULT_BEHAVIOR_PROFILE` is the in-band default for matrix-derived sessions (`wpm: 65`). Both export from `@mochi.js/behavioral`.
+
+**4. `wreqPreset` final cleanup.** The runtime ignored the field starting in 0.7; in 0.8 the documentation is firmly on "deprecated, kept in the schema for back-compat only." The `@mochi.js/net` and `@mochi.js/net-rs` packages remain unpublished.
+
+**5. `ALL_BROWSER_PERMISSIONS` retuned for Chromium 148** (the retune landed in 0.7; 0.8.1 confirmed the CfT pin to `148.0.7778.97`). 39 entries.
+
+**6. New: `connectWebSocketCdp` + `WebSocketCdpAdapter` building blocks** for tools that want to drive the WebSocket transport directly without the full `Session` lifecycle.
+
+**7. New: `EXPLICIT_PROFILE_IDS`** const — the six captured-baseline profile IDs, exported publicly so downstream tooling can render the same list verbatim.
+
 ## Upgrade from v0.6 → v0.7 (Session.fetch routes through Chromium)
 
 `@mochi.js/core@0.7.0` drops the Rust `wreq` HTTP layer. `Session.fetch` now routes through Chromium itself via CDP — JA4/JA3/H2 are real Chrome by definition because Chromium is the client. The two npm packages that wrapped wreq (`@mochi.js/net`, `@mochi.js/net-rs`) are deprecated and no longer published.
@@ -88,7 +106,7 @@ The fix is in v0.1.1+ via `scripts/rewrite-workspace-deps.ts` (publish-time pre-
 bun add @mochi.js/core@latest @mochi.js/cli@latest
 ```
 
-Affected packages bumped to `0.1.1`: `@mochi.js/core`, `@mochi.js/cli`, `@mochi.js/inject`, `@mochi.js/core`, `@mochi.js/behavioral`, `@mochi.js/harness`, `@mochi.js/profiles`. `@mochi.js/consistency` was a leaf package with no internal deps and remained at `0.1.0`.
+Affected packages bumped to `0.1.1`: `@mochi.js/core`, `@mochi.js/cli`, `@mochi.js/inject`, `@mochi.js/challenges`, `@mochi.js/behavioral`, `@mochi.js/harness`, `@mochi.js/profiles`. `@mochi.js/consistency` was a leaf package with no internal deps and remained at `0.1.0`.
 
 ## Profile-ID stability
 
@@ -106,10 +124,12 @@ These are captured by `mochi capture` on real hardware, filtered by FingerprintJ
 
 **Placeholders (do NOT depend on these IDs — they may flip to real captures or be renamed):**
 - `mac-m2-chrome-stable`
+- `mac-m1-chrome-stable`
 - `mac-intel-chrome-stable`
+- `win11-chrome-stable`
 - `win11-edge-stable`
 
-These resolve to a generic synthesis that's consistency-clean but doesn't match any specific captured device. When a real Mac M2 / Mac Intel / Edge capture lands in the harvester corpus, the placeholder ID may either (a) become a real capture under the same ID, or (b) be renamed (e.g. `mac-m2-air-chrome-stable` if the captured machine is specifically a Mac M2 Air, leaving `mac-m2-chrome-stable` as the new placeholder for the device class).
+These resolve to a generic synthesis that's consistency-clean but doesn't match any specific captured device. When a real Mac M2 / Mac M1 / Mac Intel / Win11 / Edge capture lands in the harvester corpus, the placeholder ID may either (a) become a real capture under the same ID, or (b) be renamed (e.g. `mac-m2-air-chrome-stable` if the captured machine is specifically a Mac M2 Air, leaving `mac-m2-chrome-stable` as the new placeholder for the device class).
 
 If you want stability today, **use the six real-device IDs**. Track new captures via the [Limits](/docs/reference/limits) page.
 

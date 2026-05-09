@@ -58,11 +58,12 @@ The IIFE layout is fixed:
 2. Banner comment block (engine version, profile id, seed — useful in DevTools dumps; deliberately omits `derivedAt`).
 3. `'use strict';`
 4. Runtime helpers — `defineProperty` cloak + `toString` cloak.
-5. Spoof modules, each wrapped in `try { /* mochi:<name> */ ... } catch (_e) {}` so a single module's failure can't take down the rest:
+5. Spoof modules (18 total), each wrapped in `try { /* mochi:<name> */ ... } catch (_e) {}` so a single module's failure can't take down the rest:
    - `navigator`, `screen`, `webgl`, `client-hints`, `timing`, `bot-globals`, `fonts`
    - `media-devices`, `network-info`, `permissions`, `screen-orientation`, `webgpu`
    - `window-chrome`, `plugins`, `mouse-event-screen`
    - `audio-fingerprint`, `canvas-fingerprint`
+   - `performance-timing` — `PerformanceNavigationTiming` `dns` / `tcp` / `secureConnectionStart` / `nextHopProtocol` overrides. Closes the pipe-mode-launch zero-handshake leak (cold loads under `--remote-debugging-pipe` would emit `domainLookupStart === domainLookupEnd`, `connectStart === connectEnd`, `nextHopProtocol === ""` — a documented headless tell).
 6. Self-delete tail — sweeps `__mochi*` keys off `window` (belt-and-braces; the modules don't actually leak there).
 7. IIFE epilogue — `})();`
 

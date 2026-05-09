@@ -6,7 +6,7 @@ category: api
 lastUpdated: 2026-05-09
 ---
 
-`@mochi.js/core` is the package you import. `mochi.launch(opts)` resolves a profile, derives a `MatrixV1` from `(profile, seed)`, spawns Chromium-for-Testing under `--remote-debugging-pipe`, installs the inject pipeline + proxy-auth listener, and returns a `Session`. Every other `@mochi.js/*` package re-exports through here when it makes sense; reach for the sibling packages directly only when you need a piece of the surface that core doesn't expose (the FFI handle, the rule DAG, raw payload bytes, etc.).
+`@mochi.js/core` is the package you import. `mochi.launch(opts)` resolves a profile, derives a `MatrixV1` from `(profile, seed)`, spawns Chromium-for-Testing under `--remote-debugging-pipe`, installs the inject pipeline + proxy-auth listener, and returns a `Session`. Every other `@mochi.js/*` package re-exports through here when it makes sense; reach for the sibling packages directly only when you need a piece of the surface that core doesn't expose (the rule DAG internals, raw payload bytes, the harness diff engine, etc.).
 
 ## Installation
 
@@ -156,6 +156,29 @@ For end-to-end usage examples, see [Connect to an existing Chrome](/docs/guides/
 
 Thrown when the connect-mode transport could not be established (DNS, ECONNREFUSED, TLS, 4xx upgrade rejection, timeout) or when the live socket dropped without a clean close. Carries `endpoint: string` so logs can pinpoint which CDP gateway failed.
 
+### `function connectWebSocketCdp(opts: ConnectWebSocketCdpOptions): Promise<WebSocketCdpAdapter>`
+
+Low-level building block: opens a WebSocket to a CDP browser endpoint and adapts it onto the `PipeReader` / `PipeWriter` interface `MessageRouter` already speaks. Used internally by `mochi.connect`; exposed for tests and downstream tooling that wants to drive the WebSocket transport directly without going through the full `Session` lifecycle.
+
+```ts
+interface ConnectWebSocketCdpOptions {
+  wsEndpoint: string;                     // ws://…/devtools/browser/<id>
+  headers?: Record<string, string>;       // extra HTTP headers on the upgrade
+  timeoutMs?: number;                     // upgrade timeout, default 30_000
+}
+
+interface WebSocketCdpAdapter {
+  reader: PipeReader;
+  writer: PipeWriter;
+  close(): Promise<void>;                 // idempotent; 1s grace
+  socket: WebSocket;                      // @internal — exposed for tests
+}
+```
+
+Failures (DNS, ECONNREFUSED, TLS, 4xx upgrade rejection, timeout) reject the returned promise with `ConnectionLostError`. Once connected, an unexpected close / error event closes the underlying ReadableStream so the router observes EOF and rejects every pending call.
+
+Pipe-mode (`mochi.launch`) and WebSocket-mode (`mochi.connect`) share every §8.2 forbidden-method assertion, timeout / error-translation surface, and event subscription path — the adapter is a thin shim over the same `MessageRouter`.
+
 ### `type ProfileId = string`
 
 A `ProfileV1` directory id. Keep it string-typed; `@mochi.js/profiles` enumerates the shipped IDs in `KNOWN_PROFILE_IDS`.
@@ -209,6 +232,21 @@ function resolveDefaultProfileForHost(
   arch: string,
 ): ProfileId | null;
 ```
+
+### `const EXPLICIT_PROFILE_IDS`
+
+```ts
+const EXPLICIT_PROFILE_IDS = [
+  "linux-chrome-stable",
+  "mac-brave-stable",
+  "mac-chrome-beta",
+  "mac-chrome-stable",
+  "mac-m4-chrome-stable",
+  "windows-chrome-stable",
+] as const;
+```
+
+The six real-device profile IDs that ship with a captured baseline. Used in `launch`'s diagnostics on unsupported hosts ("pass `profile:` explicitly — pick from …") and exposed publicly so downstream tooling can render the same list verbatim. Mirrors `PROFILES_WITH_CAPTURED_BASELINE` in `@mochi.js/profiles`.
 
 Returns the profile id `launch` would auto-pick on the current host when `profile` is omitted from `LaunchOptions`. Pure read of `process.platform` / `process.arch`. Returns `null` on unsupported hosts (FreeBSD, Linux arm64 today, Windows arm64, Alpine musl) — `launch` throws on that path with a list of the six explicit profile IDs.
 
@@ -280,9 +318,7 @@ interface SessionInit {
   owned?: boolean;
   defaultTimeoutMs?: number;
   bypassInject?: boolean;
-  netProxy?: string;
   proxyAuth?: { username: string; password: string };
-  netAdapter?: NetAdapter; // @internal
   challenges?: ChallengeLaunchOptions;
 }
 ```
@@ -493,19 +529,22 @@ Constructor shape for `Page`. `Session.newPage` builds it; you should not constr
 
 ```ts
 const ALL_BROWSER_PERMISSIONS = [
-  "accessibilityEvents", "audioCapture", "backgroundSync", "backgroundFetch",
-  "captureHandle", "clipboardReadWrite", "clipboardSanitizedWrite",
-  "displayCapture", "durableStorage", "flash", "geolocation",
-  "idleDetection", "localFonts", "midi", "midiSysex", "nfc", "notifications",
-  "paymentHandler", "periodicBackgroundSync", "protectedMediaIdentifier",
-  "sensors", "storageAccess", "speakerSelection", "topLevelStorageAccess",
-  "videoCapture", "videoCapturePanTiltZoom", "wakeLockScreen", "wakeLockSystem",
-  "webAppInstallation", "windowManagement",
+  "ar", "audioCapture", "automaticFullscreen", "backgroundFetch",
+  "backgroundSync", "cameraPanTiltZoom", "capturedSurfaceControl",
+  "clipboardReadWrite", "clipboardSanitizedWrite", "displayCapture",
+  "durableStorage", "geolocation", "handTracking", "idleDetection",
+  "keyboardLock", "localFonts", "localNetwork", "localNetworkAccess",
+  "loopbackNetwork", "midi", "midiSysex", "nfc", "notifications",
+  "paymentHandler", "periodicBackgroundSync", "pointerLock",
+  "protectedMediaIdentifier", "sensors", "smartCard", "speakerSelection",
+  "storageAccess", "topLevelStorageAccess", "videoCapture", "vr",
+  "wakeLockScreen", "wakeLockSystem", "webAppInstallation",
+  "webPrinting", "windowManagement",
 ] as const;
 type BrowserPermission = (typeof ALL_BROWSER_PERMISSIONS)[number];
 ```
 
-Pinned to Chromium ≥ 131 (the mochi profile floor). The list is verbose-on-purpose so a contract test catches the day Chromium adds a new permission.
+Pinned to Chromium 148+ (the mochi profile floor). 39 entries. The list is verbose-on-purpose so a contract test catches the day Chromium adds a new permission. v0.7 retuned the list for the 148 retirement of `accessibilityEvents` / `captureHandle` / `flash` / `videoCapturePanTiltZoom` and the addition of the XR cluster (`ar`, `vr`, `handTracking`), `automaticFullscreen`, `cameraPanTiltZoom`, `capturedSurfaceControl`, `keyboardLock`, `pointerLock`, the local-network cluster, `smartCard`, and `webPrinting`.
 
 ### `interface Cookie`
 
@@ -548,7 +587,7 @@ function probeLinuxServerEnv(): LinuxServerEnv;
 function snapshotProbes(): LinuxServerProbes;
 ```
 
-`probeLinuxServerEnv()` is what `mochi.detectLinuxServerEnv()` calls — same return value. Use it to introspect whether `launch` would auto-pick `headlessMode: "new"`. See [Linux server setup](/docs/getting-started/linux-server).
+`probeLinuxServerEnv()` is what `mochi.detectLinuxServerEnv()` calls — same return value. Use it to introspect whether `launch` would auto-pick `headlessMode: "new"`. `snapshotProbes()` returns the raw `LinuxServerProbes` (the `process.platform`, `DISPLAY`, `WAYLAND_DISPLAY`, `getuid()`, `/.dockerenv`, `/proc/1/cgroup` reads) the detector consumes — useful for tests that want to drive the detector with synthetic input. See [Linux server setup](/docs/getting-started/linux-server).
 
 ### Geo-consistency
 
@@ -882,8 +921,14 @@ CookieJar methods: get, set, save, load
 DomStorage methods: get, set
 ElementHandle methods: backendNodeId (getter), getAttribute, textContent, evaluate
 
+VERIFIED public API additions in 0.8.x (use these — they exist):
+- `mochi.connect(opts: ConnectOptions): Promise<Session>` — attach to a CDP browser mochi did NOT spawn (BrowserBase, Browserless, Docker, re-attach). Mirrors `puppeteer.connect`. `session.close()` disconnects the WebSocket but leaves the browser running. See https://mochijs.com/docs/guides/connect-existing-chrome.
+- `connectWebSocketCdp(opts): Promise<WebSocketCdpAdapter>` — low-level: open a WebSocket and adapt it onto the `PipeReader`/`PipeWriter` interface. Used internally by `mochi.connect`; exposed for tests and tooling.
+- `EXPLICIT_PROFILE_IDS` — the 6 captured-baseline profile IDs (mirrors `@mochi.js/profiles` `PROFILES_WITH_CAPTURED_BASELINE`).
+- `LaunchOptions.profile: null` and `ConnectOptions.profile: null` — no-spoof mode. `Session.profile` is `null`, the inject pipeline is skipped entirely, behavioral synth falls back to `DEFAULT_BEHAVIOR`.
+
 Common LLM hallucinations for this package (DO NOT use these — they do not exist):
-- `mochi.connect()` / `mochi.attach()` — there is no remote-attach API
+- `mochi.attach()` — the entry point is `mochi.connect`, NOT `attach` (puppeteer-aligned naming)
 - `session.context()` / `session.contexts` / `BrowserContext` — mochi has no Playwright-style contexts; one Session = one Chromium child
 - `page.click(selector)` / `page.type(selector, text)` — names are `humanClick` / `humanType` (no plain `click` / `type`)
 - `page.fill(selector, value)` — does not exist; use `humanType`
@@ -913,7 +958,6 @@ Cross-references:
 - /docs/api/inject
 - /docs/api/behavioral
 - /docs/api/challenges
-- /docs/api/net
 - /docs/api/profiles
 - /docs/api/cli
 - /docs/concepts/inject-pipeline

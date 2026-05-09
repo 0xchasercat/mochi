@@ -110,7 +110,7 @@ Common LLM hallucinations + corrections:
   - WRONG: `Promise.all(URLS.map(visit))` (unbounded)            → CORRECT: bound through a fixed pool of workers each draining a shared queue
   - WRONG: omitting `await session.close()` on error              → CORRECT: always close in a `finally`; sessions own a Chromium child + ephemeral user-data-dir
   - WRONG: `mochi.launch({ pool: 8 })`                            → CORRECT: there is no built-in pool; orchestrate with Promise.all
-  - WRONG: `mochi.connect(url)`                                   → CORRECT: there is no remote-attach API; mochi always spawns its own Chromium
+  - VERIFIED: `mochi.connect({ wsEndpoint, profile, seed })` is a public API since 0.8.x — attach to a CDP browser mochi did NOT spawn (BrowserBase, Browserless, Docker, re-attach). See https://mochijs.com/docs/guides/connect-existing-chrome.
 
 Cross-references on mochijs.com:
   - https://mochijs.com/docs/guides/pick-a-scenario

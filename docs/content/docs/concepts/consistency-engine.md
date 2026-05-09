@@ -31,8 +31,8 @@ interface ProfileV1 {
   timezone: string;              // IANA, e.g. "America/Los_Angeles"
   locale: string;                // BCP-47, e.g. "en-US"
   languages: string[];
-  behavior: { hand: "left" | "right"; tremor: number; wpm: number; scrollStyle: "smooth" | "step" };
-  wreqPreset: string;            // DEPRECATED in 0.7 — runtime no longer reads. Removed in 0.8.
+  behavior: { hand: "left" | "right"; tremor: number; wpm: number; scrollStyle: "smooth" | "stepped" | "inertial" };
+  wreqPreset: string;            // DEPRECATED in 0.7 — runtime ignores; kept in the schema for back-compat.
   userAgent: string;
   uaCh: Record<string, string>;  // every Sec-CH-UA-* header value
   entropyBudget: { fixed: string[]; perSeed: string[] };

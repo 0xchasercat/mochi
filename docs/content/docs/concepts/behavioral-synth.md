@@ -8,7 +8,7 @@ lastUpdated: 2026-05-09
 
 A cursor that teleports in a straight line to a button and clicks it is a fingerprint signal as obvious as a wrong UA string. mochi's `page.humanClick` / `page.humanType` / `page.humanScroll` derive from biomechanical models — Bezier paths with overshoot+correction, Fitts movement times, lognormal digraph delays, autocorrelated Gaussian jitter — all parameterized off the matrix's `behavior` block (`hand`, `tremor`, `wpm`, `scrollStyle`).
 
-This is the third pillar of mochi's stealth philosophy alongside [relational consistency](/docs/concepts/consistency-engine) and [JA4 coherence](/docs/concepts/ja4-coherence). The same `(profile, seed)` that locks the fingerprint Matrix also seeds the [`@mochi.js/behavioral`](https://github.com/0xchasercat/mochi/tree/main/packages/behavioral) PRNG — one deterministic universe across consistency *and* behavior. PLAN.md §11.
+This is the third pillar of mochi's stealth philosophy alongside [relational consistency](/docs/concepts/consistency-engine) and [JA4 coherence via Chromium-native networking](/docs/concepts/stealth-philosophy#network-and-ja4). The same `(profile, seed)` that locks the fingerprint Matrix also seeds the [`@mochi.js/behavioral`](https://github.com/0xchasercat/mochi/tree/main/packages/behavioral) PRNG — one deterministic universe across consistency *and* behavior. PLAN.md §11.
 
 ## The pure-data principle
 
@@ -117,7 +117,7 @@ const events = synthesizeScroll({
 // events: ScrollEvent[] = [{ tMs, deltaY }, ...]
 ```
 
-The `humanScroll` flow dispatches `Input.dispatchMouseEvent` of type `mouseWheel` per frame at the current cursor position. `scrollStyle: "step"` profiles use a quantised wheel-tick step shape; `"smooth"` uses the inertial curve.
+The `humanScroll` flow dispatches `Input.dispatchMouseEvent` of type `mouseWheel` per frame at the current cursor position. `scrollStyle: "stepped"` profiles cap each frame to a single 100px wheel notch; `"smooth"` and `"inertial"` are treated identically (the inertial curve IS the smooth curve).
 
 ## Per-profile parameterization
 
@@ -125,10 +125,10 @@ The matrix's `behavior` block is the canonical source (PLAN.md I-5 — every beh
 
 ```ts
 type BehaviorProfile = {
-  hand: "left" | "right";        // dominant hand — affects digraph hand classification
-  tremor: number;                // 0.0..1.0 — perpendicular jitter scale on Bezier paths
-  wpm: number;                   // typing speed — drives the lognormal digraph means
-  scrollStyle: "smooth" | "step"; // inertial curve vs quantised wheel tick
+  hand: "left" | "right";                         // dominant hand — affects digraph hand classification
+  tremor: number;                                 // 0.0..1.0 — perpendicular jitter scale on Bezier paths
+  wpm: number;                                    // typing speed — drives the lognormal digraph means
+  scrollStyle: "smooth" | "stepped" | "inertial"; // smooth/inertial = inertial curve; stepped = quantised wheel-tick
 };
 ```
 
@@ -171,7 +171,7 @@ Key API symbols on @mochi.js/behavioral (source: packages/behavioral/src/index.t
 - cdpKeyFor(char: string): { key: string, code: string, windowsVirtualKeyCode?: number, text?: string }
 - handFor(char: string): "left" | "right"
 - DEFAULT_BEHAVIOR_PROFILE: BehaviorProfile
-- type BehaviorProfile = { hand: "left" | "right", tremor: number, wpm: number, scrollStyle: "smooth" | "step" }
+- type BehaviorProfile = { hand: "left" | "right", tremor: number, wpm: number, scrollStyle: "smooth" | "stepped" | "inertial" }
 - type Point = { x: number, y: number }
 - type Box = { x: number, y: number, width: number, height: number }
 - type TrajectoryEvent = { tMs: number, x: number, y: number }

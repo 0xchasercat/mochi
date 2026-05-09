@@ -54,12 +54,12 @@ try {
 
 ## What's happening here
 
-- **`proxy: "http://user:pass@host:port"`** — `mochi.launch` runs the URL through `parseProxyUrl`. Credentials are stripped from the `--proxy-server=` flag (Chromium rejects inline auth there) and re-installed via a CDP `Fetch.authRequired` listener that answers HTTP, HTTPS, SOCKS5, and SOCKS4 challenges. The full URL (with creds) is also forwarded to `@mochi.js/core` so `Session.fetch` traffic shares the same authenticated egress.
+- **`proxy: "http://user:pass@host:port"`** — `mochi.launch` runs the URL through `parseProxyUrl`. Credentials are stripped from the `--proxy-server=` flag (Chromium rejects inline auth there) and re-installed via a CDP `Fetch.authRequired` listener that answers HTTP, HTTPS, SOCKS5, and SOCKS4 challenges. `Session.fetch` rides Chromium's own network stack via CDP, so it automatically shares the same `--proxy-server=` egress — there's no parallel HTTP layer to wire creds into.
 - **Or `proxy: { server, username?, password? }`** — explicit `ProxyConfig` shape. Useful when credentials contain reserved characters that don't percent-encode cleanly.
 - **`geoConsistency: "privacy-fallback"` (default).** Before the first navigation, mochi probes the proxy's exit IP through the session's Chromium-native network stack, so the geo-lookup service sees the same JA4 / headers as user traffic. If `tzOffsetMinutes(matrix.timezone)` doesn't agree with the IP's timezone, the matrix's `timezone` is overridden to UTC and `locale` to `en-US`. The session prints a `[mochi] geoConsistency=privacy-fallback: privacy-fallback applied` warning — that's the matrix being adjusted, not an error.
 - **`session.profile`** — the *resolved* `MatrixV1` after geo reconciliation. Read `session.profile.timezone` to confirm what the page will see; it may differ from the input profile when `privacy-fallback` or `auto-correct` triggered.
 - **`GeoMismatchError`** — thrown when `geoConsistency: "strict"` AND the proxy's exit IP doesn't agree with the matrix. Probe failure (network blip) does NOT throw under `strict` — only a real mismatch does. The error carries `.matrix.{timezone, locale}`, `.geo.{country, timezone, ip}`, and `.reason`.
-- **`session.fetch(url, init?)`** — out-of-band HTTP through the scratch frame. The wire fingerprint matches the session's Chromium-native network stack so the side-channel API call is JA4-coherent with the browser navigation. Forwards the proxy URL automatically.
+- **`session.fetch(url, init?)`** — out-of-band HTTP through the same Chromium that drives `page.goto` (`Network.loadNetworkResource` for simple GETs; a scratch-frame `page.evaluate("fetch(url, init)")` otherwise). The wire fingerprint is real Chrome by definition because Chromium is the client; egress shares the `--proxy-server=` flag automatically.
 
 ## Things that go wrong
 
@@ -67,7 +67,7 @@ try {
 - **`geoConsistency: "off"` blindly.** `"off"` skips the probe entirely — the network round-trip cost goes away but you keep the IP-vs-timezone leak. Use it for offline tests or when the geo-probe service is rate-limited, not as a "make the warning stop" hack.
 - **`geoConsistency: "auto-correct"` over a sketchy proxy.** Auto-correct trusts mochi's IP-derived defaults over your declared profile. If your proxy provider rotates exit IPs mid-session, the matrix you started with isn't the matrix the page sees later. `"privacy-fallback"` is the safer default for stable identity.
 - **Mismatched proxy creds in URL vs `ProxyConfig`.** `proxy: { server: "http://baduser:badpass@host:port", username: "good", password: "good" }` — explicit `username`/`password` win. The URL credentials are silently overridden. Pick one shape.
-- **Setting a proxy on `Session.fetch` directly.** There is no per-call proxy override. The proxy comes from `LaunchOptions.proxy` and is shared between the browser and the FFI. To call a different proxy mid-flow, open a second session.
+- **Setting a proxy on `Session.fetch` directly.** There is no per-call proxy override. The proxy comes from `LaunchOptions.proxy` and is shared between every Chromium-side network call (`page.goto` and `session.fetch` use the same network stack). To call a different proxy mid-flow, open a second session.
 - **SOCKS5 user/pass on patched / minimal Chromium builds.** `Fetch.authRequired` may not fire on the SOCKS handshake on some custom builds. Verified against modern stable. See [Limits → Proxy authentication](/docs/reference/limits).
 
 ## See also
@@ -122,5 +122,6 @@ Cross-references on mochijs.com:
   - https://mochijs.com/docs/guides/recipe-multi-session-pool
   - https://mochijs.com/docs/guides/recipe-warm-session-replay
   - https://mochijs.com/docs/api/core
-  - https://mochijs.com/docs/concepts/ja4-coherence  - https://mochijs.com/docs/reference/limits
+  - https://mochijs.com/docs/concepts/stealth-philosophy#network-and-ja4
+  - https://mochijs.com/docs/reference/limits
 llm-context:end -->
