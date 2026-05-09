@@ -27,7 +27,7 @@
  * @see PLAN.md §5.5, §11
  */
 
-export const VERSION = "0.1.5" as const;
+export const VERSION = "0.1.6" as const;
 
 // ---- Public types -----------------------------------------------------------
 

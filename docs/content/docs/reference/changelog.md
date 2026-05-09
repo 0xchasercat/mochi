@@ -10,14 +10,24 @@ The canonical changelog is [`CHANGELOG.md`](https://github.com/0xchasercat/mochi
 
 Current published versions:
 
-- `@mochi.js/core` 0.8.2
+- `@mochi.js/core` 0.9.0
 - `@mochi.js/inject` 0.4.0
-- `@mochi.js/harness` 0.1.11
-- `@mochi.js/behavioral` 0.1.5
+- `@mochi.js/harness` 0.1.12
+- `@mochi.js/behavioral` 0.1.6
 - `@mochi.js/challenges` 0.2.1
-- `@mochi.js/cli` 0.2.6
+- `@mochi.js/cli` 0.2.7
 - `@mochi.js/consistency` 0.1.4
 - `@mochi.js/profiles` 0.2.0
+
+## v0.9.0 — 2026-05-10
+
+`@mochi.js/core` 0.9.0 + `@mochi.js/cli` 0.2.7 + `@mochi.js/harness` 0.1.12 + `@mochi.js/behavioral` 0.1.6.
+
+- **`mochi.connect(opts)` — attach to a CDP browser mochi did NOT spawn.** Public API for BrowserBase, Browserless, dockerised Chromium, user-managed patched Chrome, or re-attach to a running session. Mirrors `puppeteer.connect`'s shape: `wsEndpoint` for direct WebSocket attachment, `browserURL` for HTTP discovery via `/json/version`. Optional `headers` for auth-gated CDP gateways. `session.close()` disconnects without killing the browser (matches puppeteer's convention via the new `Session.owned` field). See [Connect to an existing Chrome](/docs/guides/connect-existing-chrome).
+- **`profile: null` no-spoof mode.** Skip every fingerprint override. Mochi launches a stock Chromium-for-Testing, drives it through the same `Session` / `Page` API surface (humanClick / humanType / session.fetch / cookies / screenshots), but does not derive a `MatrixV1`, compile/splice the inject payload, or send any matrix-keyed CDP override. `Session.profile` surfaces as `null`. Behavioral synthesis falls back to `DEFAULT_BEHAVIOR` from `@mochi.js/behavioral` (`{ hand: "right", tremor: 0.18, wpm: 60, scrollStyle: "smooth" }`).
+- **New `@mochi.js/behavioral` export `DEFAULT_BEHAVIOR`.** Distinct from the existing `DEFAULT_BEHAVIOR_PROFILE` (which targets typical typists, `wpm: 65`); `DEFAULT_BEHAVIOR` is the no-spoof fallback (`wpm: 60`) used when the session has no resolved matrix.
+- **New low-level CDP transport export.** `connectWebSocketCdp(opts)` + `WebSocketCdpAdapter` interface — escape hatch for users who want to drive raw CDP without the `Session` wrapper.
+- **CLI `mochi version` bumped to 0.2.7** to reflect the new `connect`-mode helpers in the programmatic surface.
 
 ## v0.8.2 — 2026-05-10
 
