@@ -19,6 +19,13 @@ export {
   type SendOptions,
   type Unsubscribe,
 } from "./cdp/router";
+// Auto-pick host-OS-matching profile when `LaunchOptions.profile` is omitted
+// (task 0272 — paired with the strategic thesis in task 0271).
+export {
+  defaultProfileForHost,
+  EXPLICIT_PROFILE_IDS,
+  resolveDefaultProfileForHost,
+} from "./default-profile";
 // Error surface.
 export { NotImplementedError } from "./errors";
 // Exit-IP / TZ / locale reconciliation (task 0262, PLAN.md §9).
