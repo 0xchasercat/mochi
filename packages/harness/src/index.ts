@@ -18,7 +18,6 @@
  *   - {@link runHarnessAgainstProfile} the orchestrator
  *
  * @see PLAN.md §5.7, §13
- * @see tasks/0050-harness-mvp.md
  */
 
 export const VERSION = "0.5.0" as const;

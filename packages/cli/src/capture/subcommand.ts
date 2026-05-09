@@ -13,7 +13,6 @@
  * seed → `capture-<id>`, headless → true.
  *
  * @see PLAN.md §12.1
- * @see tasks/0040-mochi-capture.md
  */
 
 import { ChromiumNotFoundError } from "../browsers/index";

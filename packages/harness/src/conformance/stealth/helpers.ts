@@ -18,7 +18,6 @@
  *     before triaging an offline failure).
  *
  * @see tests/fixtures/cloakbrowser/test_stealth.py
- * @see tasks/0140-stealth-conformance.md (triage protocol)
  */
 
 import { existsSync } from "node:fs";
@@ -65,7 +64,7 @@ export async function launchSharedSession(): Promise<Session> {
     // Conformance runs are hermetic: re-apply the harness-only flags so
     // updater/sync traffic doesn't pollute the stealth surface or destabilise
     // reruns. Production `mochi.launch()` callers get the cleaner default
-    // flag set (no command-line bot-tells). Task 0256.
+    // flag set (no command-line bot-tells).
     hermetic: true,
   };
   if (binary !== undefined && binary.length > 0) {

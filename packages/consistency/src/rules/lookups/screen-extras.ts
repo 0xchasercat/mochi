@@ -23,7 +23,6 @@
  * The values are surfaced via the `screen-orientation` inject module by
  * intercepting `Window.matchMedia(spec)` and answering from this table.
  *
- * @see tasks/0070-consistency-rules-full.md (screen-orientation)
  */
 
 /**

@@ -11,7 +11,6 @@
  * + en-US looks like every Tor user.
  *
  * @see PLAN.md §9 — relational consistency, IP/TZ/Locale axis
- * @see tasks/0262-ip-tz-locale-exit-consistency.md
  */
 
 import type { MatrixV1 } from "@mochi.js/consistency";

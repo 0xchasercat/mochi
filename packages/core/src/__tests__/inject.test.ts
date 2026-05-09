@@ -10,7 +10,6 @@
  * `MessageRouter`, so the test implicitly enforces those too.
  *
  * @see PLAN.md §12.1 — capture must run against bare Chromium.
- * @see tasks/0040-mochi-capture.md — `bypassInject: true` requirement.
  * @see tests/helpers/cdp-fixture.ts — shared helper consolidating fake-pipe boilerplate.
  */
 
@@ -129,7 +128,7 @@ describe("Session.bypassInject (PLAN.md §12.1, task 0040)", () => {
     expect(session._internalBypassInject()).toBe(true);
   });
 
-  it("with bypassInject omitted — Session installs the unified Fetch-domain injector instead of Page.addScriptToEvaluateOnNewDocument (task 0266)", async () => {
+  it("with bypassInject omitted — Session installs the unified Fetch-domain injector instead of Page.addScriptToEvaluateOnNewDocument", async () => {
     // Override the script identifier for this test — it asserts that the
     // dual-mechanism `addScriptToEvaluateOnNewDocument` call (commit 2 of
     // 0266) carries the wrapped matrix payload.

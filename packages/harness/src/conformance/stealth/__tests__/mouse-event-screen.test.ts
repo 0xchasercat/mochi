@@ -20,7 +20,6 @@
  * Source: PRB `lib/cjs/module/pageController.js:48-58` (origin
  * `TheFalloutOf76/CDP-bug-MouseEvent-.screenX-.screenY-patcher`).
  *
- * @see tasks/0250-mouseevent-screen-coords.md
  * @see PLAN.md §5.3, §8.4 (R-041)
  */
 

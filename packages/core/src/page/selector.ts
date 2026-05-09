@@ -31,7 +31,6 @@
  * Throws `SelectorParseError` on syntactically invalid input. The matcher
  * itself never throws — unsupported nodes just don't match.
  *
- * @see tasks/0253-closed-shadow-piercing-locator.md
  * @see PLAN.md §8.2 (forbidden CDP — neither `DOM.getDocument` nor
  *   `DOM.resolveNode` is forbidden; both fine).
  */

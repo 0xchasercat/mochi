@@ -19,7 +19,6 @@
  *     covered by the E2E mouse-trajectory test which observes wall-clock
  *     pacing of dispatched events.
  *
- * @see tasks/0150-humanize-conformance.md
  * @see tests/fixtures/cloakbrowser/test_humanize_unit.mjs
  */
 

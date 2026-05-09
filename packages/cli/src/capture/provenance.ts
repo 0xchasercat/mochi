@@ -19,7 +19,6 @@
  * fall-back only when stdin is a TTY.
  *
  * @see PLAN.md §12.2
- * @see tasks/0040-mochi-capture.md
  */
 
 import { createInterface } from "node:readline/promises";

@@ -6,7 +6,6 @@
  * 0.5 `@mochi.js/harness` runner; both walk up from cwd to find the repo
  * root the same way.
  *
- * @see tasks/0040-mochi-capture.md "Implementation notes — probe-page.ts"
  */
 
 import { existsSync } from "node:fs";

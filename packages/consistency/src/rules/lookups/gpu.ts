@@ -6,7 +6,7 @@
  * AMD Radeon, NVIDIA RTX, Adreno mobile placeholder). Real device-specific
  * data for the full catalog lands in phase 0.7.
  *
- * @see PLAN.md §9.5 / tasks/0020 R-001..R-003, R-024, R-025
+ * @see PLAN.md §9.5 (R-001..R-003, R-024, R-025)
  */
 
 /**

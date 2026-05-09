@@ -28,7 +28,7 @@ export const KNOWN_PROFILE_IDS = [
   "win11-chrome-stable",
   "win11-edge-stable",
   "linux-chrome-stable",
-  // Imported from harvester corpus per task 0260.
+  // Imported from harvester corpus per
   "mac-chrome-stable",
   "mac-chrome-beta",
   "windows-chrome-stable",

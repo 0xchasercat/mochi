@@ -16,7 +16,6 @@
  * Gated by `MOCHI_E2E=1`. Set `MOCHI_CHROMIUM_PATH` if needed.
  *
  * @see PLAN.md §8.4
- * @see tasks/0266-fetch-fulfill-init-script.md
  */
 
 import { describe, expect, it } from "bun:test";

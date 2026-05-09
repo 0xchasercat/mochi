@@ -9,7 +9,6 @@
  * Gating: `MOCHI_E2E=1` AND `MOCHI_ONLINE=1`. Without the gates the test
  * is `describe.skip`'d so unit / contract suites stay green offline.
  *
- * @see tasks/0220-turnstile-auto-click.md §"Tests"
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
@@ -102,7 +101,7 @@ describeOrSkip(
     );
 
     /**
-     * Closed-shadow variant (task 0253). Loads the local
+     * Closed-shadow variant. Loads the local
      * `tests/fixtures/closed-shadow.html` fixture which embeds a Turnstile
      * iframe inside a `{ mode: "closed" }` shadow root. We don't expect a
      * solved token here (the iframe `src` is a smoke marker — it can't

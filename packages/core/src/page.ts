@@ -202,7 +202,7 @@ export interface ScreenshotOptions {
   encoding?: "binary" | "base64";
 }
 
-// ---- DX cluster: DOM storage + permissions (task 0257) ---------------------
+// ---- DX cluster: DOM storage + permissions ---------------------
 
 /**
  * Options for {@link Page.localStorage} / {@link Page.sessionStorage}
@@ -1030,13 +1030,12 @@ export class Page {
    * Supported selectors (see `selector.ts`): tag / id / class / attribute /
    * descendant combinator / comma-separated lists. **Not** supported:
    * `>`/`+`/`~` combinators, `:pseudo-classes`, `::pseudo-elements`, XPath.
-   * XPath is a stretch goal per task 0253 brief — TODO if a future surface
+   * XPath is a stretch goal — TODO if a future surface
    * needs it (Turnstile detection only needs CSS).
    *
    * Performance: O(N) in DOM size per call. Acceptable for v0.2; a per-page
    * cache layer is a v0.3+ concern (also called out in 0253).
    *
-   * @see tasks/0253-closed-shadow-piercing-locator.md
    * @see PLAN.md §8.2 (`DOM.getDocument` and `DOM.resolveNode` are not on the
    *   forbidden list — both fine to use here).
    */
@@ -1480,7 +1479,7 @@ function hash01(s: string): number {
   return (h >>> 0) / 0x1_0000_0000;
 }
 
-// ---- DOM storage factory (task 0257) ----------------------------------------
+// ---- DOM storage factory ----------------------------------------
 
 /**
  * Build the {@link DomStorage} returned by `Page.localStorage` /

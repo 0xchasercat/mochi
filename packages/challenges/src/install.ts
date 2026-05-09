@@ -32,7 +32,6 @@
  * inject reader assigns stable per-widget ids.
  *
  * @see PLAN.md §11 (behavioral synth)
- * @see tasks/0220-turnstile-auto-click.md
  */
 
 import { buildTurnstileInjectScript } from "./inject";
@@ -68,7 +67,7 @@ export interface PageLike {
   /** Remove a previously-installed init script by identifier. */
   removeInitScript?(identifier: string): Promise<void>;
   /**
-   * Closed-shadow piercing locator (task 0253). When provided, the Turnstile
+   * Closed-shadow piercing locator. When provided, the Turnstile
    * detector uses it to scan for the iframe across closed shadow roots (where
    * `document.querySelectorAll('iframe')` from the page's main world can't
    * see — `Element.shadowRoot` is `null` for closed roots from JS). Optional
@@ -159,7 +158,7 @@ interface WidgetState {
    * found by host-side `Page.querySelectorPiercing` — the only way to see
    * iframes behind CLOSED shadow roots, since the inject's `Element.shadowRoot`
    * accessor returns `null` for closed shadows from the page's main world
-   * (task 0253 design choice). When `"piercing"`, `clickWidget` routes
+   *. When `"piercing"`, `clickWidget` routes
    * through `Page.humanClickHandle` because no CSS selector can name the
    * element from the parent document.
    */
@@ -283,7 +282,7 @@ export function installTurnstileAutoClick(page: PageLike, opts: TurnstileOptions
     }
 
     // Closed-shadow pass — only meaningful when the page actually exposes
-    // the v0.2 piercing locator (task 0253). For v0.1 stubs / consumers
+    // the v0.2 piercing locator. For v0.1 stubs / consumers
     // without it, we silently skip — the inject pass is functionally
     // equivalent for non-closed-shadow integrations.
     if (typeof page.querySelectorAllPiercing === "function") {

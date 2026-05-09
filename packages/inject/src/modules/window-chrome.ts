@@ -29,7 +29,6 @@
  * gating condition (other engines would not have `window.chrome`).
  *
  * @see CloakBrowser tests/test_stealth.py:47-50,158
- * @see tasks/0140-stealth-conformance.md §"window.chrome spoof"
  */
 
 import type { MatrixV1 } from "@mochi.js/consistency";

@@ -67,7 +67,6 @@
  *     so the surface area is small.
  *
  * @see PLAN.md §9.3
- * @see tasks/0267-audio-canvas-fingerprint-blobs.md
  */
 
 import type { MatrixV1 } from "@mochi.js/consistency";

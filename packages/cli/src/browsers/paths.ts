@@ -14,7 +14,6 @@
  * downstream.
  *
  * @see PLAN.md §5.8 — mochi browsers install
- * @see tasks/0010-mochi-browsers-install.md
  */
 import { homedir } from "node:os";
 import { join } from "node:path";

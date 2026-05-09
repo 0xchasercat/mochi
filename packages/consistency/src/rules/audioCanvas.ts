@@ -19,7 +19,6 @@
  * doesn't" matrix's two largest leakers from `deferred` to `works`.
  *
  * @see PLAN.md §9.3 (audio), §9.4 (canvas)
- * @see tasks/0267-audio-canvas-fingerprint-blobs.md
  */
 
 import { defineRule, type Rule } from "../rule";

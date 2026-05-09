@@ -68,7 +68,6 @@
  * `nativeToString` cloak via `__mochi_register_native__`.
  *
  * @see PLAN.md §9.4
- * @see tasks/0267-audio-canvas-fingerprint-blobs.md
  */
 
 import type { MatrixV1 } from "@mochi.js/consistency";

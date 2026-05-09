@@ -16,7 +16,6 @@
  * captured baseline byte-exactly (the meet-in-the-middle search is the
  * load-bearing piece of this brief).
  *
- * @see tasks/0267-audio-canvas-fingerprint-blobs.md
  */
 
 import { describe, expect, it } from "bun:test";

@@ -17,7 +17,6 @@
  * which is fine for a v0.2 surface.
  *
  * @see PLAN.md §8.2 / §8.3
- * @see tasks/0253-closed-shadow-piercing-locator.md
  */
 
 import type { MessageRouter } from "../cdp/router";

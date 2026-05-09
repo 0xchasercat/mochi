@@ -1,8 +1,8 @@
 // AUTO-GENERATED — do not edit. Run `bun run codegen` to regenerate.
-// Source schema lives in schemas/. See scripts/codegen.ts and tasks/0003-schemas-and-codegen.md.
+// Source schema lives in schemas/. See scripts/codegen.ts.
 
 /**
- * Canonical schema for a single page's probe manifest. One manifest per (target, axis-cell) capture. Built from VV8/FV8 traces (and HTTP/2/TLS captures) by the trace post-processor. Consumed by (1) the replica to drive an equivalent collection surface, (2) the equivalence harness to diff replica vs. real Bing.
+ * Canonical schema for a single page's probe manifest. One manifest per (target, axis-cell) capture. Consumed by (1) the harness to drive an equivalent collection surface, (2) the equivalence pipeline to diff captured vs. baseline.
  */
 export interface ProbeManifestV1 {
   /**

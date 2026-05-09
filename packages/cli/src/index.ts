@@ -10,7 +10,7 @@ export const VERSION = "0.0.1" as const;
 
 /**
  * Programmatic re-exports for downstream consumers (notably `@mochi.js/core`,
- * task 0011). Keep this list narrow — the CLI is a tool, not a library.
+ * (). Keep this list narrow — the CLI is a tool, not a library.
  */
 export {
   type CftPlatform,

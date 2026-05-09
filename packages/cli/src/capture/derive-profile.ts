@@ -21,7 +21,6 @@
  * `null`. We narrow defensively and emit reasonable defaults.
  *
  * @see PLAN.md §6.1 / §12.1
- * @see tasks/0040-mochi-capture.md "Pipeline > Derive ProfileV1"
  */
 
 import type { ProfileV1 } from "@mochi.js/consistency";
@@ -131,7 +130,7 @@ export function deriveProfile(probes: CapturedProbes, opts: DeriveOptions): Prof
   // For uaCh.sec-ch-ua-model we pass the *captured* model string verbatim —
   // real Chrome desktop reports "" (empty) for `model`, and stuffing the
   // device.model fallback ("Mac"/"PC"/"MacIntel") into the uaCh slot would
-  // contradict the live header. tasks/0051-consistency-stack-fixes.md (D).
+  // contradict the live header.
   const uadModel = typeof uadHigh.model === "string" ? uadHigh.model : "";
   const uaCh = buildUaCh(navigator, browserMeta, osName, osVersion, arch, uadModel);
 

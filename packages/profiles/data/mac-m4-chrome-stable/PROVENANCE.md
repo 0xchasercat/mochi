@@ -14,7 +14,7 @@ must carry verifiable provenance.
 
 ## Hand-corrections
 
-- 2026-05-08, task 0051: `uaCh.sec-ch-ua-model` corrected from `"\"Mac\""`
+- 2026-05-08, `uaCh.sec-ch-ua-model` corrected from `"\"Mac\""`
   to `"\"\""` (empty quoted string). Real Chrome 147 desktop reports
   `model: ""` from `getHighEntropyValues`; the v0.4 capture incorrectly
   stamped the `device.model` fallback ("Mac") into the uaCh slot. The
@@ -22,7 +22,7 @@ must carry verifiable provenance.
   `buildUaCh`) was fixed in the same task so future captures preserve the
   real (empty) value verbatim.
 
-- 2026-05-08, task 0070: headless-mode-leak corrections in
+- 2026-05-08, headless-mode-leak corrections in
   `baseline.manifest.json` + `profile.json`. The original capture ran
   against `--headless=new` Chromium-for-Testing, which emits several
   artifacts NOT present in real user-Chrome on the same hardware:

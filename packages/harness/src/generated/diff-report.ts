@@ -1,5 +1,5 @@
 // AUTO-GENERATED — do not edit. Run `bun run codegen` to regenerate.
-// Source schema lives in schemas/. See scripts/codegen.ts and tasks/0003-schemas-and-codegen.md.
+// Source schema lives in schemas/. See scripts/codegen.ts.
 
 /**
  * Any JSON-encodable value: null, boolean, number, string, array, or object.

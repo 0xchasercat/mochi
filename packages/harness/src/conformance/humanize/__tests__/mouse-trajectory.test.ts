@@ -17,7 +17,6 @@
  * Gated by `MOCHI_E2E=1`. Set `MOCHI_CHROMIUM_PATH` to a real Chrome /
  * Chromium-for-Testing binary.
  *
- * @see tasks/0150-humanize-conformance.md
  * @see PLAN.md §11.1
  */
 

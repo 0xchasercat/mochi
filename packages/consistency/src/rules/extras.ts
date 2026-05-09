@@ -9,7 +9,6 @@
  * single open-keyed expansion slot at v0.7.
  *
  * @see PLAN.md §9.2, §13.6
- * @see tasks/0070-consistency-rules-full.md
  */
 
 import type { ProfileV1 } from "../generated/profile";

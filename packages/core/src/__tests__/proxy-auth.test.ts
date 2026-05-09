@@ -13,7 +13,6 @@
  *   - The defensive `Fetch.requestPaused` handler issues `Fetch.continueRequest`.
  *   - `dispose()` sends `Fetch.disable` and is idempotent.
  *
- * @see tasks/0160-proxy-auth-and-ci-fix.md
  */
 
 import { describe, expect, it } from "bun:test";
@@ -152,7 +151,7 @@ function makeRouter(): FakeRouter {
 }
 
 describe("installProxyAuth", () => {
-  it("sends Fetch.enable with handleAuthRequests:true and Document-first patterns (task 0266)", async () => {
+  it("sends Fetch.enable with handleAuthRequests:true and Document-first patterns", async () => {
     const f = makeRouter();
     const handle = await installProxyAuth(f.router, { username: "u", password: "p" });
     const enable = f.pipe.written.find((c) => c.parsed.method === "Fetch.enable");

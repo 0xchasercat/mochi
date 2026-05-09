@@ -11,7 +11,6 @@
  * device. v0.7 ships per-vendor curated lists keyed by GPU vendor class.
  *
  * @see PLAN.md §9.5 (WebGPU adapter info — phase 0.7)
- * @see tasks/0070-consistency-rules-full.md (webgpu)
  */
 
 import type { GpuVendorKey } from "./gpu";

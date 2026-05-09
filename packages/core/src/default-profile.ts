@@ -1,6 +1,6 @@
 /**
  * Auto-pick the host-OS-matching profile when `LaunchOptions.profile` is
- * omitted (task 0272). The function below is the pure decision table the
+ * omitted. The function below is the pure decision table the
  * launcher consults; tests stub `(platform, arch)` and assert the mapping
  * without spinning a Chromium.
  *
@@ -17,7 +17,7 @@
  * by hand" into a default removes the entire class of "user accidentally
  * spoofed Windows from a Linux DC and looked weird to the WAF" failures —
  * the same argument that drove `detectLinuxServerEnv` for headless mode in
- * task 0259.
+ *
  *
  * ## Mapping
  *
@@ -38,12 +38,10 @@
  * The current profile catalog (`packages/profiles/data/`) ships
  * `mac-chrome-stable` as a darwin/arm64 capture (its `os.arch === "arm64"`
  * in `profile.json`). The mapping above still routes darwin/x64 to
- * `mac-chrome-stable` per task 0272's success criteria; users on Intel Macs
+ * `mac-chrome-stable`; users on Intel Macs
  * who want a strict arch match should pass `profile` explicitly until an
  * `mac-intel-chrome-stable` capture lands.
  *
- * @see tasks/0271-the-linux-os-thesis.md — the strategic thesis + evidence
- * @see tasks/0272-host-os-profile-auto-default.md — engineering brief
  */
 
 import type { ProfileId } from "./launch";
@@ -64,7 +62,7 @@ export function defaultProfileForHost(): ProfileId | null {
 /**
  * Internal pure resolver, exposed so the unit tests can drive the table
  * without stubbing global `process`. Mirrors the precedence-table style of
- * `resolveHeadlessMode` (task 0258).
+ * `resolveHeadlessMode`.
  *
  * @internal
  */
@@ -82,7 +80,7 @@ export function resolveDefaultProfileForHost(
 /**
  * The six real-device profile IDs that `defaultProfileForHost` can return,
  * surfaced by the launcher's failure-mode diagnostic. Order matches the
- * task 0272 brief verbatim so the user-facing message is stable.
+ * brief verbatim so the user-facing message is stable.
  *
  * @internal
  */
@@ -97,7 +95,7 @@ export const EXPLICIT_PROFILE_IDS = [
 
 /**
  * Build the precise diagnostic emitted when `profile` is omitted on an
- * unsupported host. Format pinned by task 0272 — keep stable so docs +
+ * unsupported host. Format pinned — keep stable so docs +
  * LLM-context blocks stay correct.
  *
  * @internal

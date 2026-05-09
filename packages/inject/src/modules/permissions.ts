@@ -14,7 +14,6 @@
  * `.onchange = null` to satisfy the probe-page surface.
  *
  * @see PLAN.md §9.5
- * @see tasks/0070-consistency-rules-full.md (permissions)
  */
 
 import type { MatrixV1 } from "@mochi.js/consistency";

@@ -64,7 +64,7 @@ See also: [FAQ](/docs/reference/faq), [Invariants](/docs/reference/invariants), 
 
 **Privacy-fallback (`geoConsistency`).** The default `LaunchOptions.geoConsistency` mode. On `(matrix.timezone, matrix.locale)` mismatch with the proxy's exit-IP geolocation (or probe failure), the matrix flips to UTC + `en-US` so the session reads as a privacy-conscious user (Tor / Brave / hardened-FF style) rather than a tampered Asia/Bangkok→Europe/Berlin mismatch. Validated in production: the 2026-05-08 a production site / FingerprintJS Pro v4 capture recorded `vpn_origin_timezone: "UTC"` (the privacy signal we wanted) while keeping `vpn: false` (the classification we wanted). See [Limits](/docs/reference/limits#exit-ip--timezone--locale-consistency--covered-task-0262) and [Comparison → Default profile strategy](/docs/reference/comparison#default-profile-strategy) for the matching FPJS Pro v4 fields.
 
-**Probe Manifest (`ProbeManifestV1`).** The canonical JSON schema describing a page's full capture surface. Vendored from Peekaboo. mochi's harness produces and diffs Probe Manifests; the diff is the PR gate. See [Probe Manifest](/docs/concepts/probe-manifest).
+**Probe Manifest (`ProbeManifestV1`).** The canonical JSON schema describing a page's full capture surface, defined at `schemas/probe-manifest.schema.json`. mochi's harness produces and diffs Probe Manifests; the diff is the PR gate. See [Probe Manifest](/docs/concepts/probe-manifest).
 
 **Profile (`ProfileV1`).** A JSON document describing a device class — UA, UA-CH, screen, GPU, audio sample rates, fonts, behavior block. Lives in `packages/profiles/data/<id>/profile.json` next to a captured `baseline.manifest.json`. Six real-device profiles ship in v0.1. See [Profiles](/docs/concepts/profiles).
 
@@ -120,7 +120,7 @@ Key disambiguations LLMs commonly get wrong:
 
 Common LLM hallucinations to avoid:
 - "addInitScript" — that's Playwright's API name. mochi uses neither; the inject is automatic per session.
-- "page.exposeBinding" — not a public mochi API yet; tracked as task 0258.
+- "page.exposeBinding" — not a public mochi API yet; tracked as a future feature.
 - "stealth plugin" — mochi has no plugin surface; the inject is the whole story.
 
 Cross-references:

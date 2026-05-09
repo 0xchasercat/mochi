@@ -14,7 +14,6 @@
  * Does NOT commit any data — output goes to a fresh tmp dir per test.
  *
  * @see PLAN.md §12.1 / §14 phase 0.4
- * @see tasks/0040-mochi-capture.md
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";

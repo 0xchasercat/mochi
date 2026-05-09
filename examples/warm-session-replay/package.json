@@ -8,8 +8,8 @@
     "resume": "bun run index.ts --resume"
   },
   "dependencies": {
-    "@mochi.js/core": "^0.4.0",
-    "@mochi.js/cli": "^0.2.0"
+    "@mochi.js/core": "^0.6.0",
+    "@mochi.js/cli": "^0.2.3"
   },
   "devDependencies": {
     "typescript": "^5.5.0"

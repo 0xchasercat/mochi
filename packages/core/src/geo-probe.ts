@@ -34,10 +34,9 @@
  * mode (default `privacy-fallback`).
  *
  * **No cross-session caching** — proxy IPs rotate; stale cache is worse
- * than no cache. (`docs/limits.md` — task 0262.)
+ * than no cache. (`docs/limits.md` —)
  *
  * @see PLAN.md §9 (relational consistency — IP/TZ/Locale axis)
- * @see tasks/0262-ip-tz-locale-exit-consistency.md
  */
 
 import type { MatrixV1 } from "@mochi.js/consistency";

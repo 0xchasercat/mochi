@@ -30,7 +30,6 @@
  *
  * @see CloakBrowser tests/test_stealth.py:52-56
  * @see packages/profiles/data/mac-m4-chrome-stable/baseline.manifest.json
- * @see tasks/0140-stealth-conformance.md §"plugins spoof"
  */
 
 import type { MatrixV1 } from "@mochi.js/consistency";

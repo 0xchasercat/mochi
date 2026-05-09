@@ -24,7 +24,6 @@
  *
  * No matrix inputs — the patch is a relational identity, not a value spoof.
  *
- * @see tasks/0250-mouseevent-screen-coords.md
  * @see PLAN.md §5.3, §8.4
  */
 

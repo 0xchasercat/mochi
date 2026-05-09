@@ -11,7 +11,6 @@
  * the init dict onto the instance; the patched prototype getter reads
  * those + window.screenX/Y to produce the screen-relative value.
  *
- * @see tasks/0250-mouseevent-screen-coords.md
  * @see PLAN.md §5.3
  */
 

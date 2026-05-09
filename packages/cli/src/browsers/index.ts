@@ -1,6 +1,6 @@
 /**
  * @mochi.js/cli/browsers — programmatic surface for `mochi browsers …` and
- * the `resolveChromiumBinary` helper consumed by `@mochi.js/core` (task 0011).
+ * the `resolveChromiumBinary` helper consumed by `@mochi.js/core`.
  *
  * The split between this file, `install.ts`, `manifest.ts`, and `paths.ts`:
  *   - `paths.ts`     — pure: platform mapping + on-disk layout
@@ -13,7 +13,6 @@
  * on; everything else is implementation detail.
  *
  * @see PLAN.md §5.8
- * @see tasks/0010-mochi-browsers-install.md
  */
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";

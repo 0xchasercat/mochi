@@ -1,5 +1,5 @@
 /**
- * Unit tests for the init-injector building blocks (task 0266).
+ * Unit tests for the init-injector building blocks.
  *
  * Covers:
  *   - {@link rewriteCsp}: no-nonce / nonce / strict-dynamic / unsafe-inline
@@ -12,7 +12,6 @@
  *   - {@link wrapSelfRemovingPayload}: first statement is the self-remove +
  *     marker; the inner payload is left intact.
  *
- * @see tasks/0266-fetch-fulfill-init-script.md
  */
 
 import { describe, expect, it } from "bun:test";

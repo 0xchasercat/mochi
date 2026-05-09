@@ -92,7 +92,7 @@ export interface LaunchOptions {
    * string (looked up against `KNOWN_PROFILE_IDS`) or an inline `ProfileV1`
    * object.
    *
-   * **Optional since task 0272** — when omitted, mochi auto-picks the
+   * **Optional** — when omitted, mochi auto-picks the
    * profile whose declared OS matches the host's `process.platform` /
    * `process.arch` pair via {@link defaultProfileForHost}:
    *
@@ -120,7 +120,7 @@ export interface LaunchOptions {
    * `false` (default in v0.1) runs headful. New code should prefer
    * {@link headlessMode}, which is more expressive AND env-aware.
    *
-   * Resolution priority (task 0258):
+   * Resolution priority:
    *
    *   1. `headlessMode` if set.
    *   2. Else `headless: true → "new"`, `headless: false → "off"`.
@@ -130,7 +130,7 @@ export interface LaunchOptions {
    */
   headless?: boolean;
   /**
-   * Headless dispatch mode (task 0258). One of:
+   * Headless dispatch mode. One of:
    *
    *   - `"new"`    — modern Chromium headless (`--headless=new`). Full
    *                  rendering, near-byte-identical to headful for
@@ -178,7 +178,7 @@ export interface LaunchOptions {
    * trivially fingerprinted as Chromium-for-Testing.
    *
    * Defaults to `false`. PLAN.md §12.1 (capture must run against bare
-   * Chromium); task 0040.
+   * Chromium);
    */
   bypassInject?: boolean;
   /**
@@ -199,7 +199,7 @@ export interface LaunchOptions {
    *
    * Pairs with — but is independent of — {@link bypassInject}. Capture
    * flows set both `true`; harness conformance runs set `hermetic: true`
-   * with full inject pipeline active. PLAN.md §8.6 + task 0256.
+   * with full inject pipeline active. PLAN.md §8.6 +
    */
   hermetic?: boolean;
   /**
@@ -241,7 +241,6 @@ export interface LaunchOptions {
    * cached across sessions — proxy IPs rotate.
    *
    * @see PLAN.md §9 (relational consistency, IP/TZ/Locale axis)
-   * @see tasks/0262-ip-tz-locale-exit-consistency.md
    */
   geoConsistency?: GeoConsistencyMode;
 }
@@ -255,8 +254,8 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
   const normalized = normalizeProxy(opts.proxy);
 
   // Resolve the `MatrixV1` BEFORE spawning so matrix-derived values flow
-  // into both the `--lang` flag (task 0251) and `--window-size` flag
-  // (task 0252). The matrix is otherwise read post-spawn for inject;
+  // into both the `--lang` flag and `--window-size` flag
+  //. The matrix is otherwise read post-spawn for inject;
   // deriving early is cheap (~µs, pure function) and lets us close the
   // I-5 leaks between Chromium's native network/OS-window state and the
   // JS-layer spoof.
@@ -275,7 +274,7 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
   if (profileSource.autoPicked) {
     // One info-level log line so users can see what mochi inferred without
     // calling `defaultProfileForHost()` themselves. Wording is pinned by
-    // task 0272 — keep stable so docs + LLM-context blocks stay correct.
+    // — keep stable so docs + LLM-context blocks stay correct.
     // (Routed through `console.warn` to match the existing diagnostic
     // channel for `geoConsistency` / Linux-server inference; `console.info`
     // is gated by the workspace lint config — `noConsole` only allows
@@ -359,13 +358,13 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
     // multi-locale list still flows through `matrix.languages` to the
     // inject layer's `navigator.languages` spoof; Chromium derives the
     // q-weighted `Accept-Language` value from the single `--lang` primary
-    // automatically. Task 0251.
+    // automatically.
     locale: adjustedMatrix.locale,
     // Pin OS-level outer window from the matrix's display geometry so
     // `window.outerWidth/outerHeight` (which reads from the OS window,
     // NOT the JS-spoofed `screen.*`) matches the spoof. Closes the
     // `fingerprint-scan.com` 800×600 leak under `--headless=new`.
-    // UDC fixes the same issue at `__init__.py:410-411`. Task 0252.
+    // UDC fixes the same issue at `__init__.py:410-411`.
     //
     // (`adjustedMatrix.display` === `matrix.display` since geo reconcile
     // only touches timezone/locale/languages — but we use the adjusted
@@ -417,16 +416,15 @@ export const mochi = {
    * Inspect what mochi would infer about the current process environment for
    * Linux-server detection (drives `headlessMode` defaulting). Pure read of
    * `process.platform`, `process.env.DISPLAY`, `process.env.WAYLAND_DISPLAY`,
-   * `process.getuid?.()`, and the container probe paths. Task 0258.
+   * `process.getuid?.()`, and the container probe paths.
    */
   detectLinuxServerEnv: probeLinuxServerEnv,
   /**
    * Inspect which profile id `mochi.launch` would auto-pick on the current
    * host when `profile` is omitted. Pure read of `process.platform` /
    * `process.arch`. Returns `null` on unsupported hosts — the launcher
-   * throws on that path with a list of explicit profile IDs. Task 0272.
+   * throws on that path with a list of explicit profile IDs.
    *
-   * @see tasks/0271-the-linux-os-thesis.md — the strategic thesis
    * @see https://mochijs.com/docs/concepts/stealth-philosophy
    */
   defaultProfileForHost,
@@ -550,7 +548,7 @@ function resolveProfileSource(profile: ProfileId | ProfileV1 | undefined): {
       autoPicked: false,
     };
   }
-  // Auto-pick branch — task 0272.
+  // Auto-pick branch —
   const picked = defaultProfileForHost();
   if (picked === null) {
     throw new Error(unsupportedHostMessage(process.platform, process.arch));

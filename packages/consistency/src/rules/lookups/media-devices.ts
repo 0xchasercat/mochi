@@ -12,7 +12,7 @@
  * survive harness normalization (which sentinelizes those leaves). The
  * inject layer feeds the seeded xoshiro to derive 32-byte hex IDs.
  *
- * @see PLAN.md §9.5 / tasks/0070-consistency-rules-full.md (media-devices)
+ * @see PLAN.md §9.5 (media-devices)
  */
 
 import type { ProfileV1 } from "../../generated/profile";

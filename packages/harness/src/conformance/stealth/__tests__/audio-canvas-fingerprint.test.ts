@@ -12,7 +12,6 @@
  * (audioHash 124.04347624466754, sampleValues window) are pinned in the
  * baseline manifest.
  *
- * @see tasks/0267-audio-canvas-fingerprint-blobs.md
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";

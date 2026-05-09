@@ -15,7 +15,7 @@ import type { PipeReader, PipeWriter } from "./cdp/transport";
 /**
  * The chromium flags PLAN.md §8.6 mandates we always pass in PRODUCTION
  * (non-hermetic) mode. Trimmed against patchright's
- * `chromiumSwitchesPatch.ts:20-34` removal list (task 0256): every flag
+ * `chromiumSwitchesPatch.ts:20-34` removal list: every flag
  * here passes two tests — (a) it isn't a passive command-line bot-tell that
  * patchright explicitly drops, AND (b) we have a concrete production reason
  * to keep it (CDP transport, UI suppression that matters in headed mode,
@@ -181,7 +181,7 @@ export interface SpawnConfig {
    * integers; otherwise the flag is omitted. Sourced from
    * `matrix.display.{width,height}` by `launch.ts` — the matrix is canonical.
    *
-   * @see UDC `__init__.py:410-411`, UDC issue #2242, task 0252.
+   * @see UDC `__init__.py:410-411`, UDC issue #2242,
    */
   windowSize?: { width: number; height: number };
   /**
@@ -418,7 +418,7 @@ export function buildChromiumArgs(
   }
   // Headless dispatch.
   //
-  // `headlessMode` (task 0258) supersedes the legacy `headless: boolean` knob
+  // `headlessMode` supersedes the legacy `headless: boolean` knob
   // when both are set. When `headlessMode` is unset, fall back to the v0.1
   // mapping (`headless: true → "new"`, `false → "off"`). The launcher in
   // `launch.ts` is responsible for the env-aware default ("new" on Linux
@@ -445,7 +445,7 @@ export function buildChromiumArgs(
   // header so the network surface matches the JS-layer `navigator.language`
   // spoof (PLAN.md I-5). Pushed BEFORE `extraArgs` so a user-supplied
   // override in `args` can win on the command line if absolutely needed —
-  // Chromium honors the last-occurrence on the line for `--lang`. Task 0251.
+  // Chromium honors the last-occurrence on the line for `--lang`.
   if (cfg.locale !== undefined && cfg.locale.length > 0) {
     args.push(`--lang=${cfg.locale}`);
   }
@@ -454,7 +454,7 @@ export function buildChromiumArgs(
   // Chromium's headless 800×600 default. The matrix is canonical: when
   // `display.{width,height}` is missing or non-finite we omit the flag
   // rather than fall back to a hardcoded value (a hardcoded value would
-  // mismatch a profile that legitimately uses different dimensions). Task 0252.
+  // mismatch a profile that legitimately uses different dimensions).
   if (cfg.windowSize !== undefined) {
     const { width, height } = cfg.windowSize;
     if (
@@ -501,7 +501,6 @@ export function buildChromiumArgs(
  * surfaces only the raw stderr tail. Exported for unit tests so we can lock
  * the regexes against regressions without spawning Chromium.
  *
- * @see tasks/0259-linux-first-run-experience.md
  */
 export function diagnoseEarlyExitTail(tail: string): string {
   if (/running.*root.*without.*--no-sandbox|--no-sandbox.*required/i.test(tail)) {

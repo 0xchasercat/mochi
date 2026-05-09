@@ -15,7 +15,6 @@
  * have no value (just presence).
  *
  * @see PLAN.md §5.8
- * @see tasks/0010-mochi-browsers-install.md
  */
 import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";

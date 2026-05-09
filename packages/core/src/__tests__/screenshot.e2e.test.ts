@@ -1,5 +1,5 @@
 /**
- * Live conformance test for `Page.screenshot` (task 0265).
+ * Live conformance test for `Page.screenshot`.
  *
  * Gated by `MOCHI_E2E=1` so the default `bun test` run stays fast and offline.
  * Spawns a real Chromium-for-Testing instance, navigates to a tiny data URL,

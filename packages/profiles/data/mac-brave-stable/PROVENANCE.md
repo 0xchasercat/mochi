@@ -12,7 +12,7 @@ Imported from the wrkx harvester corpus (`http://wrkx.app/api`) by `mochi profil
 | FingerprintJS suspectScore | 12 |
 | captured at (UTC) | 2026-05-08T20:06:53.637Z |
 | imported at (UTC) | 2026-05-08T20:50:38.368Z |
-| importer | `mochi profiles import` (task 0260) |
+| importer | `mochi profiles import` |
 
 ## Multi-snapshot policy
 
@@ -24,5 +24,5 @@ Brave's TLS fingerprint diverges from Chrome's at the cipher-suite level. wreq's
 
 ## Hand-corrections
 
-None at import time. The harvester's `navigator` snapshot is captured by real Chrome (not headless), so the `--headless=new` artifacts that needed manual correction in `mac-m4-chrome-stable` (task 0070) are absent here.
+None at import time. The harvester's `navigator` snapshot is captured by real Chrome (not headless), so the `--headless=new` artifacts that needed manual correction in `mac-m4-chrome-stable` are absent here.
 

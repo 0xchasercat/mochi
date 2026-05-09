@@ -9,7 +9,6 @@
  * matching the pattern used by `payload-shape.test.ts`. Runtime semantics
  * are exercised by the harness E2E gate against real Chromium.
  *
- * @see tasks/0070-consistency-rules-full.md
  */
 
 import { describe, expect, it } from "bun:test";

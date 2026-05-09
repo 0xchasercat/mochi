@@ -20,7 +20,7 @@ interface EscalationContext {
   startedAt: number;
 }
 
-async function attemptWithEscalation(attempt: number): Promise<"ok" | "give-up"> {
+async function attemptWithEscalation(attempt: number): Promise<"ok" | "retry" | "give-up"> {
   let triggered: EscalationContext | undefined;
 
   // Profile family rotation: macOS shape on 0/1, Windows shape on 2.
@@ -56,7 +56,7 @@ async function attemptWithEscalation(attempt: number): Promise<"ok" | "give-up">
         // Click landed; response token never propagated. Often a network
         // blip. Bumping `timeout` to 45s before retrying is much cheaper
         // than calling a solver. Same seed = deterministic replay.
-        return attempt < 1 ? "ok" : "give-up";
+        return attempt < 1 ? "retry" : "give-up";
 
       case "image-challenge":
         // CAPTCHA solve required. Two trade-offs:
@@ -65,25 +65,26 @@ async function attemptWithEscalation(attempt: number): Promise<"ok" | "give-up">
         //   - hand off to a solver (paid) — works if the site classified the
         //     fingerprint *class* as suspect; posture changes won't help.
         // Heuristic: posture improvement first, solver after that fails.
-        return attempt < 2 ? "ok" : "give-up";
+        return attempt < 2 ? "retry" : "give-up";
 
       case "managed":
         // Cloudflare already classified you as a bot before the widget
         // rendered. Clicking won't save the session. Re-launch with a
         // different fingerprint class + different exit IP. If both retries
         // also hit "managed", the IP range is likely flagged.
-        return attempt < 2 ? "ok" : "give-up";
+        return attempt < 2 ? "retry" : "give-up";
     }
   } finally {
     await session.close();
   }
 }
 
-let result: "ok" | "give-up" = "give-up";
+let result: "ok" | "retry" | "give-up" = "give-up";
 for (let attempt = 0; attempt < 3; attempt++) {
   result = await attemptWithEscalation(attempt);
   if (result === "ok") break;
-  console.warn(`attempt ${attempt} failed; retrying with adjusted posture`);
+  if (result === "give-up") break;
+  console.warn(`attempt ${attempt} escalated; retrying with adjusted posture`);
 }
 
 if (result === "give-up") {

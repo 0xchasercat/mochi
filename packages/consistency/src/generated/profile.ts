@@ -1,5 +1,5 @@
 // AUTO-GENERATED — do not edit. Run `bun run codegen` to regenerate.
-// Source schema lives in schemas/. See scripts/codegen.ts and tasks/0003-schemas-and-codegen.md.
+// Source schema lives in schemas/. See scripts/codegen.ts.
 
 /**
  * A device-class profile consumed by @mochi.js/consistency. Declares the deterministic capabilities of a single (hardware, OS, browser) class. Instantiated for a specific seed by deriveMatrix() to produce a MatrixV1. See PLAN.md §6.1.

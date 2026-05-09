@@ -19,7 +19,6 @@
  * The phase 0.5 gate (PLAN.md §13.6, §14): `report.counts.material === 0`.
  *
  * @see PLAN.md §13.2 / §13.6
- * @see tasks/0050-harness-mvp.md
  */
 
 import { existsSync } from "node:fs";

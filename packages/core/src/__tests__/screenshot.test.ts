@@ -1,5 +1,5 @@
 /**
- * Unit tests for `Page.screenshot` (task 0265).
+ * Unit tests for `Page.screenshot`.
  *
  * Exercises the CDP wire shape against a `MessageRouter` driven over a fake
  * pipe — no real Chromium spawn, no real `Session`. The router still applies

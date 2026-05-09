@@ -23,7 +23,6 @@
  *     The probe-page only reads `features` / `info` / `isFallbackAdapter`,
  *     so we don't need a full adapter implementation.
  *
- * @see tasks/0070-consistency-rules-full.md (webgpu)
  * @see PLAN.md §9.5
  */
 

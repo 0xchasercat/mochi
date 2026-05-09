@@ -20,7 +20,7 @@
  *      visible surface and uses a Symbol so iterators / `Object.keys` /
  *      `for-in` don't enumerate it.
  *
- * **Closed-shadow design (task 0253).** The inject script CANNOT see iframes
+ * **Closed-shadow design.** The inject script CANNOT see iframes
  * that live behind a closed shadow root: from page JS, `Element.shadowRoot`
  * is `null` for closed shadows and `MutationObserver` doesn't fire on
  * mutations inside them. So this script is intentionally only a coarse
@@ -53,7 +53,6 @@
  * navigation) the second install is a no-op via the Symbol presence check.
  *
  * @see PLAN.md §5.3, §8.4
- * @see tasks/0220-turnstile-auto-click.md
  */
 
 /**

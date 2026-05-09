@@ -30,7 +30,7 @@ type BrowserName = ProfileV1["browser"]["name"];
  * that would overwrite the real device's logical-core count. v0.5 surfaced
  * the original derive-from-cpuFamily implementation as a bug for M-series
  * Pro/Max parts (e.g. M4 Max ships 14 cores; the table emitted 10 and
- * clobbered the profile). See tasks/0051-consistency-stack-fixes.md
+ * clobbered the profile). See PLAN.md
  * (Group A).
  */
 export const R008: Rule = defineRule<readonly [number], number>({

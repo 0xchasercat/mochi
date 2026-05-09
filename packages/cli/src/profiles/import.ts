@@ -19,7 +19,7 @@
  *                                 geometry block (window-frame is handled by
  *                                 normalize.ts; canvas/audio remain v0.7).
  *     PROVENANCE.md           — capture date, suspect score, source URL,
- *                                hand-corrections per task 0260.
+ *                                hand-corrections.
  *
  * Per-category mapping (snapshot.category → baseline key):
  *   navigator       → navigator (strip __probeTime)
@@ -52,7 +52,6 @@
  * verify `navigator.userAgent` reads as plain Chrome AND `navigator.brave` is
  * absent. If the mask leaks, refuse to write and surface a diagnostic.
  *
- * @see tasks/0260-import-harvester-profiles.md
  * @see packages/cli/src/capture/derive-profile.ts (downstream)
  */
 
@@ -416,8 +415,8 @@ export function bravePassesChromeMask(navigator: Record<string, unknown>): boole
  * Two classes of intentional divergence:
  *
  * 1. v0.7-deferred surfaces (inherits from `mac-m4-chrome-stable`):
- *    - `audio.**`   precomputed bytes (task 0071)
- *    - `canvas.**`  precomputed hash maps (task 0071)
+ *    - `audio.**`   precomputed bytes
+ *    - `canvas.**`  precomputed hash maps
  *
  * 2. real-user-Chrome vs Chromium-for-Testing structural deltas. The harvester
  *    captured snapshots from real users running stock Chrome; the harness
@@ -439,7 +438,7 @@ function defaultExpectedDivergences(profileId: string): {
         path: "audio.**",
         comment:
           "Audio fingerprint bytes (sampleValues, audioHash) require precomputed " +
-          'per-(profile, sample-rate) byte tables — task 0071. docs/limits.md "Audio ' +
+          'per-(profile, sample-rate) byte tables — docs/limits.md "Audio ' +
           'fingerprinting (OfflineAudioContext) is NOT spoofed at v0.3" carried over to ' +
           "v0.7 phase split.",
       },
@@ -447,7 +446,7 @@ function defaultExpectedDivergences(profileId: string): {
         path: "canvas.**",
         comment:
           "Canvas hash + dataUrl spoofing requires precomputed hash maps for the " +
-          "standard probe payloads + per-pixel noise injection — task 0071. " +
+          "standard probe payloads + per-pixel noise injection — " +
           'docs/limits.md "Canvas fingerprinting (HTMLCanvasElement.toDataURL) is NOT ' +
           'spoofed at v0.3" carried over to v0.7 phase split.',
       },
@@ -604,7 +603,7 @@ function defaultExpectedDivergences(profileId: string): {
         path: "bot.chromeRuntime",
         comment:
           "Real Chrome exposes window.chrome.runtime; Chromium-for-Testing does not. " +
-          "Restoring chrome.runtime polyfill is task 0140 (stealth conformance) — " +
+          "Restoring chrome.runtime polyfill is tracked separately." +
           "tracked separately.",
       },
       {
@@ -926,7 +925,7 @@ function renderProvenance(args: {
   );
   lines.push(`| captured at (UTC) | ${args.capturedAt} |`);
   lines.push(`| imported at (UTC) | ${args.importedAt} |`);
-  lines.push("| importer | `mochi profiles import` (task 0260) |");
+  lines.push("| importer | `mochi profiles import` |");
   lines.push("");
   lines.push("## Multi-snapshot policy");
   lines.push("");
@@ -953,7 +952,7 @@ function renderProvenance(args: {
   lines.push(
     "None at import time. The harvester's `navigator` snapshot is captured by " +
       "real Chrome (not headless), so the `--headless=new` artifacts that needed " +
-      "manual correction in `mac-m4-chrome-stable` (task 0070) are absent here.",
+      "manual correction in `mac-m4-chrome-stable` are absent here.",
   );
   lines.push("");
   return `${lines.join("\n")}\n`;
@@ -1033,7 +1032,7 @@ export async function runImport(opts: ImportOptions): Promise<ImportResult> {
         `[mochi profiles import] Brave UA mask leaked for visitor ${opts.visitorId} ` +
           `(profile ${opts.profileId}): \`navigator.brave\` is present or the UA does ` +
           "not look like plain Chrome. Refusing to import — the resulting profile " +
-          "would be a Brave-fingerprint, not a Chrome-mask. See task 0260.",
+          "would be a Brave-fingerprint, not a Chrome-mask.",
       );
     }
   }
@@ -1047,7 +1046,7 @@ export async function runImport(opts: ImportOptions): Promise<ImportResult> {
       `[mochi profiles import] visitor ${opts.visitorId} reports \`userAgentData.mobile=true\` ` +
         `(platform=${String(uad.platform ?? "?")}). The v0.5 ProfileV1 schema enums (\`os.name\`, ` +
         "UA templates) cover desktop only — Android/iOS support requires schema + " +
-        "consistency-rule work tracked outside task 0260.",
+        "consistency-rule work tracked separately.",
     );
   }
 

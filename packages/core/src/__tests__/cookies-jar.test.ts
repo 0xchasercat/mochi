@@ -1,5 +1,5 @@
 /**
- * Unit tests for the {@link Session.cookies} jar surface (task 0257):
+ * Unit tests for the {@link Session.cookies} jar surface:
  *
  *   - `cookies.get()`         → `Storage.getCookies` round-trip with optional
  *                               url-host filter.
@@ -19,7 +19,6 @@
  * `ChromiumProcess` whose pipe reader/writer let us observe every CDP
  * request sent and inject canned responses.
  *
- * @see tasks/0257-dx-cluster-cookies-storage-permissions.md
  * @see docs/audits/nodriver.md (LOW finding 2 — pickle → JSON port)
  */
 
@@ -193,7 +192,7 @@ const SAMPLE_COOKIES: Cookie[] = [
   },
 ];
 
-describe("Session.cookies (task 0257)", () => {
+describe("Session.cookies", () => {
   let fake: FakeBrowser;
   let session: Session;
   let tmpFile: string;

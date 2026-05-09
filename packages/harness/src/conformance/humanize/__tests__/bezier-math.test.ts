@@ -17,7 +17,6 @@
  *      point land inside the requested box. mochi exposes the click-point
  *      computation as part of `synthesizeMouseTrajectory({box})`.
  *
- * @see tasks/0150-humanize-conformance.md
  * @see PLAN.md §11.1
  */
 

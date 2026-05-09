@@ -9,7 +9,6 @@
  *
  * The values are stable across desktop OS so v0.7 doesn't key by OS yet.
  *
- * @see tasks/0070-consistency-rules-full.md (permissions)
  */
 
 /** Chrome's default permission states for a fresh profile, by name. */

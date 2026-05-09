@@ -33,7 +33,6 @@
  * brief — a per-page cache layer is a v0.3+ concern).
  *
  * @see PLAN.md §8.2 — `DOM.getDocument` / `DOM.resolveNode` are not forbidden
- * @see tasks/0253-closed-shadow-piercing-locator.md
  */
 
 import type { PierceDomNode } from "../cdp/types";

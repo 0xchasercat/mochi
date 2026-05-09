@@ -12,7 +12,7 @@ Imported from the wrkx harvester corpus (`http://wrkx.app/api`) by `mochi profil
 | FingerprintJS suspectScore | 6 |
 | captured at (UTC) | 2026-05-07T15:30:54.805Z |
 | imported at (UTC) | 2026-05-08T20:50:35.794Z |
-| importer | `mochi profiles import` (task 0260) |
+| importer | `mochi profiles import` |
 
 ## Multi-snapshot policy
 
@@ -24,5 +24,5 @@ The harvester capture did not include a JA3/JA4 hash, so the wreqPreset is synth
 
 ## Hand-corrections
 
-None at import time. The harvester's `navigator` snapshot is captured by real Chrome (not headless), so the `--headless=new` artifacts that needed manual correction in `mac-m4-chrome-stable` (task 0070) are absent here.
+None at import time. The harvester's `navigator` snapshot is captured by real Chrome (not headless), so the `--headless=new` artifacts that needed manual correction in `mac-m4-chrome-stable` are absent here.
 

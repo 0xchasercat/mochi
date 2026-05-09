@@ -4,7 +4,7 @@
  * spawn a real Chromium here; the goal is to lock the flag set against
  * regressions, particularly the matrix-derived `--lang=<locale>` flag that
  * closes the I-5 leak between Chromium's network-layer `Accept-Language`
- * header and the JS-layer `navigator.language(s)` spoof (task 0251).
+ * header and the JS-layer `navigator.language(s)` spoof.
  *
  * The flag is sourced from `MatrixV1.locale` (the canonical primary BCP-47
  * string) and MUST come from the matrix, never from the host OS.
@@ -75,7 +75,7 @@ describe("buildChromiumArgs / baseline", () => {
   });
 });
 
-describe("buildChromiumArgs / --lang (task 0251 — matrix.locale → Accept-Language)", () => {
+describe("buildChromiumArgs / --lang  (— matrix.locale → Accept-Language)", () => {
   it("appends --lang=<value> when locale is set", () => {
     const args = buildChromiumArgs(
       baseCfg({ locale: "en-US" }),
@@ -337,7 +337,7 @@ describe("buildChromiumArgs — task 0256 (hermetic-mode knob)", () => {
 });
 
 /**
- * Diagnostic-tail classifier — task 0259. Locks the two patterns we currently
+ * Diagnostic-tail classifier — Locks the two patterns we currently
  * surface (root-sandbox refusal and missing shared libs) against regressions
  * without spawning a real Chromium.
  */

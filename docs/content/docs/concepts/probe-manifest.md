@@ -12,7 +12,7 @@ This is invariant **I-6** in [PLAN.md](https://github.com/0xchasercat/mochi/blob
 
 ## What's in a Probe Manifest
 
-The manifest is JSON-Schema-validated. The schema lives at [`schemas/probe-manifest.schema.json`](https://github.com/0xchasercat/mochi/blob/main/schemas/probe-manifest.schema.json), vendored verbatim from [Peekaboo](https://github.com/0xchasercat/mochi/blob/main/PLAN.md) (the private upstream the schema originated in) and synced quarterly. The top-level shape:
+The manifest is JSON-Schema-validated. The schema lives at [`schemas/probe-manifest.schema.json`](https://github.com/0xchasercat/mochi/blob/main/schemas/probe-manifest.schema.json) and is the canonical contract for the harness. Top-level shape:
 
 ```jsonc
 {
@@ -95,7 +95,7 @@ Every profile in `main` was captured by a known person on a known machine on a k
 
 ## How the harness consumes the manifest as a gate
 
-The harness diff pipeline mirrors Peekaboo's `recon/equivalence/`:
+The harness diff pipeline:
 
 1. **Normalize.** Strip GUIDs (visitor IDs, install IDs, MUID-class), CSP nonces, timestamps, bundle URLs, hostnames. These vary per-session; comparing them is noise. The normalizer rules are committed under `packages/harness/src/normalize/` so a regression in normalization shows up in code review.
 2. **Diff.** Structural deep-equality with path-based output. Every leaf divergence becomes a `DiffEntry` with `path` and `before`/`after`.

@@ -3,7 +3,7 @@
  * (`packages/core/src/page/piercing.ts`). Drives a hand-crafted
  * `PierceDomNode` tree that mirrors the CDP `DOM.getDocument({ depth:-1,
  * pierce:true })` shape — including a closed-shadow-rooted iframe, which is
- * the whole point of task 0253.
+ * the whole point of
  *
  * The findPiercingMatches output is verified by `backendNodeId`, the only
  * field the host-side `Page.querySelectorPiercing` cares about for the

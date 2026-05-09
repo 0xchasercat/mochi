@@ -10,7 +10,6 @@
  * `http://wrkx.app/api`. `MOCHI_HARVESTER_API` is read at runtime — never
  * committed.
  *
- * @see tasks/0260-import-harvester-profiles.md
  */
 
 import { HarvesterFetchError, ImportRejectedError, runImport } from "./import";

@@ -7,7 +7,6 @@
  * `navigator.gpu.requestAdapter().{features,info}`.
  *
  * @see PLAN.md §9.5 (WebGPU adapter info)
- * @see tasks/0070-consistency-rules-full.md
  */
 
 import { defineRule, type Rule } from "../rule";

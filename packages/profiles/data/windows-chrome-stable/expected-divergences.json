@@ -108,7 +108,7 @@
     },
     {
       "path": "bot.chromeRuntime",
-      "comment": "Real Chrome exposes window.chrome.runtime; Chromium-for-Testing does not. Restoring chrome.runtime polyfill is task 0140 (stealth conformance) — tracked separately."
+      "comment": "Real Chrome exposes window.chrome.runtime; Chromium-for-Testing does not. Restoring chrome.runtime polyfill."
     },
     {
       "path": "storage.cookieCount",

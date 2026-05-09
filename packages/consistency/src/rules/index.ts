@@ -34,7 +34,7 @@ import { WEBGPU_RULES } from "./webgpu";
  * Rule families:
  *   - GPU_RULES         R-001..R-003, R-024, R-025
  *   - USER_AGENT_RULES  R-004..R-007, R-023, R-026, R-031,
- *                       R-042..R-046 (UA-CH metadata struct; task 0261 —
+ *                       R-042..R-046 (UA-CH metadata struct;
  *                       sec-ch-ua-arch / -bitness / -mobile / -model and
  *                       single-string ua-full-version derived from R-031)
  *   - NAVIGATOR_RULES   R-008..R-009, R-015..R-018, R-020, R-022, R-027,
@@ -45,9 +45,9 @@ import { WEBGPU_RULES } from "./webgpu";
  *   - EXTRAS_RULES      R-034..R-040 (mediaDevices / permissions / network /
  *                       screen.orientation / matchMedia / storage)
  *   - MOUSE_EVENT_RULES R-041 (MouseEvent.screenX/screenY relational lock —
- *                       PLAN.md I-5 / CDP-dispatch leak; task 0250)
+ *                       PLAN.md I-5 / CDP-dispatch leak)
  *   - AUDIO_CANVAS_RULES R-047 + R-048 (audio + canvas fingerprint blobs;
- *                        PLAN.md §9.3 / §9.4; task 0267)
+ *                        PLAN.md §9.3 / §9.4)
  */
 export const RULES: readonly Rule[] = [
   ...GPU_RULES,

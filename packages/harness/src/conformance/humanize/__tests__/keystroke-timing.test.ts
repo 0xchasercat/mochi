@@ -19,7 +19,6 @@
  *   4. `wpm` parameter scales the realized mean inter-key delay (higher WPM
  *      → lower mean delay).
  *
- * @see tasks/0150-humanize-conformance.md
  * @see PLAN.md §11.2
  */
 

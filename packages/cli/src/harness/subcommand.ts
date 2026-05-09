@@ -13,7 +13,6 @@
  * verdict line for the orchestrator to inspect.
  *
  * @see PLAN.md §13.6
- * @see tasks/0050-harness-mvp.md
  */
 
 import { mkdir } from "node:fs/promises";

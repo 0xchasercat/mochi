@@ -15,7 +15,6 @@
  * fail for reasons unrelated to fingerprint match.
  *
  * @see docs/limits.md (the canonical entries)
- * @see tasks/0140-stealth-conformance.md §"Layer 2"
  */
 
 /** Why a test is expected to fail under a JS-only stealth ceiling. */

@@ -4,7 +4,7 @@
  *
  * We deliberately ship a tiny hand-rolled validator instead of pulling in
  * an external dep (`@cfworker/json-schema`, `ajv`, etc.):
- *   - Reading `tasks/0040-mochi-capture.md` "Implementation notes" — the
+ *   - The
  *     brief calls this out as the preferred path.
  *   - The profile schema only uses a closed subset of JSON Schema:
  *     `type`, `enum`, `required`, `properties`, `additionalProperties:false`,
@@ -17,7 +17,6 @@
  * many `$defs`), we revisit this and pull in a real validator.
  *
  * @see schemas/profile.schema.json
- * @see tasks/0040-mochi-capture.md
  */
 
 /** A single validation error with a JSONPointer-ish path. */

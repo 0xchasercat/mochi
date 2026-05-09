@@ -9,7 +9,7 @@
  * dies with `error while loading shared libraries: <name>.so` on stderr,
  * surfacing through mochi as a `BrowserCrashedError` / `EPIPE` with no clue
  * what's actually missing. Two consecutive first-time-user reports during
- * v0.1.2 testing hit this. Task 0259.
+ * v0.1.2 testing hit this.
  *
  * The list below MUST stay in lockstep with the apt invocation in
  * `.github/workflows/pr-fast.yml` and `.github/workflows/release.yml` — both
@@ -23,7 +23,6 @@
  * (libasound2 → libasound2t64 transition between 22.04 → 24.04 is captured
  * by including the t64 variant — apt resolves it on either release).
  *
- * @see tasks/0259-linux-first-run-experience.md
  */
 
 /**

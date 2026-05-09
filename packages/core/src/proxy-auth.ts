@@ -39,8 +39,6 @@
  * handler covers both.
  *
  * @see PLAN.md §8.2 / §10
- * @see tasks/0160-proxy-auth-and-ci-fix.md
- * @see tasks/0266-fetch-fulfill-init-script.md
  */
 
 import { installInitInjector } from "./cdp/init-injector";
@@ -148,7 +146,7 @@ export interface ProxyAuthHandle {
  * shim — delegates to {@link installInitInjector} with `payloadCode: null`
  * so the proxy-auth-only call path still works for any out-of-tree caller.
  *
- * The Session no longer uses this directly (task 0266); proxy auth and
+ * The Session no longer uses this directly; proxy auth and
  * init-script delivery share a single `Fetch.enable` owner.
  *
  * Behavior (unchanged contract):

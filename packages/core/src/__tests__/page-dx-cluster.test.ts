@@ -1,5 +1,5 @@
 /**
- * Unit tests for the Page DX cluster (task 0257):
+ * Unit tests for the Page DX cluster:
  *   - `Page.localStorage.{get,set}`   → DOMStorage.getDOMStorageItems /
  *                                       DOMStorage.setDOMStorageItem.
  *   - `Page.sessionStorage.{get,set}` → same shape, `isLocalStorage: false`.
@@ -9,7 +9,6 @@
  * Driven against a hand-rolled fake CDP transport — same fixture pattern as
  * the cookies-jar tests, kept inline here so each test file stands alone.
  *
- * @see tasks/0257-dx-cluster-cookies-storage-permissions.md
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
@@ -114,7 +113,7 @@ function wireOriginResolver(fake: FakeBrowser, origin: string): void {
   });
 }
 
-describe("Page.localStorage / Page.sessionStorage (task 0257)", () => {
+describe("Page.localStorage / Page.sessionStorage", () => {
   let fake: FakeBrowser;
   let router: MessageRouter;
   let page: Page;
@@ -224,7 +223,7 @@ describe("Page.localStorage / Page.sessionStorage (task 0257)", () => {
   });
 });
 
-describe("Page.grantAllPermissions (task 0257)", () => {
+describe("Page.grantAllPermissions", () => {
   let fake: FakeBrowser;
   let router: MessageRouter;
   let page: Page;

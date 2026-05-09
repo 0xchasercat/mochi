@@ -6,7 +6,6 @@
  * Pure JS — no FFI, no CDP, no network. The {@link reconcileGeoConsistency}
  * function is a pure transform on `(matrix, geo, mode)`.
  *
- * @see tasks/0262-ip-tz-locale-exit-consistency.md
  * @see packages/core/src/geo-consistency.ts
  */
 

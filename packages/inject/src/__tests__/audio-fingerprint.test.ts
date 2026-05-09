@@ -1,7 +1,7 @@
 /**
  * Unit: audio fingerprint overlay() byte-exactness.
  *
- * Pins the f32 quantization fix for PR #38 / task 0267. The page-side
+ * Pins the f32 quantization fix for PR #38 / The page-side
  * digest is `hash = 0; for (i = 4500..5000) hash += Math.abs(data[i])`,
  * where `data` is the Float32Array returned by `getChannelData(0)`. The
  * captured baseline `audioHash` is a *specific* f64 value; the spoof must
@@ -21,7 +21,6 @@
  * arithmetic in pure JS (no Chromium needed) and pins the equality.
  *
  * @see packages/inject/src/modules/audio-fingerprint.ts
- * @see tasks/0267-audio-canvas-fingerprint-blobs.md
  */
 
 import { describe, expect, it } from "bun:test";

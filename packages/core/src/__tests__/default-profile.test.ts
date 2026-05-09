@@ -1,5 +1,5 @@
 /**
- * Unit tests for the host-OS profile auto-pick (task 0272).
+ * Unit tests for the host-OS profile auto-pick.
  *
  * Three layers under test:
  *
@@ -18,11 +18,9 @@
  * exported `defaultProfileForHost` introspection helper. We do NOT spawn
  * Chromium here — the goal is to lock the decisions against regressions
  * without taking the cost of a real launch. Mirrors the
- * `proc-linux-server.test.ts` pattern (task 0258).
+ * `proc-linux-server.test.ts` pattern.
  *
  * @see packages/core/src/default-profile.ts
- * @see tasks/0271-the-linux-os-thesis.md (strategic thesis + production evidence)
- * @see tasks/0272-host-os-profile-auto-default.md (engineering brief)
  */
 
 import { afterEach, describe, expect, it } from "bun:test";
@@ -33,7 +31,7 @@ import {
   unsupportedHostMessage,
 } from "../default-profile";
 
-describe("resolveDefaultProfileForHost — pure mapping table (task 0272)", () => {
+describe("resolveDefaultProfileForHost — pure mapping table", () => {
   it("linux/x64 → linux-chrome-stable", () => {
     expect(resolveDefaultProfileForHost("linux", "x64")).toBe("linux-chrome-stable");
   });
@@ -87,7 +85,7 @@ describe("resolveDefaultProfileForHost — pure mapping table (task 0272)", () =
   });
 });
 
-describe("defaultProfileForHost — live wrapper (task 0272)", () => {
+describe("defaultProfileForHost — live wrapper", () => {
   // Stub `process.platform` / `process.arch` so the live wrapper exercises
   // the same table as the pure resolver. `Object.defineProperty` is the
   // standard Bun-test pattern (matches `proc-linux-server.test.ts`).
@@ -127,7 +125,7 @@ describe("defaultProfileForHost — live wrapper (task 0272)", () => {
   });
 });
 
-describe("unsupportedHostMessage — failure-mode diagnostic (task 0272)", () => {
+describe("unsupportedHostMessage — failure-mode diagnostic", () => {
   it("names the host platform + arch verbatim", () => {
     const msg = unsupportedHostMessage("freebsd", "x64");
     expect(msg).toContain("platform=freebsd");
@@ -153,7 +151,7 @@ describe("unsupportedHostMessage — failure-mode diagnostic (task 0272)", () =>
   });
 });
 
-describe("introspection contract — defaultProfileForHost is pure (task 0272)", () => {
+describe("introspection contract — defaultProfileForHost is pure", () => {
   it("returns the same value on repeated calls (no caching, no mutation)", () => {
     // The launcher consults this helper at every launch; pinning purity
     // here means a downstream `console.log(mochi.defaultProfileForHost())`

@@ -27,7 +27,6 @@
  * list/path` cheap during a session. Bypass with `MOCHI_NO_CACHE=1` (mostly
  * useful for tests).
  *
- * @see tasks/0010-mochi-browsers-install.md
  */
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";

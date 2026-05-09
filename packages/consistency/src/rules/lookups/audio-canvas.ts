@@ -29,7 +29,6 @@
  * captured values. See `packages/inject/src/modules/{audio,canvas}-fingerprint.ts`.
  *
  * @see PLAN.md §9.3 / §9.4
- * @see tasks/0267-audio-canvas-fingerprint-blobs.md
  */
 
 /**

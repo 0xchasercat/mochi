@@ -22,7 +22,6 @@
  * to a small ephemeral `Bun.serve` instance bound to `127.0.0.1:0` — no
  * network egress, hermetic.
  *
- * @see tasks/0251-lang-flag-from-matrix.md
  * @see PLAN.md §2 I-5 (relational consistency or nothing)
  */
 

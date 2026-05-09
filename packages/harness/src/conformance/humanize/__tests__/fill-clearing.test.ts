@@ -20,7 +20,6 @@
  *
  * Gated by `MOCHI_E2E=1`.
  *
- * @see tasks/0150-humanize-conformance.md
  * @see PLAN.md §11.2
  */
 

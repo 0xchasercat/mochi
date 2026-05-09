@@ -1,5 +1,5 @@
 /**
- * Live conformance test for the DX cluster (task 0257).
+ * Live conformance test for the DX cluster.
  *
  * Gated by `MOCHI_E2E=1`. Drives a real Chromium-for-Testing through the
  * public mochi launch path to verify, end-to-end, that:
@@ -18,7 +18,6 @@
  * Budget: < 30 seconds.
  *
  * @see PLAN.md §14
- * @see tasks/0257-dx-cluster-cookies-storage-permissions.md
  */
 
 import { describe, expect, it } from "bun:test";

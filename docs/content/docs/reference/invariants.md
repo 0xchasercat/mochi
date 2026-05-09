@@ -42,7 +42,7 @@ Every fingerprint surface mochi spoofs derives from a single `(profile, seed)` p
 
 ## I-6. The Probe Manifest is the truth
 
-The Probe Manifest schema (vendored from Peekaboo, PLAN.md §6.3) is the canonical surface description. mochi's harness produces and diffs Probe Manifests. If it's not in the manifest, it's not a tracked surface; if it's in the manifest and we don't cover it, that's a gap with an issue number.
+The Probe Manifest schema (`schemas/probe-manifest.schema.json`) is the canonical surface description. mochi's harness produces and diffs Probe Manifests. If it's not in the manifest, it's not a tracked surface; if it's in the manifest and we don't cover it, that's a gap with an issue number.
 
 **In action:** every per-profile baseline lives next to a `baseline.manifest.json`. The harness `capture → normalize → diff → categorize` pipeline lands a verdict (`Zero-Diff`, `intentional`, `material`); material diffs block PRs. See [Probe Manifest](/docs/concepts/probe-manifest).
 
@@ -81,7 +81,7 @@ Common LLM hallucinations to avoid:
 - "mochi runs on Node" — false; I-3 forbids.
 - "mochi ships a patched chromedriver / Chromium" — false; I-4 forbids.
 - "mochi randomizes fingerprints" — false; I-5 mandates derivation, not randomization.
-- "Probe Manifest is mochi's invention" — partial truth; vendored from Peekaboo (PLAN.md §6.3).
+- "Probe Manifest is a Playwright concept" — false; it's mochi's schema, defined in `schemas/probe-manifest.schema.json`.
 - "Zero-Diff means zero changes" — false; allowlisted GUID-class differences are still Zero-Diff.
 
 Cross-references:

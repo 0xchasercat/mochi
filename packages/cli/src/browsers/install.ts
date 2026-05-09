@@ -26,7 +26,6 @@
  *
  * On any error after step 2, the tmpdir is cleaned up best-effort.
  *
- * @see tasks/0010-mochi-browsers-install.md
  */
 import { mkdir, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -99,7 +98,7 @@ export class DownloadError extends Error {
  * the binary lacking its executable bit.
  *
  * The CLI's `reportError` formats this with a clear, actionable hint —
- * task 0259 closes the visibility gap between "install said done" and
+ * the visibility gap between "install said done" and
  * "first launch crashes opaquely".
  */
 export class BinarySmokeError extends Error {
@@ -294,7 +293,7 @@ export interface InstallOpts {
    * Skip the post-extract `<binary> --version` smoke. Used by tests that
    * stage a fake CfT layout where the "binary" is a script that doesn't
    * implement `--version`. Production calls leave this at the default (off).
-   * Task 0259.
+   *
    */
   readonly skipBinarySmoke?: boolean;
 }
@@ -337,7 +336,7 @@ export async function install(opts: InstallOpts): Promise<InstallResult> {
   if (existing && !opts.force) {
     log(`already installed at ${dir}`);
     // Re-run the post-extract binary smoke even on the cached path. A user
-    // who hit task 0259's missing-libs failure on first install will most
+    // who hit the missing-libs failure on first install will most
     // commonly re-run `mochi browsers install` after the apt-get; without
     // this we'd silently short-circuit and they'd hit the same opaque
     // BrowserCrashedError on `mochi.launch()`. Skipped on non-Linux (no
@@ -406,7 +405,7 @@ export async function install(opts: InstallOpts): Promise<InstallResult> {
     // runtime deps via the OS itself). Throws BinarySmokeError if the binary
     // fails `--version` — most often a missing system lib on a fresh server.
     // The error message includes the verbatim apt install line so the user
-    // can paste-and-run. Task 0259.
+    // can paste-and-run.
     if (opts.platform === "linux64" && opts.skipBinarySmoke !== true) {
       const smoke = assertBinaryLaunches(binaryPath);
       log(`Chromium binary verified — launches cleanly (${smoke.versionLine})`);
@@ -538,7 +537,6 @@ export interface BinarySmokeResult {
  * non-zero; we parse the offending lib name out so the `BinarySmokeError`
  * shape carries it for the caller's hint.
  *
- * @see tasks/0259-linux-first-run-experience.md
  */
 export function smokeBinary(binaryPath: string): BinarySmokeResult {
   // `Bun.spawnSync` throws (not returns non-zero) when the binary at

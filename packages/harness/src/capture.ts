@@ -9,7 +9,6 @@
  * it against the bare-Chromium baseline captured by `mochi capture`.
  *
  * @see PLAN.md §13.2 (capture pipeline)
- * @see tasks/0050-harness-mvp.md
  */
 
 import { existsSync } from "node:fs";

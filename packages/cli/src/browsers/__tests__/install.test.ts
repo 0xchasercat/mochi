@@ -241,7 +241,7 @@ describe("error class shapes", () => {
 });
 
 /**
- * Post-extract `--version` smoke — the deliverable for task 0259's first
+ * Post-extract `--version` smoke — the deliverable for the first
  * goal. We stage tiny shell-script "binaries" that simulate Chromium's exit
  * shapes (success, missing-libs stderr, generic exec failure) and assert
  * the smoke classifies them correctly.

@@ -17,7 +17,6 @@
  *     {@link synthesizeMouseTrajectory} (pure data) + the new
  *     `Page.humanMove(x, y)` dispatch surface (E2E paths).
  *
- * @see tasks/0150-humanize-conformance.md
  * @see tests/fixtures/cloakbrowser/test_humanize_unit.mjs
  * @see tests/fixtures/cloakbrowser/test_human_visual.mjs
  */

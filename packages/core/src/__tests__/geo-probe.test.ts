@@ -11,7 +11,6 @@
  * The probe's `fetch` injection seam is an internal — production wires it
  * to `@mochi.js/net`'s `fetch`, which carries the matrix's wreq preset.
  *
- * @see tasks/0262-ip-tz-locale-exit-consistency.md
  * @see packages/core/src/geo-probe.ts
  */
 

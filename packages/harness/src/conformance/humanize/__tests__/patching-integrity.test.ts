@@ -31,7 +31,6 @@
  * native-API integrity check is gated by `MOCHI_E2E=1` since it requires
  * a real Chromium attach.
  *
- * @see tasks/0150-humanize-conformance.md
  * @see PLAN.md §7 / §11
  */
 

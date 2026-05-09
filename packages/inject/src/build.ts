@@ -115,7 +115,7 @@ export function buildPayload(matrix: MatrixV1): PayloadResult {
   // CloakBrowser-surfaced modules — defensive shims that no-op on real
   // Chrome.app (where the underlying browser already provides these
   // surfaces) and install on Chromium-for-Testing where they're absent.
-  // See tasks/0140-stealth-conformance.md.
+  // See PLAN.md.
   parts.push(wrapTry("window-chrome", emitWindowChromeModule(matrix)));
   parts.push(wrapTry("plugins", emitPluginsModule(matrix)));
   // R-041: MouseEvent.screenX/screenY prototype patch — closes the I-5

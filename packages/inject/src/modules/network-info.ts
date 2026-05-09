@@ -11,7 +11,6 @@
  * don't reconstruct the full prototype; the probe page only reads the
  * four (now five) properties below.
  *
- * @see tasks/0070-consistency-rules-full.md (network-info)
  */
 
 import type { MatrixV1 } from "@mochi.js/consistency";

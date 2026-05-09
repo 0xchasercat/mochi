@@ -18,7 +18,6 @@
  *
  * Gated by `MOCHI_E2E=1 MOCHI_ONLINE=1`.
  *
- * @see tasks/0150-humanize-conformance.md
  * @see tests/fixtures/cloakbrowser/test_humanize_unit.mjs
  */
 

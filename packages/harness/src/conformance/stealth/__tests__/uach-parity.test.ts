@@ -27,7 +27,6 @@
  *
  * Gated by `MOCHI_E2E=1`. Profile: `mac-m4-chrome-stable`.
  *
- * @see tasks/0261-uach-network-metadata.md
  * @see PLAN.md §2 I-5 (relational consistency or nothing)
  */
 

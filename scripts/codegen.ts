@@ -29,7 +29,7 @@ const SCHEMAS_DIR = join(REPO_ROOT, "schemas");
 
 const BANNER =
   "// AUTO-GENERATED — do not edit. Run `bun run codegen` to regenerate.\n" +
-  "// Source schema lives in schemas/. See scripts/codegen.ts and tasks/0003-schemas-and-codegen.md.\n";
+  "// Source schema lives in schemas/. See scripts/codegen.ts.\n";
 
 /**
  * Build the per-target compile options. We carry `cwd` to resolve $ref siblings,
@@ -91,7 +91,7 @@ const TARGETS: readonly GenTarget[] = [
   },
   {
     schema: "probe-manifest.schema.json",
-    rootId: "https://peekaboo/schemas/probe-manifest.schema.json",
+    rootId: "https://mochijs.com/schemas/probe-manifest.schema.json",
     typeName: "ProbeManifestV1",
     outputs: ["packages/harness/src/generated/probe-manifest.ts"],
   },

@@ -15,7 +15,6 @@
  *   1. confirm the inject's prototype patch is installed,
  *   2. assert the patched getter returns the expected sum.
  *
- * @see tasks/0250-mouseevent-screen-coords.md
  * @see PLAN.md §5.2, §9.2 (R-041)
  */
 

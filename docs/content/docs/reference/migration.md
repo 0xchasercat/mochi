@@ -40,7 +40,7 @@ v1.0 is the production-ready inflection point. Targeted changes:
 - **Renames (if any) are documented.** Today, no public surface is slated for rename at v1. Internal-only items can churn.
 - **Behavioral recorder** — `humanClick(sel, { trace })` accepts a recorded trace alongside the synthesizer. The forward-compatible parameter is already in the contract; the recorder lands in v1.x.
 - **Profile catalog growth.** Additional real-device captures from the harvester corpus. Placeholder IDs (see below) may flip to real captures.
-- **Probe Manifest schema.** Vendored from Peekaboo (PLAN.md §6.3). v1.0 freezes the schema version mochi targets; subsequent upstream Peekaboo versions are tracked in PLAN.md `sync notes`.
+- **Probe Manifest schema.** Defined at `schemas/probe-manifest.schema.json`. v1.0 freezes the schema version; future bumps follow semver and are tracked in `CHANGELOG.md`.
 
 Anything that would violate an invariant (PLAN.md §2 / I-1 through I-8) is by definition not in the v1.0 plan. Migrations across major-bumps will get a dedicated section here when they exist.
 

@@ -83,7 +83,6 @@ export interface DomNode {
  *
  * @see PLAN.md §8.2 — `DOM.getDocument` and `DOM.resolveNode` are not on the
  * forbidden list; both are fine to use.
- * @see tasks/0253-closed-shadow-piercing-locator.md
  */
 export interface PierceDomNode {
   nodeId: number;

@@ -5,7 +5,7 @@
  * R-023 produces a seed-derived build-hash that R-004 consumes — that's the
  * v0.2 chain that gives the rule DAG real (non-trivial) edges.
  *
- * R-042..R-046 (task 0261) close the UA-CH cross-layer gap exposed by 0255:
+ * R-042..R-046 close the UA-CH cross-layer gap exposed by 0255:
  * `Network.setUserAgentOverride` accepts a structured `userAgentMetadata`
  * shape from which Chromium derives every `Sec-CH-UA*` request header. Core
  * needs to pass that struct, and the values for `architecture`, `bitness`,
@@ -14,7 +14,6 @@
  * the same source of truth (PLAN.md I-5).
  *
  * @see PLAN.md §9.2
- * @see tasks/0261-uach-network-metadata.md
  */
 
 import type { ProfileV1 } from "../generated/profile";
@@ -154,7 +153,6 @@ export const R026: Rule = defineRule<readonly [string], string>({
  * the brand-list majors (`"147"`), which mismatches the captured baseline.
  *
  * @see PLAN.md §9.2 / §13.6
- * @see tasks/0070-consistency-rules-full.md (full-version-list)
  */
 export const R031: Rule = defineRule<readonly [BrowserName, string], string>({
   id: "R-031",

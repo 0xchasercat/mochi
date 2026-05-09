@@ -1,6 +1,6 @@
 /**
  * Unit tests for the Linux-server environment auto-detection that drives
- * `LaunchOptions.headlessMode` defaulting (task 0258).
+ * `LaunchOptions.headlessMode` defaulting.
  *
  * Two layers under test:
  *
@@ -41,7 +41,7 @@ function probes(overrides: Partial<LinuxServerProbes> = {}): LinuxServerProbes {
   };
 }
 
-describe("detectLinuxServerEnv — server-no-display classifier (task 0258)", () => {
+describe("detectLinuxServerEnv — server-no-display classifier", () => {
   it("flags Linux + no DISPLAY + no WAYLAND_DISPLAY as serverNoDisplay=true", () => {
     const env = detectLinuxServerEnv(probes());
     expect(env.serverNoDisplay).toBe(true);
@@ -130,7 +130,7 @@ describe("detectLinuxServerEnv — server-no-display classifier (task 0258)", ()
   });
 });
 
-describe("resolveHeadlessMode — precedence table (task 0258)", () => {
+describe("resolveHeadlessMode — precedence table", () => {
   const SERVER_ENV = detectLinuxServerEnv(probes());
   const DEV_ENV = detectLinuxServerEnv(probes({ display: ":0" }));
 
@@ -198,7 +198,7 @@ describe("resolveHeadlessMode — precedence table (task 0258)", () => {
   });
 });
 
-describe("buildChromiumArgs — headlessMode dispatch (task 0258)", () => {
+describe("buildChromiumArgs — headlessMode dispatch", () => {
   function baseCfg(overrides: Partial<SpawnConfig> = {}): SpawnConfig {
     return { binary: FAKE_BINARY, headless: false, ...overrides };
   }

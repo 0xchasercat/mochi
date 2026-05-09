@@ -21,7 +21,6 @@
  * Gated by `MOCHI_E2E=1`. Profile: `mac-m4-chrome-stable`.
  *
  * @see tests/fixtures/cloakbrowser/test_stealth.py
- * @see tasks/0140-stealth-conformance.md §"Layer 1"
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";

@@ -22,7 +22,6 @@
  *
  * Gated by `MOCHI_E2E=1`. Set `MOCHI_CHROMIUM_PATH` to a real binary.
  *
- * @see tasks/0252-window-size-flag-from-matrix.md
  * @see UDC `__init__.py:410-411`, UDC issue #2242
  */
 

@@ -285,7 +285,7 @@ describe("rules — v0.2 ruleset (golden lock)", () => {
     );
   });
 
-  // ---- task 0261 rules (R-042..R-046) — UA-CH metadata struct ------------
+  // ---- R-042..R-046 — UA-CH metadata struct ------------
 
   it("R-042: sec-ch-ua-arch is quoted arm on apple-silicon, x86 on win-x64", () => {
     expect(macMatrix.uaCh["sec-ch-ua-arch"]).toBe('"arm"');
@@ -324,7 +324,7 @@ describe("rules — v0.2 ruleset (golden lock)", () => {
     expect(macMatrix.uaCh["ua-full-version"]).toBe("131.0.6778.110");
   });
 
-  // ---- task 0267 rules (R-047 / R-048) — audio + canvas fingerprint ------
+  // ---- R-047 / R-048 — audio + canvas fingerprint ------
 
   it("R-047: audio-fingerprint slot carries sampleRate + audioHash + 10-sample window", () => {
     const audio = JSON.parse(macMatrix.uaCh["audio-fingerprint"] ?? "{}") as {

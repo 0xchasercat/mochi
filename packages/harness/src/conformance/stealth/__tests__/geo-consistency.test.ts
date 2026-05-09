@@ -26,7 +26,6 @@
  * fall to privacy-fallback and the test would degenerate).
  *
  * @see PLAN.md §9
- * @see tasks/0262-ip-tz-locale-exit-consistency.md
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";

@@ -12,7 +12,6 @@
  * still byte-stable per (profile, seed).
  *
  * @see PLAN.md §9.5
- * @see tasks/0070-consistency-rules-full.md (media-devices)
  */
 
 import type { MatrixV1 } from "@mochi.js/consistency";

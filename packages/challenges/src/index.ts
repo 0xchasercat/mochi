@@ -24,7 +24,6 @@
  *     via the existing `Page.evaluate` plumbing (which uses
  *     `Runtime.callFunctionOn`, not `Runtime.evaluate`).
  *
- * @see tasks/0220-turnstile-auto-click.md
  */
 
 export const VERSION = "0.1.0" as const;

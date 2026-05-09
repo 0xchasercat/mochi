@@ -14,7 +14,7 @@
  *
  * The same `sec-ch-ua*` and `ua-full-version*` fields drive
  * `Network.setUserAgentOverride.userAgentMetadata` in `@mochi.js/core`
- * (task 0261). Single source of truth — the JS-side spoof and the
+ *. Single source of truth — the JS-side spoof and the
  * request-header spoof read the same matrix slots so they cannot drift
  * (PLAN.md I-5).
  *

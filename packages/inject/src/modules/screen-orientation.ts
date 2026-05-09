@@ -17,7 +17,6 @@
  * returned `MediaQueryList` reports `matches` according to the matrix's
  * curated answer. Unknown specs fall through to native.
  *
- * @see tasks/0070-consistency-rules-full.md (screen-orientation)
  */
 
 import type { MatrixV1 } from "@mochi.js/consistency";

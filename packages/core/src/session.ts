@@ -97,7 +97,7 @@ export interface SessionInit {
    * When true, skip {@link buildPayload} AND skip the init-injector install
    * (no `Fetch.fulfillRequest` body splice on documents); worker targets
    * receive no inject either. Intended for `mochi capture` and similar
-   * baseline-collection flows. PLAN.md §12.1, task 0040.
+   * baseline-collection flows. PLAN.md §12.1,
    */
   bypassInject?: boolean;
   /**
@@ -156,7 +156,7 @@ export interface StorageSnapshot {
   sessionStorage: Record<string, Record<string, string>>;
 }
 
-// ---- cookie-jar persistence (task 0257) -------------------------------------
+// ---- cookie-jar persistence -------------------------------------
 
 /**
  * Current on-disk cookie-file format version. Bumped on incompatible header
@@ -170,7 +170,6 @@ export const COOKIE_JAR_FORMAT_VERSION = 1 as const;
  * verbatim `Storage.getCookies` payload — every shipped Chromium revision
  * agrees on this shape, so loading on a newer Chromium round-trips losslessly.
  *
- * @see tasks/0257-dx-cluster-cookies-storage-permissions.md (success criteria)
  * @see https://chromedevtools.github.io/devtools-protocol/tot/Storage/#method-getCookies
  */
 export interface CookieJarFile {
@@ -282,7 +281,7 @@ export class Session {
   /**
    * Whether this session bypasses the inject pipeline (no `buildPayload`,
    * no body splice via `Fetch.fulfillRequest`, no worker injection). Set
-   * from {@link SessionInit.bypassInject}. PLAN.md §12.1, task 0040.
+   * from {@link SessionInit.bypassInject}. PLAN.md §12.1,
    *
    * @internal
    */
@@ -823,7 +822,7 @@ export class Session {
    * (no Page domain). PLAN.md §8.4 calls out that the worker target accepts
    * `Runtime.evaluate` even though `Runtime.enable` is forbidden by §8.2.
    *
-   * The Patchright-cited bootstrap (task 0254 — `crServiceWorkerPatch.ts:32-43`,
+   * The Patchright-cited bootstrap  (— `crServiceWorkerPatch.ts:32-43`,
    * `crPagePatch.ts:404-417`) tightens the inject race window:
    *   1. `Runtime.evaluate("globalThis", { serialization: "idOnly" })` —
    *      returns a `RemoteObject` whose `objectId` carries the worker's
@@ -1016,7 +1015,7 @@ export class Session {
   }
 }
 
-// ---- UA-CH metadata helpers (task 0261) -------------------------------------
+// ---- UA-CH metadata helpers -------------------------------------
 
 /**
  * Single brand entry as accepted by `Network.setUserAgentOverride`'s
@@ -1191,7 +1190,7 @@ export function buildUserAgentMetadata(matrix: MatrixV1): {
   };
 }
 
-// ---- cookie-jar factory (task 0257) -----------------------------------------
+// ---- cookie-jar factory -----------------------------------------
 
 /**
  * Build the {@link CookieJar} returned by `Session.cookies`. Bound to one

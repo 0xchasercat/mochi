@@ -18,7 +18,6 @@
  * spoofed Matrix.
  *
  * @see PLAN.md §12.1
- * @see tasks/0040-mochi-capture.md
  */
 
 import { mkdir, rm } from "node:fs/promises";
@@ -179,7 +178,7 @@ export async function runCapture(opts: CaptureOptions): Promise<CaptureResult> {
     // Capture is a hermetic flow: we want the bare un-spoofed Chromium
     // surface AND we want it free of updater / sync / default-apps /
     // feed-prefetch network noise so the baseline manifest is byte-stable
-    // across reruns. Pairs with `bypassInject: true`. Task 0256.
+    // across reruns. Pairs with `bypassInject: true`.
     hermetic: true,
     binary,
   };

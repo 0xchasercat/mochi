@@ -12,7 +12,6 @@
  * Budget: < 30 seconds total (single session, single fixture, no online).
  *
  * @see PLAN.md §13.6 ("Zero-Diff" definition)
- * @see tasks/0050-harness-mvp.md
  */
 
 import { describe, expect, it } from "bun:test";

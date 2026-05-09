@@ -1,5 +1,5 @@
 // AUTO-GENERATED — do not edit. Run `bun run codegen` to regenerate.
-// Source schema lives in schemas/. See scripts/codegen.ts and tasks/0003-schemas-and-codegen.md.
+// Source schema lives in schemas/. See scripts/codegen.ts.
 
 /**
  * A ProfileV1 instantiated for a specific seed. Same shape as ProfileV1 (every property re-declared via $ref to profile.schema.json), with three additional required fields: seed, derivedAt, consistencyEngineVersion. Consumed by @mochi.js/inject. JSON-serializable; round-trips losslessly. See PLAN.md §6.2.
