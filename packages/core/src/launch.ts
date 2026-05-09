@@ -557,8 +557,10 @@ async function resolveProfileSource(profile: ProfileId | ProfileV1 | undefined):
 
 /**
  * Load a `ProfileV1` for `id` from `@mochi.js/profiles` if a captured
- * baseline ships, otherwise synthesize a placeholder. Unknown ids propagate
- * as the underlying `UnknownProfileIdError`.
+ * baseline ships, otherwise synthesize a placeholder. Unknown ids also fall
+ * back to the placeholder (with a console.warn) — preserving the
+ * pre-getProfile() contract that any string id produces a working session.
+ * E2E test fixtures rely on synthetic ids like "test-humanize".
  *
  * Critical correctness path: the captured baselines pin tip-of-stable Chrome
  * majors (147+ as of 2026-05). The pre-fix code path called
@@ -571,8 +573,7 @@ async function loadProfileWithFallback(id: ProfileId): Promise<ProfileV1> {
     // `ProfileId` here is the loose `string` alias the launcher accepts
     // (see comment near the type definition). `getProfile` narrows it
     // back to the catalog union at runtime and throws
-    // `UnknownProfileIdError` for ids outside the catalog — which we
-    // re-throw below.
+    // `UnknownProfileIdError` for ids outside the catalog.
     return await getProfile(id as Parameters<typeof getProfile>[0]);
   } catch (err) {
     if (err instanceof ProfileBaselineMissingError) {
@@ -581,9 +582,16 @@ async function loadProfileWithFallback(id: ProfileId): Promise<ProfileV1> {
       return synthesizePlaceholderProfile(id);
     }
     if (err instanceof UnknownProfileIdError) {
-      // Caller passed an id that isn't in `KNOWN_PROFILE_IDS`. Propagate
-      // unchanged — the user should see the precise diagnostic.
-      throw err;
+      // Caller passed an id that isn't in `KNOWN_PROFILE_IDS`. Surface a
+      // warning so typos are visible, but fall back to the placeholder so
+      // synthetic test-fixture ids (e.g. "test-humanize") keep working.
+      // biome-ignore lint/suspicious/noConsole: dev-facing diagnostic
+      console.warn(
+        `[mochi] profile id "${id}" is not in @mochi.js/profiles.KNOWN_PROFILE_IDS; ` +
+          "falling back to a synthesized placeholder. Pass a ProfileV1 object directly " +
+          "or use one of the catalog ids to silence this warning.",
+      );
+      return synthesizePlaceholderProfile(id);
     }
     throw err;
   }
