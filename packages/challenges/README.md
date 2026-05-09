@@ -11,7 +11,7 @@ Out of scope (deferred):
 
 ## What this is — and isn't
 
-This is **not** a captcha solver. The visible Turnstile checkbox is a behavioral test: Cloudflare watches the cursor trajectory, the dwell, and a few hundred other signals around the click. The hard part is the **behavioral** profile, which mochi already does (`@mochi.js/behavioral`'s Bezier+Fitts synth, the inject pipeline's matrix consistency, the wreq TLS fingerprint). The actual click is the easy part — this package exists so you don't have to write `page.humanClick('iframe[src*="challenges.cloudflare.com"]')` yourself in every flow.
+This is **not** a captcha solver. The visible Turnstile checkbox is a behavioral test: Cloudflare watches the cursor trajectory, the dwell, and a few hundred other signals around the click. The hard part is the **behavioral** profile, which mochi already does (`@mochi.js/behavioral`'s Bezier+Fitts synth, the inject pipeline's matrix consistency, Chromium's native TLS fingerprint emitted on every request). The actual click is the easy part — this package exists so you don't have to write `page.humanClick('iframe[src*="challenges.cloudflare.com"]')` yourself in every flow.
 
 For escalated variants (image / audio / managed-failed), this package fires `onEscalation(reason)` and bails. It will **not** click randomly into a challenge iframe.
 

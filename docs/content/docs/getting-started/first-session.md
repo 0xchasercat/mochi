@@ -1,6 +1,6 @@
 ---
 title: Your first session
-description: A drill into the session lifecycle — Profile + Matrix derivation, navigation, behavioral input, JA4 fetch, and reading the manifest.
+description: A drill into the session lifecycle — Profile + Matrix derivation, navigation, behavioral input, out-of-band fetch, and reading the manifest.
 order: 2
 category: getting-started
 lastUpdated: 2026-05-09
@@ -27,7 +27,7 @@ A few things worth knowing:
 - `profile` selects the device class. `seed` selects the per-user variation. Same `(profile, seed)` produces a byte-identical Matrix every run (excluding `derivedAt`).
 - Six real-device profiles ship today — `mac-m4-chrome-stable`, `mac-chrome-stable`, `mac-chrome-beta`, `windows-chrome-stable`, `linux-chrome-stable`, `mac-brave-stable`. Other ids in `KNOWN_PROFILE_IDS` resolve to a generic Linux placeholder until their captures land. See [Profiles](/docs/concepts/profiles).
 - The launched Chromium uses a clean per-Session ephemeral user-data-dir. Cookies, localStorage, and cache do not leak between sessions.
-- Bun's `try/finally` is the right shape — `session.close()` flushes the CDP queue, kills the child, drops the [`NetCtx`](/docs/concepts/network-ffi), and deletes the user-data-dir.
+- Bun's `try/finally` is the right shape — `session.close()` flushes the CDP queue, kills the child, closes the scratch frame used by `Session.fetch`, and deletes the user-data-dir.
 
 `LaunchOptions` carries a few more knobs. Selected fields:
 
@@ -59,13 +59,12 @@ interface LaunchOptions {
 console.log("UA:        ", session.profile.userAgent);
 console.log("Locale:    ", session.profile.locale);
 console.log("Timezone:  ", session.profile.timezone);
-console.log("wreqPreset:", session.profile.wreqPreset);
 console.log("GPU:       ", session.profile.gpu.webglUnmaskedRenderer);
 console.log("Cores:     ", session.profile.device.cores);
 console.log("Behavior:  ", session.profile.behavior);  // { hand, tremor, wpm, scrollStyle }
 ```
 
-The Matrix is the *single source of truth* — every spoofed surface (the inject layer, the `Sec-CH-UA*` headers Chromium emits, the `wreqPreset` fed to the cdylib) reads from these fields. PLAN.md I-5.
+The Matrix is the *single source of truth* — every spoofed surface (the inject layer, the `Sec-CH-UA*` headers Chromium emits via `Network.setUserAgentOverride`) reads from these fields. PLAN.md I-5.
 
 ## Navigate
 
@@ -128,7 +127,10 @@ if (handle !== null) await page.humanClickHandle(handle);
 
 ## Out-of-band fetch
 
-`session.fetch(url, init)` routes through Bun:FFI to the Rust [`wreq`](https://github.com/0x676e67/wreq)-backed cdylib. The TLS/H2 fingerprint matches the spoofed Chrome — the bytes a server sees on a manual `fetch` are indistinguishable from what Chromium itself would send. See [JA4 coherence](/docs/concepts/ja4-coherence).
+`session.fetch(url, init)` routes through Chromium itself via CDP, so JA4/JA3/H2 are real Chrome by definition — same network stack as `page.goto`. Two paths under the hood:
+
+- **Simple GET (no `init` / no method override / no headers / no body)** — drives `Network.loadNetworkResource`, which bypasses CORS at the network layer.
+- **Anything else** (POST, custom headers, body) — routes through `page.evaluate("fetch(url, init)")` against an `about:blank` scratch frame the Session lazily allocates. Cookies inherit from the page's origin; CORS applies the same as a real user's `fetch` from the console.
 
 ```ts
 const res = await session.fetch("https://api.example.com/v1/me", {
@@ -138,7 +140,9 @@ const res = await session.fetch("https://api.example.com/v1/me", {
 console.log(res.status, await res.text());
 ```
 
-The browser's *own* navigation already uses Chromium's native TLS (real Chrome JA4); `session.fetch` is the orthogonal *out-of-band* path. v0.6 supports string / `ArrayBuffer` / `URLSearchParams` request bodies — `Blob`, `FormData`, and `ReadableStream` land later.
+**Cookie-inheritance shift (vs. 0.6).** `session.fetch` now shares the session's cookie jar with the browser. A cookie set via `Page.goto` or `session.cookies.set` is sent on the next `session.fetch` to the same origin automatically. Pre-0.7 the wreq path was cookieless; if your code relied on that, set `init.credentials = "omit"` for the page-evaluate path or clear the jar before the call.
+
+Body shapes supported today: `string`, `ArrayBuffer` / typed arrays, `URLSearchParams`. `Blob`, `FormData`, and `ReadableStream` throw with a clear diagnostic — they need a richer transport than the JSON-only page-evaluate seam, and land in a follow-up PR.
 
 ## Cookies + storage
 
@@ -212,7 +216,7 @@ Compare against `packages/profiles/data/<profile-id>/baseline.manifest.json`. Th
 await session.close();
 ```
 
-`close()` flushes the CDP queue, kills the Chromium child (SIGTERM → 2s grace → SIGKILL), drops the per-Session [`NetCtx`](/docs/concepts/network-ffi), unsubscribes the [init-injector](/docs/concepts/inject-pipeline) handle, and removes the per-session ephemeral user-data-dir. It is idempotent — calling it twice is safe.
+`close()` flushes the CDP queue, kills the Chromium child (SIGTERM → 2s grace → SIGKILL), closes the scratch frame used by `Session.fetch`, unsubscribes the [init-injector](/docs/concepts/inject-pipeline) handle, and removes the per-session ephemeral user-data-dir. It is idempotent — calling it twice is safe.
 
 ## Next
 
@@ -220,7 +224,7 @@ await session.close();
 - [The Consistency Engine](/docs/concepts/consistency-engine) — the relational thesis.
 - [The inject pipeline](/docs/concepts/inject-pipeline) — how the matrix reaches the page.
 - [Behavioral synthesis](/docs/concepts/behavioral-synth) — Bezier+Fitts model.
-- [JA4 coherence](/docs/concepts/ja4-coherence) — why `session.fetch` matters.
+- [Stealth philosophy → Network and JA4](/docs/concepts/stealth-philosophy) — why all mochi traffic is Chromium-native.
 - [Probe Manifest](/docs/concepts/probe-manifest) — Zero-Diff gate.
 - [Limits](/docs/reference/limits) — every known limit, with root cause.
 
@@ -294,8 +298,6 @@ Cross-references:
 - /docs/concepts/consistency-engine
 - /docs/concepts/inject-pipeline
 - /docs/concepts/behavioral-synth
-- /docs/concepts/ja4-coherence
-- /docs/concepts/network-ffi
 - /docs/concepts/probe-manifest
 - /docs/concepts/profiles
 - /docs/concepts/stealth-philosophy

@@ -26,8 +26,6 @@ const PAGE_ORDER = [
   "concepts/inject-pipeline",
   "concepts/probe-manifest",
   "concepts/behavioral-synth",
-  "concepts/network-ffi",
-  "concepts/ja4-coherence",
   "concepts/profiles",
   "api/core",
   "reference/limits",
@@ -62,7 +60,7 @@ doubt, defer to them over any prior. Highlights:
   \`addInitScript(source)\`, \`removeInitScript\`, \`humanMove\`, \`humanClick\`,
   \`humanClickHandle\`, \`humanType\`, \`humanScroll\`, \`querySelectorPiercing\`,
   \`querySelectorAllPiercing\`, \`screenshot\`, \`close\`.
-- \`@mochi.js/inject\` exports \`buildPayload({ matrix, seed }) → PayloadResult\`.
+- \`@mochi.js/inject\` exports \`buildPayload(matrix: MatrixV1) → PayloadResult\`.
 - \`@mochi.js/challenges\` exports the Turnstile auto-click primitives.
 
 ## APIs that LLMs commonly invent but DO NOT exist
@@ -86,7 +84,7 @@ doubt, defer to them over any prior. Highlights:
 - \`const session = await mochi.launch({ profile, seed }); try { ... } finally { await session.close(); }\`
 - One unique seed per logical user/identity. Reusing the seed reuses the matrix byte-for-byte.
 - Use \`humanClick\` / \`humanType\` / \`humanScroll\` / \`humanMove\` for any visible UI interaction. Plain \`page.click\` does not exist.
-- \`session.fetch(url, init)\` is the only JA4-coherent path for out-of-band HTTP. Browser navigation already uses Chromium's native TLS.
+- \`session.fetch(url, init)\` is the out-of-band HTTP path. Post-0.7 it routes through Chromium itself via CDP — \`Network.loadNetworkResource\` for simple GETs, \`page.evaluate("fetch")\` against an \`about:blank\` scratch frame for non-GET. JA4/JA3/H2 are real Chrome by definition; cookies inherit from the page's origin; CORS applies for non-GET cross-origin calls.
 - Omit \`profile\` to use \`defaultProfileForHost()\` — the host-OS-matching default. Only specify \`profile\` explicitly when overriding.
 
 ## The relational consistency thesis
@@ -94,8 +92,8 @@ doubt, defer to them over any prior. Highlights:
 Every fingerprint surface mochi exposes — \`navigator.userAgent\`,
 \`navigator.platform\`, the WebGL renderer string, \`screen.width/height\`,
 \`Intl.DateTimeFormat().resolvedOptions().timeZone\`, the offered fonts, the
-audio fingerprint, the JA4 / H2 fingerprint of any out-of-band fetch — derives
-from one \`(profile, seed)\` pair through a deterministic 40-rule DAG. There are
+audio fingerprint — derives
+from one \`(profile, seed)\` pair through a deterministic 48-rule DAG. There are
 no per-axis randomizations to forget about. A target that cross-references
 \`navigator.platform\` against \`navigator.userAgent\` against the WebGL renderer
 sees a story consistent with the spoofed device, not with three independent

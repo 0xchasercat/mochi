@@ -8,7 +8,7 @@ lastUpdated: 2026-05-09
 
 ## Scenario
 
-You have a list of 200 URLs to visit. Sequential is too slow. A single tab in N parallel pages won't work — they'd share the same `(profile, seed)` Matrix, the same TLS session, the same cookie jar, the same exit IP. To a fingerprinter that looks like one user opening 200 tabs in 30 seconds, which is the wrong shape. You want N independent sessions, each with its own derived Matrix (different `display.width` jitter, different `behavior.tremor` instance, different `wreqPreset` if you're rotating profiles), each with its own Chromium child, each isolated from the others' failures.
+You have a list of 200 URLs to visit. Sequential is too slow. A single tab in N parallel pages won't work — they'd share the same `(profile, seed)` Matrix, the same TLS session, the same cookie jar, the same exit IP. To a fingerprinter that looks like one user opening 200 tabs in 30 seconds, which is the wrong shape. You want N independent sessions, each with its own derived Matrix (different `display.width` jitter, different `behavior.tremor` instance, different UA-CH if you're rotating profiles), each with its own Chromium child, each isolated from the others' failures.
 
 mochi sessions are independent by construction. One `Session` = one Chromium process = one CDP transport = one ephemeral user-data-dir. A `seed` of `pool-0`, `pool-1`, …, `pool-N` produces N distinct relationally-locked Matrices from the same profile. `Promise.all` plus `Promise.allSettled` gives you the fan-out and the per-session error isolation.
 

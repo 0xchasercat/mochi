@@ -365,13 +365,15 @@ describe("DX cluster contract: Browser.grantPermissions payload", () => {
     await router.close();
   });
 
-  it("ALL_BROWSER_PERMISSIONS includes the canonical CDP enum entries", () => {
+  it("ALL_BROWSER_PERMISSIONS includes the canonical Chromium 148 CDP enum entries", () => {
     // Pin a representative subset — a future Chromium revision adding a new
     // permission type should fail this when the bundled list isn't updated.
+    // Verified against `Browser.PermissionType` on Chromium 148, 2026-05-09.
     const required = [
       "audioCapture",
       "backgroundFetch",
       "backgroundSync",
+      "cameraPanTiltZoom",
       "clipboardReadWrite",
       "clipboardSanitizedWrite",
       "displayCapture",
@@ -387,13 +389,23 @@ describe("DX cluster contract: Browser.grantPermissions payload", () => {
       "storageAccess",
       "topLevelStorageAccess",
       "videoCapture",
-      "videoCapturePanTiltZoom",
       "wakeLockScreen",
       "wakeLockSystem",
       "windowManagement",
     ];
     for (const p of required) {
       expect(ALL_BROWSER_PERMISSIONS).toContain(p);
+    }
+  });
+
+  it("ALL_BROWSER_PERMISSIONS does NOT include obsolete-as-of-148 entries", () => {
+    // The first-time-user agent's observed `Browser.grantPermissions:
+    // Unknown permission type: accessibilityEvents` failure pins this:
+    // these names are gone in Chromium 148. Catch any future regression
+    // that re-adds them.
+    const obsolete = ["accessibilityEvents", "captureHandle", "flash", "videoCapturePanTiltZoom"];
+    for (const p of obsolete) {
+      expect(ALL_BROWSER_PERMISSIONS).not.toContain(p);
     }
   });
 });

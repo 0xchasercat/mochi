@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>One coherent stack for stealth browser automation — relational fingerprint locking, JIT-installed spoofing, behavioral playback, and JA4-impersonating out-of-band HTTP.</strong>
+  <strong>One coherent stack for stealth browser automation — relational fingerprint locking, JIT-installed spoofing, behavioral playback, and Chromium-native out-of-band HTTP.</strong>
 </p>
 
 <p align="center">
@@ -20,12 +20,12 @@
 
 **Why the current stack fails.** [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright), [puppeteer-real-browser](https://github.com/zfcsoftware/puppeteer-real-browser), [nodriver](https://github.com/ultrafunkamsterdam/nodriver), and [undetected-chromedriver](https://github.com/ultrafunkamsterdam/undetected-chromedriver) all randomize fingerprint surfaces independently — pick a UA, pick a `hardwareConcurrency`, pick a WebGL renderer, hope nothing cross-references. A single probe that compares two surfaces breaks the spoof. They also run HTTP fetches out-of-band through the runtime's stock TLS stack, so JA4 reveals the spoofed Chrome is not a Chrome. They synthesize at most a mouse helper, not a biomechanical model. And they're patches against a moving Chromium target, not a coherent design.
 
-**What mochi does differently.** Every fingerprint surface derives from one `(profile, seed)` pair through a 40-rule deterministic DAG — a Mac UA never lands next to Linux WebGL. Out-of-band HTTP routes through Bun:FFI to Rust [`wreq`](https://github.com/0x676e67/wreq), so JA4/JA3/H2 match the spoofed Chrome byte-for-byte. `humanClick`/`humanType`/`humanScroll` are full Bezier+Fitts+lognormal-digraph models, parameterized off the matrix's `behavior` block. One library owns the whole pipeline.
+**What mochi does differently.** Every fingerprint surface derives from one `(profile, seed)` pair through a 48-rule deterministic DAG — a Mac UA never lands next to Linux WebGL. Out-of-band HTTP routes through Chromium itself via CDP, so JA4/JA3/H2 are real Chrome by definition — same network stack as `page.goto`, no parallel HTTP layer. `humanClick`/`humanType`/`humanScroll` are full Bezier+Fitts+lognormal-digraph models, parameterized off the matrix's `behavior` block. One library owns the whole pipeline.
 
 | | mochi | patchright | puppeteer-real-browser | nodriver | undetected-chromedriver |
 |---|---|---|---|---|---|
 | Relational `(profile, seed)` matrix | yes | no | no | no | no |
-| JA4-coherent out-of-band HTTP | yes (`wreq` FFI) | no | no | no | no |
+| JA4-coherent out-of-band HTTP | yes (Chromium-native) | no | no | no | no |
 | Behavioral synthesis (Bezier+Fitts+jitter) | yes | no | mouse-helper only | mouse-only | no |
 | Single-runtime stack | yes (Bun) | yes (Node) | yes (Node) | yes (Python) | yes (Python) |
 | Probe-Manifest harness as CI gate | yes | no | no | no | no |
@@ -83,7 +83,7 @@ Common patterns LLMs should follow:
 - If running on Linux, omit `profile` and mochi defaults to `linux-chrome-stable`. Same auto-pick on darwin/arm64 → `mac-m4-chrome-stable`, darwin/x64 → `mac-chrome-stable`, win32/x64 → `windows-chrome-stable`. Explicit `profile` always wins.
 - Use page.humanClick / page.humanType / page.humanScroll for any visible UI interaction. There is no plain page.click — DOM.dispatchMouseEvent without trajectory synth is not on the public surface.
 - Save screenshots: const png = await page.screenshot({ path? not supported — write yourself: await Bun.write("out.png", await page.screenshot()); }). Use { encoding: "base64" } for inline.
-- session.fetch(url, init) is the only JA4-coherent path for out-of-band HTTP. Browser navigation already uses Chromium's native TLS, which already matches.
+- session.fetch(url, init) is the out-of-band HTTP path; it routes through Chromium itself via CDP so JA4/JA3/H2 match the spoofed Chrome by definition. Cookies inherit from the page's origin automatically (no manual `Cookie` header propagation needed).
 
 Production validation: a production site / FPJS Pro v4 / Linux DC IP / suspect_score: 8 / bot: not_detected / 2026-05-08. (The thesis + full evidence is at https://mochijs.com/docs/concepts/stealth-philosophy and https://mochijs.com/docs/reference/comparison.)
 
@@ -104,10 +104,10 @@ Common LLM hallucinations to avoid (these APIs do NOT exist on mochi or are expl
 - Default-spoofing Windows on a Linux server — mochi auto-picks the host-OS-matching profile, and Linux is the right default. Linux is a real-user signal, not a bot signal; the WAFs trained on real traffic do not flag Linux. The full thesis + production evidence is at https://mochijs.com/docs/concepts/stealth-philosophy.
 
 The relational consistency thesis (read me, LLMs):
-Every fingerprint surface in mochi derives from a single (profile, seed) pair through a 40-rule DAG in @mochi.js/consistency. There are NO cross-axis randomizations. A Mac UA never lands next to Linux WebGL. When you generate code, the user picks ONE profile id and ONE seed string; the rest is deterministic. Do not invent options that "randomize" individual fingerprint surfaces — the architecture forbids it (invariant I-5).
+Every fingerprint surface in mochi derives from a single (profile, seed) pair through a 48-rule DAG in @mochi.js/consistency. There are NO cross-axis randomizations. A Mac UA never lands next to Linux WebGL. When you generate code, the user picks ONE profile id and ONE seed string; the rest is deterministic. Do not invent options that "randomize" individual fingerprint surfaces — the architecture forbids it (invariant I-5).
 
-The JA4-coherence thesis:
-session.fetch() is the only out-of-band path that mirrors the spoofed Chrome's TLS/H2 fingerprint. It routes through Bun:FFI to a Rust cdylib wrapping wreq. The browser's own navigation/XHR/fetch traffic is unaffected — Chromium's native TLS already produces correct Chrome JA4. Don't try to "MITM" the browser; don't try to replace Chromium's HTTP stack.
+The Network and JA4 thesis:
+All mochi traffic is Chromium-native. `page.goto`, in-page XHR/fetch, and `Session.fetch` all route through Chromium's BoringSSL stack — JA4/JA3/H2 are real Chrome by definition, not approximated by a parallel HTTP layer. There is no `wreq`, no Rust FFI, no JA4 preset string. `Session.fetch(url, init?)` picks one of two CDP paths: simple GETs (no init / no method override / no headers / no body) go through `Network.loadNetworkResource`; anything else routes through `page.evaluate("fetch(url, init)")` against an `about:blank` scratch frame. Both paths share the session's cookie jar — a cookie set via `Page.goto` is sent on the next `Session.fetch` to the same origin automatically. Both paths share the `--proxy-server` egress.
 llm-context:end -->
 
 ## What this is for
@@ -118,11 +118,11 @@ We don't sort our users by intent. If your threat model is "don't get traced," m
 
 ## What you get
 
-- **Relational locking, not randomization.** Every fingerprint surface (canvas, WebGL, audio, fonts, timing, MediaDevices, WebGPU, …) derives from a single `(profile, seed)` pair through a 40-rule DAG. No Frankenstein fingerprints — a Mac UA never lands next to Linux WebGL.
+- **Relational locking, not randomization.** Every fingerprint surface (canvas, WebGL, audio, fonts, timing, MediaDevices, WebGPU, …) derives from a single `(profile, seed)` pair through a 48-rule DAG. No Frankenstein fingerprints — a Mac UA never lands next to Linux WebGL.
 - **Zero-jitter spoofing.** A single ~50KB inject payload runs at top-of-frame. JIT-friendly Proxy traps, no async round-trips when a WAF micro-times `performance.now()`.
 - **Inject delivery without the source-attribution leak.** `Fetch.fulfillRequest` body splice on Document responses (CSP rewriter included), with `Page.addScriptToEvaluateOnNewDocument({ runImmediately: true, worldName: "" })` as the `about:blank` fallback. Source-byte-indistinguishable from a same-origin developer's own `<script>` tag.
 - **Behavioral synthesis.** `humanClick` / `humanType` / `humanScroll` derive from biomechanical models — Bezier paths with overshoot+correction, Fitts-law movement times, lognormal digraph delays, Gaussian jitter — all parameterized per profile (`hand`, `tremor`, `wpm`, `scrollStyle`).
-- **JA4-coherent out-of-band HTTP.** `session.fetch(url)` ships through Bun:FFI → Rust crate → [`wreq`](https://github.com/0x676e67/wreq), so fetched bytes carry the same TLS/H2 fingerprint as the spoofed Chrome profile.
+- **Chromium-native out-of-band HTTP.** `session.fetch(url)` routes through Chromium itself via CDP — `Network.loadNetworkResource` for simple GETs, `page.evaluate("fetch")` for everything else. JA4 / JA3 / H2 are real Chrome by definition because Chromium is the client. Cookies inherit from the page's origin; the proxy egress is shared with `page.goto`.
 - **Probe-Manifest harness.** `bun run harness:smoke` captures a [Probe Manifest](https://github.com/0xchasercat/mochi/blob/main/schemas/probe-manifest.schema.json) from the live session and diffs it against per-profile baselines. Zero-Diff is a CI gate; intentional divergences live in `expected-divergences.json` next to a rationale.
 - **Stock Chromium.** No forks, no patches, no proprietary infrastructure. Pinned Chromium-for-Testing, auto-downloaded by `mochi browsers install`. BYO via `binary: <path>`.
 
@@ -135,15 +135,15 @@ Direct port from the [Limits page](https://mochijs.com/docs/reference/limits) �
 | CDP pipe transport (`--remote-debugging-pipe`) | works | No TCP port, no `Runtime.enable`. |
 | `Page.goto` / `content` / `evaluate` | works | `evaluate` is `Runtime.callFunctionOn`-based — JSON-serializable returns only. |
 | `Page.goto({ waitUntil: "networkidle" })` | partial | Mapped to `"load"` until per-frame `Network.enable` lands. |
-| Relational fingerprint Matrix (40 rules) | works | `(profile, seed)` → `MatrixV1`, deterministic, JSON round-trippable. |
+| Relational fingerprint Matrix (48 rules) | works | `(profile, seed)` → `MatrixV1`, deterministic, JSON round-trippable. |
 | JS-layer spoofing (UA / UA-CH, navigator, WebGL, WebGPU, MediaDevices, Permissions, screen, fonts, timezone, locale) | works | Inject payload, JIT-proxy traps, top-of-frame. |
 | Audio (`OfflineAudioContext`) byte-accurate fingerprint | works | Per-(profile, sample-rate) captures consumed via R-047 → `audio-fingerprint` inject module. The spoof distributes the residual across the 489 samples in `[4510..4999)` (using `Math.fround` to model f32 readback) so the page-side digest equals the captured baseline byte-exactly on every host architecture, not just Mac M-series. |
 | Canvas (`toDataURL`) byte-accurate fingerprint | works | Per-profile data URL synthesis via R-048 → `canvas-fingerprint` inject module. Intercepts probe-sized canvases (`300×150`) with the captured baseline; probe-side `hashString(url)` + length + first-50-char prefix match byte-exactly. Non-probe sizes fall through to native rendering. |
 | Behavioral synthesis (`humanClick` / `humanType` / `humanScroll`) | works | Bezier+Fitts+jitter; profile-parameterized (`hand`, `tremor`, `wpm`, `scrollStyle`). |
 | Profile catalog (`mac-m4-chrome-stable`, `mac-chrome-stable`, `mac-chrome-beta`, `windows-chrome-stable`, `linux-chrome-stable`, `mac-brave-stable`) | works | Six real-device baselines captured against real Chrome on real devices, each filtered by FingerprintJS Pro `suspectScore <= 20` and validated by the harness round-trip. Other catalog ids (`mac-m2-…`, `mac-intel-…`, `win11-edge-…`) still resolve to the generic placeholder. |
 | Trace recording / replay (`mochi record` → `humanClick(sel, { trace })`) | deferred | API surface forward-compatible; recorder lands in v1.x. |
-| JA4/JA3/H2-coherent `session.fetch` via `wreq` | works | Prebuilt cdylibs for darwin-{arm64,x64}, linux-{x64,arm64}, win32-x64. |
-| `session.fetch` on FreeBSD / Alpine musl / Windows arm64 | partial | No prebuilt; falls back to local `cargo build`. |
+| JA4/JA3/H2-coherent `session.fetch` (Chromium-native) | works | Routes through CDP — `Network.loadNetworkResource` for GETs, `page.evaluate("fetch")` for non-GET. Real Chrome JA4 by definition; cookies inherit from the page's origin; CORS applies for non-GET cross-origin calls. |
+| `session.fetch` on FreeBSD / Alpine musl / Windows arm64 | works | Routes through the running Chromium process, so any host that runs CfT runs `session.fetch`. |
 | `Page.screenshot` | works | PNG/JPEG/WebP via CDP `Page.captureScreenshot`; `fullPage`, `clip`, `omitBackground`, `quality`, `encoding` opts. Element-bounded capture (`{ element: handle }`) is a separate brief. |
 | Proxy auth (HTTP/HTTPS/SOCKS5) | works | Inline URL or `ProxyConfig` shape; CDP `Fetch.authRequired`, no extension. |
 | Cookie persistence (`Session.cookies.{save,load}`) | works | JSON file with version header + regex domain filter. Round-trips losslessly. |
@@ -171,10 +171,10 @@ mochi's peer group is the JS-layer stealth-automation tools that drive stock or 
 | `Runtime.enable` avoided | yes (asserted) | yes | no | partial | n/a (WebDriver) |
 | `Page.createIsolatedWorld` avoided | yes | yes | no | yes | n/a |
 | Relational `(profile, seed)` Matrix | yes | no | no | no | no |
-| JS-layer fingerprint coverage (40-rule DAG) | yes | partial (~12 patches) | partial (fingerprint-injector add-on) | partial | partial (flag-level) |
+| JS-layer fingerprint coverage (48-rule DAG) | yes | partial (~12 patches) | partial (fingerprint-injector add-on) | partial | partial (flag-level) |
 | Probe-Manifest harness as CI gate | yes | no | no | no | no |
 | Behavioral synthesis (`humanClick`/`humanType`) | yes (Bezier+Fitts+jitter) | no | mouse-helper only | mouse-only | no |
-| JA4/JA3/H2-coherent out-of-band HTTP | yes (`wreq` FFI) | no | no | no | no |
+| JA4/JA3/H2-coherent out-of-band HTTP | yes (Chromium-native) | no | no | no | no |
 | Single-runtime stack (no `pip install` next to `npm install`) | yes | yes | yes | yes (Python only) | yes (Python only) |
 | Turnstile auto-click | yes (`@mochi.js/challenges`) | yes | yes | partial | partial |
 | Stable-Chrome quirks accumulated over 4+ years | no | partial | partial | yes | yes |
@@ -195,19 +195,20 @@ Deep version, with per-library audit reports: [mochijs.com/docs/reference/compar
                                  │
             ┌────────────────────▼────────────────────┐
             │  @mochi.js/core   — launch, CDP pipe,   │
-            │                     Page, Session       │
-            └────┬─────────────┬───────────────┬──────┘
-                 │             │               │
-        ┌────────▼──┐  ┌───────▼──────┐  ┌─────▼──────┐
-        │ inject    │  │ behavioral   │  │ net (TS)   │
-        │ (payload) │  │ Bezier+Fitts │  │            │
-        └────┬──────┘  └──────────────┘  └─────┬──────┘
-             │                                 │
-        ┌────▼──────────┐               ┌──────▼──────┐
-        │ consistency   │               │ net-rs      │
-        │ (Matrix DAG)  │               │ Bun:FFI →   │
-        └────┬──────────┘               │ wreq (Rust) │
-             │                          └─────────────┘
+            │                     Page, Session,      │
+            │                     Session.fetch (CDP) │
+            └────┬─────────────────┬──────────────────┘
+                 │                 │
+        ┌────────▼──┐  ┌───────────▼────────┐
+        │ inject    │  │ behavioral         │
+        │ (payload) │  │ Bezier+Fitts       │
+        └────┬──────┘  └────────────────────┘
+             │
+        ┌────▼──────────┐
+        │ consistency   │
+        │ (Matrix DAG)  │
+        └────┬──────────┘
+             │
         ┌────▼──────────┐
         │ profiles      │   ◄──── @mochi.js/harness
         │ (data)        │         (Probe Manifest diff,
@@ -220,7 +221,7 @@ Deep version, with per-library audit reports: [mochijs.com/docs/reference/compar
 - **Site:** [mochijs.com](https://mochijs.com) — landing, quickstart, reference, and the live `docs/` content collection.
 - [Quickstart](https://mochijs.com/docs/getting-started/quickstart) — 5-minute walkthrough, copy-pasteable.
 - [Is mochi for me?](https://mochijs.com/docs/getting-started/is-mochi-for-me) — read this if you're choosing between mochi and a peer.
-- [The Consistency Engine](https://mochijs.com/docs/concepts/consistency-engine), [JA4 coherence](https://mochijs.com/docs/concepts/ja4-coherence), [Stealth philosophy](https://mochijs.com/docs/concepts/stealth-philosophy) — concept pages.
+- [The Consistency Engine](https://mochijs.com/docs/concepts/consistency-engine), [Stealth philosophy](https://mochijs.com/docs/concepts/stealth-philosophy) — concept pages.
 - [Limits](https://mochijs.com/docs/reference/limits) — every known limit, with root cause and workaround.
 - [`PLAN.md`](PLAN.md) — design contract. The 8 architectural invariants live in §2.
 - [`AGENTS.md`](AGENTS.md) — contributor workflow (parallel-PR conventions, the harness gate, commit format).
@@ -246,7 +247,6 @@ v0.2 covers: Cloudflare Turnstile (visible-checkbox variants only). Image/audio/
 
 `mochi` is invariant I-3 in [`PLAN.md`](PLAN.md): Bun ≥ 1.1 only, no Node, no Deno. The reasons are concrete and load-bearing:
 
-- **Bun:FFI** — the JA4-coherent HTTP layer (`session.fetch`) calls a Rust cdylib via `bun:ffi`. Node's N-API would require a Neon/napi-rs wrapper layer; Bun:FFI binds the same `.dylib` / `.so` / `.dll` directly with zero glue code.
 - **Pipe-mode CDP** — `Bun.spawn` exposes file descriptors 3 + 4 directly to user code, which is what `--remote-debugging-pipe` needs. Node's `child_process` doesn't, so every Node-based stealth tool falls back to TCP — and a listening CDP port is a fingerprintable surface.
 - **Bun:SQL** — the offline-first profile lookup and `bun work` orchestrator both use `Bun.SQL` (libSQL-backed). No `better-sqlite3` native dep, no migration story, no platform-specific build issues.
 - **`Bun.spawn` + `Bun.serve` ergonomics** — the harness fixture server, `mochi capture` Probe Manifest collector, and the conformance-suite proxy chain all rely on Bun-native primitives that have no zero-cost equivalent in Node land.
@@ -255,7 +255,7 @@ If you need a Node-runtime stealth tool today, [patchright](https://github.com/K
 
 ## Status
 
-Foundations in main; first npm release `2026-05-08`. `@mochi.js/core` 0.5.0 ships `Page.screenshot`, the cookies / localStorage / sessionStorage / `grantAllPermissions` DX cluster, the `Fetch.fulfillRequest` dual-mechanism inject, byte-exact audio + canvas fingerprint blobs, and the host-OS-matching profile auto-pick (`mochi.defaultProfileForHost()`). Public API is stable; new surfaces are additive. The harness Zero-Diff gate runs on every PR. See [`CHANGELOG.md`](CHANGELOG.md) for what shipped where.
+Foundations in main; first npm release `2026-05-08`. `@mochi.js/core` 0.7.0 drops the Rust `wreq` cdylib entirely — `Session.fetch` now routes through Chromium itself via CDP (real Chrome JA4 by definition; cookies inherit from the page's origin). It also retunes `ALL_BROWSER_PERMISSIONS` for Chromium 148. Earlier 0.5/0.6 lines shipped `Page.screenshot`, the cookies / localStorage / sessionStorage / `grantAllPermissions` DX cluster, the `Fetch.fulfillRequest` dual-mechanism inject, byte-exact audio + canvas fingerprint blobs, and the host-OS-matching profile auto-pick (`mochi.defaultProfileForHost()`). Public API is stable; new surfaces are additive. The harness Zero-Diff gate runs on every PR. See [`CHANGELOG.md`](CHANGELOG.md) for what shipped where.
 
 If you found this from somewhere and you're wondering whether to depend on it for production traffic: not yet. The "what works / what doesn't" matrix above is the honest cut. v1.0 will say so plainly.
 
@@ -270,9 +270,8 @@ Stands on the shoulders of:
 - [nodriver](https://github.com/ultrafunkamsterdam/nodriver) — the no-`Runtime.enable` philosophy.
 - [rebrowser-patches](https://github.com/rebrowser/rebrowser-patches) — leak vector documentation.
 - [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright) — prior art on CDP-level stealth.
-- [wreq](https://github.com/0x676e67/wreq) — Rust HTTP impersonation backend.
 - [CloakBrowser](https://github.com/CloakHQ/CloakBrowser) — stealth conformance test bar.
 
 ## License
 
-[MIT](LICENSE). The Rust crate (`@mochi.js/net-rs`) wraps [wreq](https://github.com/0x676e67/wreq) (Apache-2.0/MIT, dual-licensed).
+[MIT](LICENSE).

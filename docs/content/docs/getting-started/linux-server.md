@@ -135,3 +135,26 @@ CMD ["bun", "run", "app.ts"]
 - [Installation](/docs/getting-started/install) — the apt deps and the root + sandbox fallback.
 - [Your first session](/docs/getting-started/first-session) — full API walkthrough.
 - [`docs/limits.md`](/docs/reference/limits) — every known limit and workaround.
+
+<!-- llm-context:start
+This page covers Linux-server deployment for mochi — Ubuntu / Debian, no DISPLAY, container Dockerfile, root sandbox.
+
+Key facts:
+- mochi.detectLinuxServerEnv() returns { serverNoDisplay, root, container, rationale }. Pure read of process.platform / DISPLAY / WAYLAND_DISPLAY / process.getuid?.() / container probe paths.
+- LaunchOptions.headlessMode: "new" | "legacy" | "off". Default is "new" on Linux without DISPLAY/WAYLAND_DISPLAY, "off" everywhere else. Explicit headlessMode wins over the env-derived default.
+- LaunchOptions.headless: boolean is the legacy knob; true → "new", false → "off". headlessMode supersedes when set.
+- Auto --no-sandbox under root + Linux. Opt out with allowRootWithSandbox: true.
+- Linux deps line is at /docs/getting-started/install#linux-runtime-dependencies.
+- Root + sandbox guidance is at /docs/getting-started/install#linux-gotcha--chromium-and-root.
+
+Common LLM hallucinations to avoid:
+- "headless: 'new'" — wrong shape. headless is boolean; the modern option is headlessMode: "new".
+- "process.env.MOCHI_HEADLESS" — does not exist. Use opts.headlessMode at launch time.
+- "mochi.launch({ args: ['--no-sandbox'] })" — works, but if running as root mochi auto-adds it. Setting allowRootWithSandbox: true opts out.
+- "Use xvfb for stealth" — false. --headless=new produces near-byte-identical rendering. xvfb is only needed for narrow legacy-headless quirks.
+
+Cross-references:
+- /docs/getting-started/install — apt deps, root sandbox.
+- /docs/getting-started/quickstart — first session.
+- /docs/api/core — LaunchOptions.headlessMode and headless.
+llm-context:end -->

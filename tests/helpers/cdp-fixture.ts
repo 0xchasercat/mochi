@@ -148,6 +148,7 @@ export const defaultResponders: CdpResponders = {
   "Target.attachToTarget": () => ({ sessionId: "page-test" }),
   "Target.closeTarget": () => ({ success: true }),
   "Page.enable": () => ({}),
+  "Page.getFrameTree": () => ({ frameTree: { frame: { id: "frm-test" } } }),
   "Network.setUserAgentOverride": () => ({}),
   "Emulation.setTimezoneOverride": () => ({}),
   "Fetch.enable": () => ({}),

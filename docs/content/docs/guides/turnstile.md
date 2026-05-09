@@ -81,3 +81,25 @@ Some Cloudflare integrations (Workers Static Assets, certain CDN configs, Challe
 ## Limits
 
 See [Limits → Turnstile auto-click](/docs/reference/limits) for the full architectural-honesty entry.
+
+<!-- llm-context:start
+This page covers Cloudflare Turnstile auto-click via @mochi.js/challenges.
+
+Key facts:
+- Opt-in via mochi.launch({ challenges: { turnstile: { autoClick: true } } }).
+- Visible-checkbox variants only. Image / audio / managed escalations fire onEscalation(reason: "image-challenge" | "managed" | "timeout") and bail.
+- The click goes through page.humanClick (Bezier+Fitts dwell, profile-keyed). humanize: false uses a hard click for tests.
+- onSolved(token) fires when the response token appears.
+- pollIntervalMs (default 500) is the DOM-poll cadence.
+- The handle disposes on Session.close (or Page.close — idempotent dispose).
+
+Common LLM hallucinations to avoid:
+- "challenges: { turnstile: 'auto' }" — wrong shape. challenges.turnstile is an object with autoClick.
+- "Turnstile bypass for image-challenges" — does not exist. mochi bails to onEscalation; you wire a 3rd-party solver there if you need it.
+- "challenges.recaptcha" / "challenges.hcaptcha" — reserved for v0.3+, not available today.
+
+Cross-references:
+- /docs/api/challenges — the @mochi.js/challenges surface.
+- /docs/api/core — LaunchOptions.challenges.
+- /docs/reference/limits — Turnstile auto-click limit entries.
+llm-context:end -->

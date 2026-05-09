@@ -8,12 +8,12 @@ const pillars = [
   {
     e: "🧬",
     title: "Relational consistency engine",
-    body: "Every fingerprint surface — canvas, WebGL, audio, fonts, MediaDevices, WebGPU — derives from a single (profile, seed) pair through a 40-rule DAG. No Frankenstein fingerprints; a Mac UA never lands next to Linux WebGL.",
+    body: "Every fingerprint surface — canvas, WebGL, audio, fonts, MediaDevices, WebGPU — derives from a single (profile, seed) pair through a 48-rule DAG. No Frankenstein fingerprints; a Mac UA never lands next to Linux WebGL.",
   },
   {
-    e: "🦀",
-    title: "JA4-coherent fetch",
-    body: "session.fetch() routes through Bun:FFI to a Rust crate wrapping wreq. TLS handshake bytes, HTTP/2 frame settings, and JA4 hashes match the spoofed Chrome profile. Same fingerprint on the wire and in the page.",
+    e: "🌐",
+    title: "Chromium-native fetch",
+    body: "session.fetch() routes through Chromium itself via CDP — Network.loadNetworkResource for simple GETs, page.evaluate('fetch') for non-GET. JA4/JA3/H2 are real Chrome by definition. No parallel HTTP layer to keep in lockstep, no FFI to install.",
   },
   {
     e: "🎯",

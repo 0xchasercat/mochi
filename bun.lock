@@ -16,7 +16,7 @@
     },
     "packages/behavioral": {
       "name": "@mochi.js/behavioral",
-      "version": "0.1.3",
+      "version": "0.1.4",
       "dependencies": {
         "@mochi.js/consistency": "workspace:*",
       },
@@ -27,7 +27,7 @@
     },
     "packages/cli": {
       "name": "@mochi.js/cli",
-      "version": "0.2.1",
+      "version": "0.2.3",
       "bin": {
         "mochi": "./src/bin.ts",
       },
@@ -39,22 +39,21 @@
     },
     "packages/consistency": {
       "name": "@mochi.js/consistency",
-      "version": "0.1.2",
+      "version": "0.1.3",
     },
     "packages/core": {
       "name": "@mochi.js/core",
-      "version": "0.3.0",
+      "version": "0.7.0",
       "dependencies": {
         "@mochi.js/behavioral": "workspace:*",
         "@mochi.js/challenges": "workspace:*",
         "@mochi.js/consistency": "workspace:*",
         "@mochi.js/inject": "workspace:*",
-        "@mochi.js/net": "workspace:*",
       },
     },
     "packages/harness": {
       "name": "@mochi.js/harness",
-      "version": "0.1.6",
+      "version": "0.1.8",
       "dependencies": {
         "@mochi.js/behavioral": "workspace:*",
         "@mochi.js/consistency": "workspace:*",
@@ -64,25 +63,14 @@
     },
     "packages/inject": {
       "name": "@mochi.js/inject",
-      "version": "0.2.1",
+      "version": "0.3.0",
       "dependencies": {
         "@mochi.js/consistency": "workspace:*",
       },
     },
-    "packages/net": {
-      "name": "@mochi.js/net",
-      "version": "0.1.1",
-      "dependencies": {
-        "@mochi.js/net-rs": "workspace:*",
-      },
-    },
-    "packages/net-rs": {
-      "name": "@mochi.js/net-rs",
-      "version": "0.1.0",
-    },
     "packages/profiles": {
       "name": "@mochi.js/profiles",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@mochi.js/consistency": "workspace:*",
       },
@@ -204,10 +192,6 @@
     "@mochi.js/harness": ["@mochi.js/harness@workspace:packages/harness"],
 
     "@mochi.js/inject": ["@mochi.js/inject@workspace:packages/inject"],
-
-    "@mochi.js/net": ["@mochi.js/net@workspace:packages/net"],
-
-    "@mochi.js/net-rs": ["@mochi.js/net-rs@workspace:packages/net-rs"],
 
     "@mochi.js/profiles": ["@mochi.js/profiles@workspace:packages/profiles"],
 

@@ -1,6 +1,6 @@
 ---
 title: Quickstart
-description: Five minutes from zero to a spoofed Chrome session driving a page — install, first session, first humanClick, JA4 fetch, manifest read.
+description: Five minutes from zero to a spoofed Chrome session driving a page — install, first session, first humanClick, out-of-band fetch, manifest read.
 order: 3
 category: getting-started
 lastUpdated: 2026-05-09
@@ -46,14 +46,14 @@ mochi browsers install — pinning Chromium-for-Testing
   version        <pinned>
   platform       <darwin-arm64 | linux-x64 | …>
   download       https://storage.googleapis.com/chrome-for-testing-public/...
-  installed      ~/.cache/mochi/chromium/<version>/chrome-<platform>/
+  installed      ~/.mochi/browsers/<version>/chrome-<platform>/
   sha256         <hex> (computed during streamed download)
 done
 ```
 
-The binary lives in `~/.cache/mochi/chromium/`. `mochi.launch()` auto-resolves it; you can override with `binary: <path>` for a BYO build (see [Installation](/docs/getting-started/install)).
+The binary lives in `~/.mochi/browsers/`. `mochi.launch()` auto-resolves it; you can override with `binary: <path>` for a BYO build (see [Installation](/docs/getting-started/install)).
 
-The first install also unpacks the `@mochi.js/net-rs` cdylib (Rust crate wrapping [`wreq`](https://github.com/0x676e67/wreq)) for the JA4-coherent fetch path. Prebuilt binaries ship for `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`, and `win32-x64`. Anything else falls back to `cargo build --release` from `packages/net-rs/` — see [Network FFI](/docs/concepts/network-ffi) for the platform matrix.
+There is no native code to compile, no FFI bridge to install. `Session.fetch` rides Chromium's own network stack via CDP — install the browser, you have JA4-coherent fetch.
 
 ## 3. First session
 
@@ -73,7 +73,6 @@ try {
   console.log("UA:        ", session.profile.userAgent);
   console.log("Locale:    ", session.profile.locale);
   console.log("Timezone:  ", session.profile.timezone);
-  console.log("wreqPreset:", session.profile.wreqPreset);
 } finally {
   await session.close();
 }
@@ -91,12 +90,11 @@ Expected output:
 UA:         Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/<pinned>.0.0.0 Safari/537.36
 Locale:     en-US
 Timezone:   <captured>
-wreqPreset: chrome_<major>_linux
 ```
 
 What just happened, layer by layer:
 
-1. `mochi.launch` resolved `linux-chrome-stable` into a `ProfileV1`, ran it through the [40-rule consistency DAG](/docs/concepts/consistency-engine) with `seed: "user-12345"`, and produced a deterministic `MatrixV1`. Same `(profile, seed)` always produces the same Matrix (excluding the `derivedAt` timestamp).
+1. `mochi.launch` resolved `linux-chrome-stable` into a `ProfileV1`, ran it through the [48-rule consistency DAG](/docs/concepts/consistency-engine) with `seed: "user-12345"`, and produced a deterministic `MatrixV1`. Same `(profile, seed)` always produces the same Matrix (excluding the `derivedAt` timestamp).
 2. The [CDP transport](/docs/concepts/inject-pipeline) opened a `--remote-debugging-pipe` connection (no TCP port) and started the spoofing inject before any page script ran. Inject delivery is dual-mechanism: `Fetch.fulfillRequest` body splice on Document responses (CSP-rewritten), with `Page.addScriptToEvaluateOnNewDocument({ runImmediately: true, worldName: "" })` as the `about:blank` / `data:` fallback.
 3. `page.goto` navigated; `session.profile` is the resolved Matrix — every fingerprint surface coheres, including byte-exact `OfflineAudioContext` and `toDataURL` digests (R-047 / R-048 fed by the precomputed audio + canvas fingerprint blobs).
 
@@ -162,9 +160,12 @@ await page.humanType("input[name=email]", "alex@example.com");
 await page.humanScroll({ to: "footer" });
 ```
 
-## 6. JA4-coherent fetch
+## 6. Out-of-band HTTP via `Session.fetch`
 
-`session.fetch` ships through Bun:FFI → Rust [`wreq`](https://github.com/0x676e67/wreq), so the TLS / H2 fingerprint matches the spoofed Chrome profile byte-for-byte. The browser's *own* navigation already uses Chromium's native TLS (real Chrome JA4); `session.fetch` is the orthogonal *out-of-band* path. See [JA4 coherence](/docs/concepts/ja4-coherence) for the conceptual *why*.
+`session.fetch(url, init?)` routes through Chromium itself via CDP, so JA4 / JA3 / H2 are real Chrome by definition — same network stack as `page.goto`, no parallel HTTP layer to keep in lockstep with the spoofed profile. Two paths under the hood:
+
+- **Simple GET (no `init` / no method override / no headers / no body)** — drives `Network.loadNetworkResource`, which bypasses CORS at the network layer. The fast path.
+- **Anything else** (POST, custom headers, body) — routes through `page.evaluate("fetch(url, init)")` against an `about:blank` scratch frame the Session lazily allocates. Cookies inherit from the page's origin; CORS applies the same as a real user's `fetch` from the console.
 
 ```ts
 const res = await session.fetch("https://tls.peet.ws/api/all");
@@ -173,9 +174,9 @@ console.log("ja4:", body.tls.ja4);
 console.log("h2 :", body.http2);
 ```
 
-The JA4 you read here should match the JA4 emitted when the **same** session hits the same endpoint via `page.goto`. That coherence is the point.
+The JA4 you read here is the same JA4 the **same** session emits when it hits the same endpoint via `page.goto`. That coherence is structural — there's only one network stack.
 
-Out-of-the-box, prebuilt cdylibs ship for `darwin-{arm64,x64}`, `linux-{x64,arm64}`, and `win32-x64`. On other targets (FreeBSD, Alpine musl, Windows arm64), `bun add` falls back to a local `cargo build`; install the Rust toolchain first.
+**Cookie-inheritance shift (vs. 0.6).** `session.fetch` now shares the session's cookie jar with the browser. A cookie set via `Page.goto` or `session.cookies.set` is sent on the next `session.fetch` to the same origin automatically. Pre-0.7 the wreq path was cookieless; if your code relied on that, set `init.credentials = "omit"` for the page-evaluate path or clear the jar before the call.
 
 ## 7. Reading the manifest
 
@@ -259,7 +260,7 @@ bunx mochi browsers list
 bunx mochi browsers uninstall <version>
 ```
 
-`session.close()` flushes the CDP queue, kills the Chromium child, drops the per-Session `NetCtx`, and frees the per-session ephemeral user-data-dir. Idempotent — calling it twice is safe.
+`session.close()` flushes the CDP queue, kills the Chromium child, closes the scratch frame used by `Session.fetch`, and frees the per-session ephemeral user-data-dir. Idempotent — calling it twice is safe.
 
 ## Troubleshooting
 
@@ -280,8 +281,7 @@ bunx mochi browsers uninstall <version>
 - [Your first session](/docs/getting-started/first-session) — drill into the session lifecycle.
 - [Is mochi for me?](/docs/getting-started/is-mochi-for-me) — when mochi is the right choice, when it isn't.
 - [The Consistency Engine](/docs/concepts/consistency-engine) — the relational thesis.
-- [JA4 coherence](/docs/concepts/ja4-coherence) — why `session.fetch` matters.
-- [Stealth philosophy](/docs/concepts/stealth-philosophy) — the eight invariants.
+- [Stealth philosophy → Network and JA4](/docs/concepts/stealth-philosophy) — why all mochi traffic is Chromium-native.
 - [Limits](/docs/reference/limits) — every known limit, with root cause and workaround.
 
 <!-- llm-context:start
@@ -343,7 +343,6 @@ Cross-references:
 - /docs/concepts/consistency-engine
 - /docs/concepts/inject-pipeline
 - /docs/concepts/behavioral-synth
-- /docs/concepts/ja4-coherence
 - /docs/concepts/probe-manifest
 - /docs/concepts/stealth-philosophy
 - /docs/reference/limits

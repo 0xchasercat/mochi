@@ -1,75 +1,37 @@
 /**
- * Cross-package contract: `Session.fetch` (PLAN.md §7) is wired to
- * `@mochi.js/net.requestOnCtx`, takes the v1-public signature
- * `(url: string, init?: RequestInit) => Promise<Response>`, and lazily
- * opens / closes a per-Session NetCtx.
+ * Cross-package contract: `Session.fetch` (PLAN.md §7) is wired to Chromium
+ * itself via CDP and exposes a dual-mechanism routing rule:
  *
- * This contract runs without a built cdylib by injecting a stub `NetAdapter`
- * via the (internal) `SessionInit.netAdapter` seam — we never call `loadLib`
- * or hit the network. The structural-wiring assertions are what protect the
- * public API from drift.
+ *   - **Mechanism A** — simple GETs (no `init` / no method override / no
+ *     headers / no body) drive `Network.loadNetworkResource` against a
+ *     lazily-allocated `about:blank` scratch frame. The body returns as an
+ *     {@link IO.StreamHandle} that we drain via `IO.read` until EOF and
+ *     then `IO.close`.
  *
- * @see PLAN.md §5.4 / §7 / §10
- * @see tasks/0060-network-ffi.md
+ *   - **Mechanism B** — anything else (POST, custom headers, body) routes
+ *     through `Runtime.callFunctionOn` against the scratch frame's
+ *     document, evaluating `fetch(url, init)` in the page's main world.
+ *     Cookies inherit; CORS applies for cross-origin POSTs.
+ *
+ * The contract test drives a fake CDP pipe — no Chromium spawn — so it
+ * runs on every PR. The wire log captured by the helper is the assertion
+ * surface: we pin the exact CDP method sequence each routing branch issues.
+ *
+ * @see PLAN.md §5.4 / §7
+ * @see tasks/0290-drop-wreq-bump-chrome.md
  */
 
-import { beforeEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { deriveMatrix, type ProfileV1 } from "../../packages/consistency/src/index";
 import { Session } from "../../packages/core/src/index";
-import type { NetAdapter } from "../../packages/core/src/session";
-import type { NetCtx } from "../../packages/net/src/index";
-import { fakeChromiumProcess, makeFakePipe } from "../helpers/cdp-fixture";
+import { type CdpResponders, fakeChromiumProcess, makeFakePipe } from "../helpers/cdp-fixture";
 
-interface CallLog {
-  opened: number;
-  closed: number;
-  lastInit: { preset: string; proxy?: string } | undefined;
-  requested: number;
-  lastRequestUrl: string | undefined;
-  lastRequestInit: Record<string, unknown> | undefined;
-}
-
-function makeLog(): CallLog {
+function fixtureProfile(): ProfileV1 {
   return {
-    opened: 0,
-    closed: 0,
-    lastInit: undefined,
-    requested: 0,
-    lastRequestUrl: undefined,
-    lastRequestInit: undefined,
-  };
-}
-
-function makeAdapter(log: CallLog): NetAdapter {
-  return {
-    openCtx(spec) {
-      log.opened += 1;
-      log.lastInit = spec;
-      let closed = false;
-      return {
-        handle: 1 as unknown as NetCtx["handle"],
-        close(): void {
-          if (closed) return;
-          closed = true;
-          log.closed += 1;
-        },
-      };
-    },
-    requestOnCtx(_ctx, url, init): Response {
-      log.requested += 1;
-      log.lastRequestUrl = url;
-      log.lastRequestInit = init as unknown as Record<string, unknown>;
-      return new Response("ok", { status: 200 });
-    },
-  };
-}
-
-function makeMatrix(preset: string) {
-  const fixture: ProfileV1 = {
-    id: "contract-fixture",
+    id: "session-fetch-fixture",
     version: "0.0.0-contract",
     engine: "chromium",
-    browser: { name: "chrome", channel: "stable", minVersion: "131", maxVersion: "133" },
+    browser: { name: "chrome", channel: "stable", minVersion: "148", maxVersion: "148" },
     os: { name: "macos", version: "14", arch: "arm64" },
     device: {
       vendor: "apple",
@@ -94,126 +56,206 @@ function makeMatrix(preset: string) {
     locale: "en-US",
     languages: ["en-US", "en"],
     behavior: { hand: "right", tremor: 0.18, wpm: 65, scrollStyle: "smooth" },
-    wreqPreset: preset,
+    wreqPreset: "chrome_148_macos",
     userAgent:
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
     uaCh: {},
     entropyBudget: { fixed: [], perSeed: [] },
   };
-  return deriveMatrix(fixture, "contract-seed");
 }
 
-function makeStubSession(
-  matrix: ReturnType<typeof makeMatrix>,
-  adapter: NetAdapter,
-  opts: { netProxy?: string } = {},
-): Session {
-  // The session-fetch contract doesn't exercise CDP at all — the helper
-  // gives us a no-op pipe surface that satisfies the transport, with
-  // `manual: true` so the auto-responder does nothing.
-  const pipe = makeFakePipe({ manual: true });
-  return new Session({
-    proc: fakeChromiumProcess(pipe, { userDataDir: "/tmp/contract" }),
+/**
+ * Build a Session against a fake pipe with the responders needed to drive
+ * one Session.fetch call.
+ */
+function makeSession(responders: CdpResponders) {
+  const pipe = makeFakePipe({ responders });
+  const matrix = deriveMatrix(fixtureProfile(), "contract-seed");
+  const session = new Session({
+    proc: fakeChromiumProcess(pipe, { userDataDir: "/tmp/session-fetch-contract" }),
     matrix,
     seed: "contract-seed",
-    netAdapter: adapter,
-    ...(opts.netProxy !== undefined ? { netProxy: opts.netProxy } : {}),
+    defaultTimeoutMs: 1000,
   });
+  return { session, pipe };
 }
 
-describe("Session.fetch contract (PLAN.md §7)", () => {
-  let log: CallLog;
-  let adapter: NetAdapter;
+describe("Session.fetch contract — Chromium-routed dual-mechanism (PLAN.md §7)", () => {
+  it("routes simple GET via Network.loadNetworkResource (Mechanism A)", async () => {
+    let count = 0;
+    const { session, pipe } = makeSession({
+      "Network.loadNetworkResource": () => ({
+        resource: {
+          success: true,
+          httpStatusCode: 200,
+          headers: { "content-type": "text/plain" },
+          stream: "io-handle-1",
+        },
+      }),
+      "IO.read": () => {
+        count += 1;
+        if (count === 1) return { data: "hello", eof: false };
+        return { data: "", eof: true };
+      },
+      "IO.close": () => ({}),
+    });
 
-  beforeEach(() => {
-    log = makeLog();
-    adapter = makeAdapter(log);
-  });
-
-  it("Session.fetch matches the v1 signature and returns a Response", async () => {
-    const session = makeStubSession(makeMatrix("chrome_131_macos"), adapter);
     try {
-      const res = await session.fetch("https://example.com/api", {
-        method: "GET",
-        headers: { "x-mochi": "1" },
-      });
-      expect(res).toBeInstanceOf(Response);
+      const res = await session.fetch("https://example.com/api");
       expect(res.status).toBe(200);
-      expect(log.opened).toBe(1);
-      expect(log.lastInit?.preset).toBe("chrome_131_macos");
-      expect(log.requested).toBe(1);
-      expect(log.lastRequestUrl).toBe("https://example.com/api");
-      const init = log.lastRequestInit ?? {};
-      expect(init.preset).toBe("chrome_131_macos");
-      expect(init.method).toBe("GET");
-      const headers = init.headers as Record<string, string>;
-      expect(headers["x-mochi"]).toBe("1");
+      expect(await res.text()).toBe("hello");
+
+      const methods = pipe.written
+        .map((f) => f.parsed.method)
+        .filter((m): m is string => typeof m === "string");
+      expect(methods).toContain("Target.createTarget");
+      expect(methods).toContain("Target.attachToTarget");
+      expect(methods).toContain("Page.enable");
+      expect(methods).toContain("Page.getFrameTree");
+      expect(methods).toContain("Network.loadNetworkResource");
+      expect(methods).toContain("IO.read");
+      expect(methods).toContain("IO.close");
+      // Mechanism A MUST NOT use Runtime.callFunctionOn for the response.
+      expect(methods).not.toContain("Runtime.callFunctionOn");
     } finally {
       await session.close();
     }
   });
 
-  it("reuses one NetCtx across multiple fetches", async () => {
-    const session = makeStubSession(makeMatrix("chrome_131_macos"), adapter);
+  it("routes POST with body via Runtime.callFunctionOn (Mechanism B)", async () => {
+    const { session, pipe } = makeSession({
+      "DOM.getDocument": () => ({ root: { nodeId: 1 } }),
+      "DOM.resolveNode": () => ({ object: { objectId: "doc-obj-1" } }),
+      "Runtime.callFunctionOn": () => ({
+        result: {
+          type: "object",
+          value: {
+            status: 201,
+            headers: { "content-type": "application/json" },
+            // base64 of `{"ok":true}`
+            bodyB64: "eyJvayI6dHJ1ZX0=",
+          },
+        },
+      }),
+    });
+
+    try {
+      const res = await session.fetch("https://example.com/api", {
+        method: "POST",
+        headers: { "x-mochi": "1" },
+        body: JSON.stringify({ k: "v" }),
+      });
+      expect(res.status).toBe(201);
+      expect(await res.json()).toEqual({ ok: true });
+
+      const methods = pipe.written
+        .map((f) => f.parsed.method)
+        .filter((m): m is string => typeof m === "string");
+      expect(methods).toContain("DOM.getDocument");
+      expect(methods).toContain("DOM.resolveNode");
+      expect(methods).toContain("Runtime.callFunctionOn");
+      // Mechanism B MUST NOT use Network.loadNetworkResource for the body.
+      expect(methods).not.toContain("Network.loadNetworkResource");
+    } finally {
+      await session.close();
+    }
+  });
+
+  it("reuses the scratch frame across multiple fetches", async () => {
+    let chunkCount = 0;
+    const { session, pipe } = makeSession({
+      "Network.loadNetworkResource": () => ({
+        resource: {
+          success: true,
+          httpStatusCode: 200,
+          headers: {},
+          stream: "io-handle-x",
+        },
+      }),
+      "IO.read": () => {
+        chunkCount += 1;
+        return chunkCount % 2 === 1 ? { data: "x", eof: false } : { data: "", eof: true };
+      },
+      "IO.close": () => ({}),
+    });
+
     try {
       await session.fetch("https://example.com/a");
       await session.fetch("https://example.com/b");
       await session.fetch("https://example.com/c");
-      expect(log.opened).toBe(1);
-      expect(log.requested).toBe(3);
+
+      const createCount = pipe.written.filter(
+        (f) => f.parsed.method === "Target.createTarget",
+      ).length;
+      expect(createCount).toBe(1);
     } finally {
       await session.close();
     }
-    expect(log.closed).toBe(1);
   });
 
-  it("forwards launch-time proxy to the NetCtx", async () => {
-    const session = makeStubSession(makeMatrix("chrome_131_macos"), adapter, {
-      netProxy: "http://proxy.example:8080",
+  it("closes the scratch frame on Session.close", async () => {
+    let closeCount = 0;
+    const { session } = makeSession({
+      "Network.loadNetworkResource": () => ({
+        resource: { success: true, httpStatusCode: 200, headers: {}, stream: "io-h" },
+      }),
+      "IO.read": () => ({ data: "", eof: true }),
+      "IO.close": () => ({}),
+      "Target.closeTarget": () => {
+        closeCount += 1;
+        return { success: true };
+      },
     });
-    try {
-      await session.fetch("https://example.com/p");
-      expect(log.lastInit?.proxy).toBe("http://proxy.example:8080");
-    } finally {
-      await session.close();
-    }
-  });
 
-  it("closes the NetCtx on Session.close (idempotent)", async () => {
-    const session = makeStubSession(makeMatrix("chrome_131_macos"), adapter);
     await session.fetch("https://example.com/x");
     await session.close();
-    await session.close();
-    expect(log.closed).toBe(1);
+    expect(closeCount).toBeGreaterThanOrEqual(1);
   });
 
-  it("does not open a NetCtx if fetch is never called", async () => {
-    const session = makeStubSession(makeMatrix("chrome_131_macos"), adapter);
+  it("does not allocate a scratch frame if fetch is never called", async () => {
+    const { session, pipe } = makeSession({});
+    // Allow the constructor's auto-attach send (Target.setAutoAttach)
+    // and its response microtask to settle before tearing down the
+    // pipe — otherwise the in-flight response races with router.close
+    // and trips a "Controller is already closed" warning that's
+    // pre-existing fixture noise unrelated to Session.fetch.
+    await new Promise((r) => setTimeout(r, 20));
     await session.close();
-    expect(log.opened).toBe(0);
-    expect(log.closed).toBe(0);
+    const createCount = pipe.written.filter(
+      (f) => f.parsed.method === "Target.createTarget",
+    ).length;
+    expect(createCount).toBe(0);
   });
 
-  it("rejects unsupported body types per task brief §Deferred", async () => {
-    const session = makeStubSession(makeMatrix("chrome_131_macos"), adapter);
+  it("rejects FormData bodies eagerly with a clear diagnostic", async () => {
+    const { session, pipe } = makeSession({});
     try {
-      const formData = new FormData();
-      formData.append("k", "v");
+      const fd = new FormData();
+      fd.append("k", "v");
       await expect(
-        session.fetch("https://example.com", { method: "POST", body: formData }),
-      ).rejects.toThrow(/only string, ArrayBuffer/);
+        session.fetch("https://example.com", { method: "POST", body: fd }),
+      ).rejects.toThrow(/not yet supported/);
+      // Validation must fire BEFORE any CDP send — no scratch frame
+      // allocated on a body-shape rejection.
+      const createCount = pipe.written.filter(
+        (f) => f.parsed.method === "Target.createTarget",
+      ).length;
+      expect(createCount).toBe(0);
     } finally {
       await session.close();
     }
   });
 
-  it("forwards URLSearchParams body as a UTF-8 string", async () => {
-    const session = makeStubSession(makeMatrix("chrome_131_macos"), adapter);
+  it("surfaces Network.loadNetworkResource failures with netErrorName", async () => {
+    const { session } = makeSession({
+      "Network.loadNetworkResource": () => ({
+        resource: { success: false, netErrorName: "net::ERR_NAME_NOT_RESOLVED" },
+      }),
+    });
     try {
-      const params = new URLSearchParams({ a: "1", b: "two" });
-      await session.fetch("https://example.com/form", { method: "POST", body: params });
-      const init = log.lastRequestInit ?? {};
-      expect(init.body).toBe("a=1&b=two");
+      await expect(session.fetch("https://does-not-resolve.example")).rejects.toThrow(
+        /ERR_NAME_NOT_RESOLVED/,
+      );
     } finally {
       await session.close();
     }

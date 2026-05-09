@@ -6,7 +6,7 @@ category: getting-started
 lastUpdated: 2026-05-09
 ---
 
-mochi is a Bun-native browser automation framework focused on **stealth as a first-class architectural concern** rather than a layer of patches over Playwright or Puppeteer. It exists because the JS ecosystem's incumbent answer — Patchright + a fingerprint injector + a Turnstile clicker + curl-impersonate + a Playwright wrapper — is fragile, leaky, and hard to reason about as a single coherent system. mochi is one library that owns the whole pipeline: pipe-mode CDP transport, a 40-rule relational consistency engine, JIT-friendly inject delivery via `Fetch.fulfillRequest`, full Bezier+Fitts behavioral synthesis, and a JA4-coherent out-of-band fetch through Bun:FFI to Rust [`wreq`](https://github.com/0x676e67/wreq). It runs on stock [Chromium-for-Testing](https://googlechromelabs.github.io/chrome-for-testing/) — no patched browser binary, no proprietary infrastructure.
+mochi is a Bun-native browser automation framework focused on **stealth as a first-class architectural concern** rather than a layer of patches over Playwright or Puppeteer. It exists because the JS ecosystem's incumbent answer — Patchright + a fingerprint injector + a Turnstile clicker + curl-impersonate + a Playwright wrapper — is fragile, leaky, and hard to reason about as a single coherent system. mochi is one library that owns the whole pipeline: pipe-mode CDP transport, a 48-rule relational consistency engine, JIT-friendly inject delivery via `Fetch.fulfillRequest`, full Bezier+Fitts behavioral synthesis, and a Chromium-native out-of-band fetch (`Session.fetch` rides the browser's network stack via CDP, so JA4/JA3/H2 are real Chrome by definition). It runs on stock [Chromium-for-Testing](https://googlechromelabs.github.io/chrome-for-testing/) — no patched browser binary, no proprietary infrastructure.
 
 This page is the front door: spend 60 seconds here before you commit. If mochi is wrong for your stack we'll tell you so on this page, and we'll name what to use instead.
 
@@ -16,9 +16,9 @@ This page is the front door: spend 60 seconds here before you commit. If mochi i
 
 - **You accept the JS-layer ceiling.** mochi does not patch Chromium, does not ship a forked binary, does not run native MITM proxies in front of the browser. Some signals — the `bot.incolumitas.com` anti-debugger trap, certain isolated-world boundaries — require a C++ patch and we say so on the [Limits](https://mochijs.com/docs/reference/limits) page rather than pretending we cover them. If your threat model includes a target that traps every CDP-driven tool identically, mochi will trip it the same as patchright and Selenium do. We name those targets.
 
-- **Relational fingerprint coherence matters to you.** If your targets cross-reference fingerprint surfaces — a probe that compares `navigator.platform` against `navigator.userAgent` against the WebGL renderer — mochi's [Consistency Engine](https://mochijs.com/docs/concepts/consistency-engine) is the structural answer. Every surface derives from one `(profile, seed)` pair through a 40-rule deterministic DAG. There are no per-axis randomizations to forget about.
+- **Relational fingerprint coherence matters to you.** If your targets cross-reference fingerprint surfaces — a probe that compares `navigator.platform` against `navigator.userAgent` against the WebGL renderer — mochi's [Consistency Engine](https://mochijs.com/docs/concepts/consistency-engine) is the structural answer. Every surface derives from one `(profile, seed)` pair through a 48-rule deterministic DAG. There are no per-axis randomizations to forget about.
 
-- **JA4 / JA3 / H2 coherence matters to you.** If your targets fingerprint the TLS handshake of out-of-band HTTP — REST APIs, telemetry endpoints, GraphQL — mochi's `session.fetch()` routes through Rust [`wreq`](https://github.com/0x676e67/wreq) so the on-the-wire bytes carry the same TLS/H2 fingerprint as the spoofed Chrome profile. The browser's own navigation already uses Chromium's native TLS; the gap is what `fetch()` from your script looks like, and mochi closes it. See [JA4 coherence](https://mochijs.com/docs/concepts/ja4-coherence).
+- **JA4 / JA3 / H2 coherence matters to you.** If your targets fingerprint the TLS handshake of out-of-band HTTP — REST APIs, telemetry endpoints, GraphQL — mochi's `session.fetch()` routes through Chromium itself via CDP, so the on-the-wire bytes are real Chrome by definition. There is no parallel HTTP layer to keep in lockstep with the spoofed profile, no Rust cdylib to install, no JA4 preset string to maintain. The only network stack is Chromium's. See [Stealth philosophy → Network and JA4](https://mochijs.com/docs/concepts/stealth-philosophy).
 
 - **You want one dependency, one runtime, one update cadence.** patchright is Playwright + a patch tree against a moving Chromium target. puppeteer-real-browser stitches `puppeteer-extra` plus `fingerprint-injector` plus a Turnstile clicker plus curl-impersonate. mochi is one workspace with versioned packages, one set of release notes, one harness gate. The trade is ecosystem age (mochi is new); the win is design coherence.
 
@@ -26,7 +26,7 @@ This page is the front door: spend 60 seconds here before you commit. If mochi i
 
 ## When mochi is the wrong choice
 
-- **Your runtime is Node and switching isn't on the table.** mochi will not run under Node. If you need stealth automation in Node today, the live options are [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright) (Playwright + patches; the most actively maintained Node-runtime stealth tool) and the archived-but-still-used [puppeteer-real-browser](https://github.com/zfcsoftware/puppeteer-real-browser). Both cover ~12 fingerprint patches versus mochi's 40-rule DAG, but they're real software you can deploy today.
+- **Your runtime is Node and switching isn't on the table.** mochi will not run under Node. If you need stealth automation in Node today, the live options are [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright) (Playwright + patches; the most actively maintained Node-runtime stealth tool) and the archived-but-still-used [puppeteer-real-browser](https://github.com/zfcsoftware/puppeteer-real-browser). Both cover ~12 fingerprint patches versus mochi's 48-rule DAG, but they're real software you can deploy today.
 
 - **Your runtime is Python.** mochi will not run under Python. The live Python-runtime options are [nodriver](https://github.com/ultrafunkamsterdam/nodriver) (the spiritual successor to undetected-chromedriver, no-`Runtime.enable` philosophy, accumulates years of stable-Chrome quirks) and [undetected-chromedriver](https://github.com/ultrafunkamsterdam/undetected-chromedriver) itself (WebDriver-based, mature, big ecosystem, and the one you'll find the most StackOverflow answers for). Both lack relational consistency and JA4 coherence; both have working production deployments. Pick the trade you can afford.
 
@@ -34,7 +34,7 @@ This page is the front door: spend 60 seconds here before you commit. If mochi i
 
 - **You need mobile or touch profiles.** v1 profiles are desktop Chromium-family only. Touch gestures (tap / swipe / pinch / rotate) require a different model — pressure curves, multi-touch coordination, OS-specific touch-event sequencing. Sensor APIs (DeviceMotion, DeviceOrientation, Geolocation) require additional spoof surfaces. None of those land in v1. If your targets fingerprint a phone, wait for v2 or use a real Android frida stack.
 
-- **The dominant signal is residential-IP-class scoring.** Sites like `demo.fingerprint.com/web-scraping` make a server-side block decision against a model trained on residential session telemetry. A pixel-perfect JS fingerprint match doesn't beat that — the block happens before the page sees your spoofed `navigator`. mochi will fingerprint identically to a real Chrome and still get blocked because the IP is a datacenter IP. The fix is operator-side: residential proxies, warm sessions, paced cadence. mochi gives you a JA4-coherent path through your proxy and the [`geoConsistency`](https://mochijs.com/docs/concepts/consistency-engine) tz-locale-vs-IP reconciler so the layers don't conflict — but it can't manufacture a residential IP from a datacenter rack.
+- **The dominant signal is residential-IP-class scoring.** Sites like `demo.fingerprint.com/web-scraping` make a server-side block decision against a model trained on residential session telemetry. A pixel-perfect JS fingerprint match doesn't beat that — the block happens before the page sees your spoofed `navigator`. mochi will fingerprint identically to a real Chrome and still get blocked because the IP is a datacenter IP. The fix is operator-side: residential proxies, warm sessions, paced cadence. mochi routes both the browser's own navigation and `Session.fetch` through your proxy via Chromium's `--proxy-server`, and the [`geoConsistency`](https://mochijs.com/docs/concepts/consistency-engine) tz-locale-vs-IP reconciler keeps the layers from conflicting — but it can't manufacture a residential IP from a datacenter rack.
 
 The deep version of these limits is [docs/reference/limits](https://mochijs.com/docs/reference/limits) — every known gap, the root cause, and either a workaround or an honest "we cannot fix this from JS".
 
@@ -56,7 +56,7 @@ We list these without ceremony. mochi is open-source, MIT-licensed, and equally 
 - [Quickstart](https://mochijs.com/docs/getting-started/quickstart) — five minutes from `bun add` to a spoofed session driving a page.
 - [Installation](https://mochijs.com/docs/getting-started/install) — Bun setup, the Linux apt-deps line, BYO Chromium.
 - [Linux server deployment](https://mochijs.com/docs/getting-started/linux-server) — `headlessMode`, container Dockerfile, root sandbox fallback.
-- [The Consistency Engine](https://mochijs.com/docs/concepts/consistency-engine) — the relational thesis, the 40-rule DAG, how seeds map to Matrices.
+- [The Consistency Engine](https://mochijs.com/docs/concepts/consistency-engine) — the relational thesis, the 48-rule DAG, how seeds map to Matrices.
 - [Stealth philosophy](https://mochijs.com/docs/concepts/stealth-philosophy) — the eight invariants and what they buy you.
 - [Limits](https://mochijs.com/docs/reference/limits) — what we explicitly don't claim, with root causes.
 
@@ -84,7 +84,6 @@ Cross-references:
 - /docs/getting-started/linux-server
 - /docs/concepts/consistency-engine
 - /docs/concepts/stealth-philosophy
-- /docs/concepts/ja4-coherence
 - /docs/reference/limits
 - /docs/reference/comparison
 llm-context:end -->

@@ -33,7 +33,12 @@ export type Verdict = DiffReportV1["verdict"];
 
 // ---- public functions -------------------------------------------------------
 
-export { type CapturedProbeManifest, type CaptureOptions, capture } from "./capture";
+export {
+  type CapturedProbeManifest,
+  type CaptureOptions,
+  capture,
+  defaultFixtureUrl,
+} from "./capture";
 export {
   type Category,
   categorize,

@@ -37,7 +37,7 @@ See [`concepts/profiles`](/docs/concepts/profiles) for the full schema and captu
 - **User base it represents.** Apple Silicon (M4) MacBook running stable Chrome on a residential or strong-signal coffee-shop wifi. High-LTV demographic, high baseline trust score from most fingerprint vendors.
 - **Fingerprint trade-offs.** `gpu.renderer` is `"Apple M4"`, `userAgent` is the `Macintosh; Intel Mac OS X 10_15_7` shape (Apple keeps that string stable for compat), `display.dpr` skews to 2.0. Audio fingerprint is M4-specific (different from M1/M2/M3 captures, which is why they're separate profile IDs).
 - **Latency.** No additional cost vs other profiles — `mochi.launch` is dominated by Chromium spawn, not matrix derivation.
-- **JA4 / wreq preset.** `wreqPreset: "chrome_131_macos"` (or floor version pinned by the profile capture). Out-of-band `Session.fetch` shares this preset.
+- **JA4 (Chromium-native).** `Session.fetch` rides the same Chromium network stack as `page.goto`, so JA4/JA3/H2 are real Chrome by definition.
 
 ### `mac-chrome-stable`
 

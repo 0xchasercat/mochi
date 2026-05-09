@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://mochi.js/schemas/matrix.schema.json",
   "title": "MatrixV1",
-  "description": "A ProfileV1 instantiated for a specific seed. Same shape as ProfileV1 (every property re-declared via $ref to profile.schema.json), with three additional required fields: seed, derivedAt, consistencyEngineVersion. Consumed by @mochi.js/inject. JSON-serializable; round-trips losslessly. See PLAN.md §6.2.",
+  "description": "A ProfileV1 instantiated for a specific seed. Same shape as ProfileV1 (every property re-declared via $ref to profile.schema.json), with three additional required fields: seed, derivedAt, consistencyEngineVersion. Consumed by @mochi.js/inject. JSON-serializable; round-trips losslessly. NOTE: `wreqPreset` is DEPRECATED in 0.7 (runtime no longer reads it; `Session.fetch` routes through Chromium directly) and removed in 0.8. See PLAN.md §6.2.",
   "type": "object",
   "unevaluatedProperties": false,
   "required": [

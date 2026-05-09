@@ -144,11 +144,11 @@ The PR-fast pipeline is what makes Zero-Diff a *gate* rather than a wish. A main
 
 Without the Probe Manifest gate, "stealth" is a vibe. With it, a regression is a precise structural diff with a path and a categorization. A PR that adds a new fingerprint vector to the [inject pipeline](/docs/concepts/inject-pipeline) has to either match the baseline or move an entry from `material` to `intentional` — and the second option requires a written `expected-divergences.json` line *and* a `docs/limits.md` entry.
 
-It is the single biggest reason mochi.js is structurally different from the JS-layer stealth-automation tools it competes with. patchright, puppeteer-real-browser, nodriver, undetected-chromedriver — none of them ship a manifest-diff CI gate. They ship patches, and you find out the patch broke when your scraper starts failing in production.
+A manifest-diff CI gate is structurally different from the patch-based posture of the other JS-layer stealth tools. patchright, puppeteer-real-browser, nodriver, and undetected-chromedriver each ship patches; none of them ship a per-PR fingerprint regression check. A patch-based stack finds out a patch broke when production scraping starts failing — a manifest gate catches the same regression at PR time.
 
 ## What to read next
 
-- [The Consistency Engine](/docs/concepts/consistency-engine) — the 40-rule DAG that produces the matrix the manifest captures.
+- [The Consistency Engine](/docs/concepts/consistency-engine) — the 48-rule DAG that produces the matrix the manifest captures.
 - [The inject pipeline](/docs/concepts/inject-pipeline) — how the matrix reaches the page in time for the probe.
 - [Profiles](/docs/concepts/profiles) — `mochi capture` and the catalog.
 - [Stealth philosophy](/docs/concepts/stealth-philosophy) — invariants I-6 (truth) and I-7 (gate).

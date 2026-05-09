@@ -6,7 +6,7 @@ category: reference
 lastUpdated: 2026-05-09
 ---
 
-The peer tools all spoof. mochi spoofs too — every fingerprint surface is JS-injected, every profile is a captured real device. The structural difference is what a tool does when forced to choose between an internally-consistent fingerprint and a "harder to detect" one. Patchright, puppeteer-real-browser, nodriver, and undetected-chromedriver default to randomization: pick a UA, pick a `hardwareConcurrency`, pick a WebGL renderer, hope no probe cross-references. mochi defaults to coherence: every surface derives from one `(profile, seed)` pair through a 40-rule DAG, so a Mac UA never lands next to Linux WebGL. WAFs flag contradictions, not automation. mochi gives them no contradictions to flag.
+The peer tools all spoof. mochi spoofs too — every fingerprint surface is JS-injected, every profile is a captured real device. The structural difference is what a tool does when forced to choose between an internally-consistent fingerprint and a "harder to detect" one. Patchright, puppeteer-real-browser, nodriver, and undetected-chromedriver default to randomization: pick a UA, pick a `hardwareConcurrency`, pick a WebGL renderer, hope no probe cross-references. mochi defaults to coherence: every surface derives from one `(profile, seed)` pair through a 48-rule DAG, so a Mac UA never lands next to Linux WebGL. The WAF signal that fires on bot traffic is cross-axis inconsistency; mochi's contract is to produce zero of it.
 
 The README's [comparison table](https://github.com/0xchasercat/mochi/blob/main/README.md#comparison) is the at-a-glance summary. This page is the deeper cut: each axis, what's measured, who's ahead, and an inline citation to the upstream source line range so you can verify the claim yourself.
 
@@ -28,13 +28,13 @@ The axes below are the structural ones that actually matter for stealth. Marketi
 
 | Tool | Runtime | Native deps |
 |---|---|---|
-| mochi | Bun ≥ 1.1 | one Rust cdylib (`@mochi.js/net-rs`) |
+| mochi | Bun ≥ 1.1 | none — Chromium-for-Testing only |
 | patchright | Node | none beyond Playwright |
 | puppeteer-real-browser | Node | `chrome-launcher`, `ghost-cursor` |
 | nodriver | Python (asyncio) | `websockets`, `mss`, optional `cv2` |
 | undetected-chromedriver | Python | Selenium, chromedriver binary |
 
-Single-runtime stacks win when you're already in that ecosystem. mochi is the only Bun-native option; patchright and puppeteer-real-browser are the live Node options; nodriver supersedes undetected-chromedriver in the Python lane. **Where mochi wins:** `Bun:FFI` lets the JA4 layer (`session.fetch`) bind a Rust cdylib without a Neon / N-API / napi-rs glue layer; `Bun.spawn` exposes FDs 3+4 directly so pipe-mode CDP works without a TCP fallback. **Where mochi loses:** if your codebase is already Node, patchright is a drop-in.
+Single-runtime stacks win when you're already in that ecosystem. mochi is the only Bun-native option; patchright and puppeteer-real-browser are the live Node options; nodriver supersedes undetected-chromedriver in the Python lane. **Where mochi wins:** `Bun.spawn` exposes FDs 3+4 directly so pipe-mode CDP works without a TCP fallback (Node's `child_process` doesn't, so every Node-based stealth tool falls back to TCP — and a listening CDP port is itself a fingerprintable surface). **Where mochi loses:** if your codebase is already Node, patchright is a drop-in.
 
 ## Browser substrate
 
@@ -52,7 +52,7 @@ mochi's CfT pin is deliberate: deterministic version, no system-install drift, c
 
 mochi (asserted in CI), patchright (asserted via the `rebrowser-patches` upstream), puppeteer-real-browser (inherited from `rebrowser-puppeteer-core`). nodriver **claims to avoid Runtime.enable but its own connection layer at `connection.py:368-419` lazily calls `domain_mod.enable()` for every domain a handler is registered against — including `cdp.runtime`** . undetected-chromedriver's W3C-WebDriver architecture *requires* `Runtime.enable` because chromedriver issues it on every session.
 
-**Where mochi wins:** the avoidance is enforced via a hard runtime assertion in `packages/core/src/cdp/forbidden.ts`; tests verify `Runtime.enable` is never sent over the wire. patchright matches the discipline; nodriver's marketing claim doesn't survive a code grep.
+**Where mochi wins:** the avoidance is enforced via a hard runtime assertion in `packages/core/src/cdp/forbidden.ts`; tests verify `Runtime.enable` is never sent over the wire. patchright matches the discipline; nodriver's docs claim avoidance, but `connection.py:368-419` lazily enables every domain a handler is registered against, including `cdp.runtime`.
 
 ## `Page.createIsolatedWorld` avoidance
 
@@ -112,22 +112,22 @@ the upstream PRB integration notes the `ghost-cursor` integration as MED-impact;
 
 **Only mochi.** Out-of-band HTTP (`session.fetch`) is a separate request channel from the browser's own navigation/XHR/fetch. The browser's network stack handles its own TLS coherence with Chrome; the question is what happens when *your code* needs to issue an additional request that should appear to come from the same identity.
 
-- mochi: `session.fetch(url)` → `@mochi.js/net` (TS facade) → Bun:FFI → `@mochi.js/net-rs` (Rust cdylib) → [`wreq`](https://github.com/0x676e67/wreq). Profile-keyed TLS preset (`chrome_131_macos` etc.) produces a JA4/JA3/JA4_R/JA4S/JA4H wire posture matching the matrix's UA family.
+- mochi: `session.fetch(url)` routes through Chromium itself via CDP — `Network.loadNetworkResource` for simple GETs, `page.evaluate("fetch(url, init)")` for non-GET. JA4/JA3/H2 are real Chrome by definition because Chromium is the client. There is no parallel HTTP layer to keep in lockstep with the spoofed profile.
 - patchright, PRB, nodriver, udc: no equivalent. If you `fetch()` from your driver process, you ship Node / Python's TLS fingerprint, which is trivially distinguishable from Chrome's.
 
-This closes "the chasm" — the otherwise-detectable gap between the browser's TLS and your script's TLS. See [Network FFI](/docs/concepts/network-ffi).
+This closes "the chasm" — the otherwise-detectable gap between the browser's TLS and your script's TLS. See [Stealth philosophy → Network and JA4](/docs/concepts/stealth-philosophy).
 
 ## Single-runtime stack
 
 | Tool | Cross-language? |
 |---|---|
-| mochi | Bun + one Rust cdylib (transparent to user) |
+| mochi | Bun only |
 | patchright | Node (with Playwright's Python bindings) |
 | puppeteer-real-browser | Node |
 | nodriver | Python only |
 | undetected-chromedriver | Python only |
 
-mochi requires only Bun; the Rust crate ships as a prebuilt `cdylib` (postinstall download from GH Releases). User code never sees Rust. Falls back to local `cargo build` on unsupported platforms (Alpine musl, FreeBSD, Windows arm64).
+mochi requires only Bun. There is no native code to compile, no FFI bridge to install, no Rust toolchain to provision. Any host that can run Chromium-for-Testing can run mochi.
 
 ## Turnstile auto-click
 

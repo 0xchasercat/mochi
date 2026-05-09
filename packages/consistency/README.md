@@ -8,7 +8,7 @@ This is an **internal** package consumed by `@mochi.js/core`. Most users should 
 import { deriveMatrix } from "@mochi.js/consistency";
 ```
 
-**Status:** shipping in v0.2. The 40-rule DAG covers UA / UA-CH, navigator, plugins, screen, timing, fonts, MediaDevices, Permissions, WebGL, WebGPU, audio fingerprint (R-047), and canvas fingerprint (R-048 — both fed by precomputed per-profile blobs).
+**Status:** shipping in v0.2. The 48-rule DAG covers UA / UA-CH, navigator, plugins, screen, timing, fonts, MediaDevices, Permissions, WebGL, WebGPU, audio fingerprint (R-047), and canvas fingerprint (R-048 — both fed by precomputed per-profile blobs).
 
 See [PLAN.md §9](https://github.com/0xchasercat/mochi/blob/main/PLAN.md) for the full ruleset.
 

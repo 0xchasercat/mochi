@@ -36,8 +36,8 @@ try {
   const html = await page.content();
   await Bun.write("./out/page.html", html);
 
-  // Side-channel API hit on the SAME proxy + the matrix's wreqPreset, so
-  // wire fingerprint stays JA4-coherent with the browser.
+  // Side-channel API hit on the SAME --proxy-server as page.goto, so
+  // wire fingerprint stays JA4-coherent with the browser (it IS the browser).
   const apiResp = await session.fetch("https://api.example.com/inventory");
   console.log(`api ${apiResp.status}`);
 } catch (err) {
@@ -54,12 +54,12 @@ try {
 
 ## What's happening here
 
-- **`proxy: "http://user:pass@host:port"`** — `mochi.launch` runs the URL through `parseProxyUrl`. Credentials are stripped from the `--proxy-server=` flag (Chromium rejects inline auth there) and re-installed via a CDP `Fetch.authRequired` listener that answers HTTP, HTTPS, SOCKS5, and SOCKS4 challenges. The full URL (with creds) is also forwarded to `@mochi.js/net` so `Session.fetch` traffic shares the same authenticated egress.
+- **`proxy: "http://user:pass@host:port"`** — `mochi.launch` runs the URL through `parseProxyUrl`. Credentials are stripped from the `--proxy-server=` flag (Chromium rejects inline auth there) and re-installed via a CDP `Fetch.authRequired` listener that answers HTTP, HTTPS, SOCKS5, and SOCKS4 challenges. The full URL (with creds) is also forwarded to `@mochi.js/core` so `Session.fetch` traffic shares the same authenticated egress.
 - **Or `proxy: { server, username?, password? }`** — explicit `ProxyConfig` shape. Useful when credentials contain reserved characters that don't percent-encode cleanly.
-- **`geoConsistency: "privacy-fallback"` (default).** Before the first navigation, mochi probes the proxy's exit IP via `wreq` (using the matrix's `wreqPreset`, so the geo-lookup service sees the same JA4 / headers as user traffic). If `tzOffsetMinutes(matrix.timezone)` doesn't agree with the IP's timezone, the matrix's `timezone` is overridden to UTC and `locale` to `en-US`. The session prints a `[mochi] geoConsistency=privacy-fallback: privacy-fallback applied` warning — that's the matrix being adjusted, not an error.
+- **`geoConsistency: "privacy-fallback"` (default).** Before the first navigation, mochi probes the proxy's exit IP through the session's Chromium-native network stack, so the geo-lookup service sees the same JA4 / headers as user traffic. If `tzOffsetMinutes(matrix.timezone)` doesn't agree with the IP's timezone, the matrix's `timezone` is overridden to UTC and `locale` to `en-US`. The session prints a `[mochi] geoConsistency=privacy-fallback: privacy-fallback applied` warning — that's the matrix being adjusted, not an error.
 - **`session.profile`** — the *resolved* `MatrixV1` after geo reconciliation. Read `session.profile.timezone` to confirm what the page will see; it may differ from the input profile when `privacy-fallback` or `auto-correct` triggered.
 - **`GeoMismatchError`** — thrown when `geoConsistency: "strict"` AND the proxy's exit IP doesn't agree with the matrix. Probe failure (network blip) does NOT throw under `strict` — only a real mismatch does. The error carries `.matrix.{timezone, locale}`, `.geo.{country, timezone, ip}`, and `.reason`.
-- **`session.fetch(url, init?)`** — out-of-band HTTP through the per-Session `NetCtx`. The wire fingerprint matches the matrix's `wreqPreset` so the side-channel API call is JA4-coherent with the browser navigation. Forwards the proxy URL automatically.
+- **`session.fetch(url, init?)`** — out-of-band HTTP through the scratch frame. The wire fingerprint matches the session's Chromium-native network stack so the side-channel API call is JA4-coherent with the browser navigation. Forwards the proxy URL automatically.
 
 ## Things that go wrong
 
@@ -76,7 +76,7 @@ try {
 - [`guides/recipe-multi-session-pool`](/docs/guides/recipe-multi-session-pool) — fan out one proxy per worker.
 - [`guides/recipe-warm-session-replay`](/docs/guides/recipe-warm-session-replay) — pair geo reconciliation with cookie warming.
 - [`api/core`](/docs/api/core) — `LaunchOptions.proxy`, `ProxyConfig`, `geoConsistency`, `GeoMismatchError`, `probeExitGeo`, `reconcileGeoConsistency`.
-- [`concepts/ja4-coherence`](/docs/concepts/ja4-coherence) — why the FFI shares the same proxy as the browser.
+- [`concepts/stealth-philosophy`](/docs/concepts/stealth-philosophy)
 
 <!-- llm-context:start
 Page purpose: cookbook recipe — running mochi behind a residential / datacenter
@@ -122,7 +122,5 @@ Cross-references on mochijs.com:
   - https://mochijs.com/docs/guides/recipe-multi-session-pool
   - https://mochijs.com/docs/guides/recipe-warm-session-replay
   - https://mochijs.com/docs/api/core
-  - https://mochijs.com/docs/concepts/ja4-coherence
-  - https://mochijs.com/docs/concepts/network-ffi
-  - https://mochijs.com/docs/reference/limits
+  - https://mochijs.com/docs/concepts/ja4-coherence  - https://mochijs.com/docs/reference/limits
 llm-context:end -->

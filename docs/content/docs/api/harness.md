@@ -191,7 +191,7 @@ interface DiffEntry {
   category?: "guid-class" | "intentional" | "material";
 }
 
-type Verdict = DiffReportV1["verdict"]; // "EQUIVALENT" | "DIVERGENT" | ...
+type Verdict = DiffReportV1["verdict"]; // "EQUIVALENT" | "DIVERGED"
 ```
 
 Generated from `schemas/diff-report.schema.json`.

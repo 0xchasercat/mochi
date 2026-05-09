@@ -25,6 +25,7 @@
     "uaCh",
     "entropyBudget"
   ],
+  "$comment": "wreqPreset is DEPRECATED in 0.7 and removed entirely in 0.8. The runtime no longer reads the field; the `Session.fetch` path routes through Chromium's network stack via CDP, so JA4/JA3/H2 are real Chrome by definition. Kept in `required` for one release for backwards-compatibility with any out-of-tree consumer.",
   "properties": {
     "id": {
       "type": "string",
@@ -217,7 +218,8 @@
     },
     "wreqPreset": {
       "type": "string",
-      "description": "Preset name accepted by the wreq Rust crate, e.g. 'chrome_131_macos'. Maps profile -> TLS/H2 fingerprint.",
+      "deprecated": true,
+      "description": "DEPRECATED in 0.7 — removed entirely in 0.8. The runtime no longer reads this field; `Session.fetch` routes through Chromium's network stack via CDP, so JA4 is real Chrome by definition. Kept in the schema for one release for migration. Historical: preset name accepted by the wreq Rust crate (e.g. 'chrome_131_macos').",
       "minLength": 1
     },
     "userAgent": {

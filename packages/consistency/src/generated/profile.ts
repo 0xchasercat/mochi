@@ -138,7 +138,8 @@ export interface ProfileV1 {
     scrollStyle: "smooth" | "stepped" | "inertial";
   };
   /**
-   * Preset name accepted by the wreq Rust crate, e.g. 'chrome_131_macos'. Maps profile -> TLS/H2 fingerprint.
+   * @deprecated
+   * DEPRECATED in 0.7 — removed entirely in 0.8. The runtime no longer reads this field; `Session.fetch` routes through Chromium's network stack via CDP, so JA4 is real Chrome by definition. Kept in the schema for one release for migration. Historical: preset name accepted by the wreq Rust crate (e.g. 'chrome_131_macos').
    */
   wreqPreset: string;
   /**

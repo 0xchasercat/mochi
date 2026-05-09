@@ -120,6 +120,7 @@ describe("contract: defaultResponders covers every CDP method a stock Session li
       "Target.attachToTarget",
       "Target.closeTarget",
       "Page.enable",
+      "Page.getFrameTree",
       "Network.setUserAgentOverride",
       "Emulation.setTimezoneOverride",
       "Fetch.enable",

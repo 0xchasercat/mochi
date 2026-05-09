@@ -20,7 +20,7 @@ The canonical changelog is [`CHANGELOG.md`](https://github.com/0xchasercat/mochi
 
 ## v0.1.2 — 2026-05-08
 
-First wide-availability release. Six real-device profile baselines from the harvester corpus, behavioral synth wired through `humanClick` / `humanType` / `humanScroll`, JA4-coherent `session.fetch` via Bun:FFI → Rust [`wreq`](https://github.com/0x676e67/wreq), proxy auth (HTTP/HTTPS/SOCKS5) via `Fetch.authRequired`, prebuilt cdylibs for darwin-{arm64,x64} / linux-{x64,arm64} / win32-x64.
+First wide-availability release. Six real-device profile baselines from the harvester corpus, behavioral synth wired through `humanClick` / `humanType` / `humanScroll`, JA4-coherent `session.fetch` via Bun:FFI → Chromium itself via CDP, proxy auth (HTTP/HTTPS/SOCKS5) via `Fetch.authRequired`, prebuilt cdylibs for darwin-{arm64,x64} / linux-{x64,arm64} / win32-x64.
 
 ## v0.1.1 — 2026-05-08
 
@@ -28,7 +28,7 @@ Hot-fix for the v0.1.0 `workspace:*` publish bug. `scripts/rewrite-workspace-dep
 
 ## v0.1.0 — 2026-05-08
 
-First public npm release. Foundations: pipe-mode CDP transport, relational fingerprint Matrix (40-rule DAG), JIT-friendly inject payload, behavioral synthesis, JA4-coherent `session.fetch`, proxy auth, `mochi browsers install` for stock Chromium-for-Testing.
+First public npm release. Foundations: pipe-mode CDP transport, relational fingerprint Matrix (48-rule DAG), JIT-friendly inject payload, behavioral synthesis, JA4-coherent `session.fetch`, proxy auth, `mochi browsers install` for stock Chromium-for-Testing.
 
 ---
 

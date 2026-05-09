@@ -1,6 +1,6 @@
 ---
 title: The Consistency Engine
-description: Relational fingerprint locking — how a (profile, seed) pair derives a Matrix that survives cross-surface probes via a 40-rule deterministic DAG.
+description: Relational fingerprint locking — how a (profile, seed) pair derives a Matrix that survives cross-surface probes via a 48-rule deterministic DAG.
 order: 1
 category: concepts
 lastUpdated: 2026-05-09
@@ -32,7 +32,7 @@ interface ProfileV1 {
   locale: string;                // BCP-47, e.g. "en-US"
   languages: string[];
   behavior: { hand: "left" | "right"; tremor: number; wpm: number; scrollStyle: "smooth" | "step" };
-  wreqPreset: string;            // wreq impersonation preset, e.g. "chrome_131_macos"
+  wreqPreset: string;            // DEPRECATED in 0.7 — runtime no longer reads. Removed in 0.8.
   userAgent: string;
   uaCh: Record<string, string>;  // every Sec-CH-UA-* header value
   entropyBudget: { fixed: string[]; perSeed: string[] };
@@ -82,7 +82,7 @@ matrix.fonts.list;                // [...the curated mac M4 font set...]
 
 The same `(profile.id, seed)` pair produces a byte-identical Matrix on every call (excluding the `derivedAt` ISO timestamp). This is the *determinism contract*. A test that passes today against `mac-m4-chrome-stable + seed=foo` will pass tomorrow with the same inputs. No flakes from per-run randomness.
 
-## The 40-rule DAG
+## The 48-rule DAG
 
 Each rule is a `Rule` with declared inputs, a declared output path, and a pure derivation function. Selected rules:
 

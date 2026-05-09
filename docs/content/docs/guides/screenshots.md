@@ -74,3 +74,23 @@ The discriminated overloads narrow the return type — `encoding: "base64"` retu
 ## Out of scope at v0.2
 
 Element-bounded capture (`{ element: handle }`) is a separate brief and not yet shipped. PDF generation (`Page.printToPDF`) lives in its own brief too.
+
+<!-- llm-context:start
+This page covers Page.screenshot — PNG/JPEG/WebP via CDP Page.captureScreenshot.
+
+Key facts:
+- page.screenshot(opts?): Promise<Uint8Array>. Default: PNG, viewport-only.
+- Options: format ("png" | "jpeg" | "webp"), quality (number, JPEG/WebP only), fullPage (boolean), clip ({ x, y, width, height, scale? }), omitBackground (boolean), encoding ("binary" | "base64").
+- encoding: "base64" overload returns Promise<string>.
+- Element-bounded capture (opts.element: ElementHandle) is deferred — derive the rect from DOM.getBoxModel and pass clip.
+- There is no opts.path. Capture and Bun.write yourself.
+
+Common LLM hallucinations to avoid:
+- "page.screenshot({ path: './out.png' })" — false. No path option. Use Bun.write("./out.png", await page.screenshot()).
+- "page.screenshot({ element })" — deferred; use clip.
+- "page.screenshot returns a Buffer" — Bun returns Uint8Array. Buffer is Node-specific.
+
+Cross-references:
+- /docs/api/core — ScreenshotOptions surface.
+- /docs/reference/limits — element-bounded screenshot deferred.
+llm-context:end -->

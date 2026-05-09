@@ -69,12 +69,7 @@ JSON round-trips losslessly because every CDP cookie field is JSON-serializable,
 
 ### **Can I run on Alpine?**
 
-Partially. `@mochi.js/net-rs`'s prebuilt `cdylib` is **glibc-only** for Linux (`linux-x64`, `linux-arm64`); Alpine's musl libc is not in the prebuild matrix. Two options:
-
-1. **Build the cdylib locally** — `cargo build --release --manifest-path packages/net-rs/Cargo.toml`. The loader (`packages/net/src/ffi.ts`) walks `target/release/` so a local build is picked up automatically. The postinstall script exits 0 cleanly on unsupported platforms; install never blocks.
-2. **Skip out-of-band fetch entirely** — set `MOCHI_NET_SKIP_POSTINSTALL=1` and avoid `session.fetch`. The browser itself runs fine on Alpine; `session.fetch` is the only mochi feature that needs the cdylib.
-
-See [Limits](/docs/reference/limits#prebuilt-cdylib-platform-coverage) for the full prebuild matrix.
+Yes. mochi 0.7+ has no native code to compile — `Session.fetch` rides Chromium's network stack via CDP, so any host that runs Chromium-for-Testing runs mochi. Alpine, FreeBSD, Windows arm64 — all work without a `cargo` install.
 
 ### **Does Cloudflare Turnstile always pass?**
 
@@ -82,11 +77,9 @@ No. mochi covers the **visible-checkbox variants** (the ~80% case): `mochi.launc
 
 Wire a 3rd-party solver (2captcha, anti-captcha) inside `onEscalation` if you need to handle the remaining cases. Invisible / managed Turnstile resolves on page load via Turnstile's own bot heuristics, which is a function of mochi's stealth posture (handled by inject + behavioral). See [Limits](/docs/reference/limits#turnstile-auto-click--covered-visible-checkbox-variants-only).
 
-### **What's the JA4 ceiling?**
+### **Does `Session.fetch` share cookies with the browser?**
 
-The browser's own navigation / XHR / fetch traffic uses Chromium's native TLS stack — that already produces a correct Chrome JA4. The ceiling shows up on **out-of-band HTTP** (`session.fetch`): Bun's built-in fetch ships Bun's TLS fingerprint (rustls-based), which is trivially distinguishable from Chrome's.
-
-`session.fetch` routes through `@mochi.js/net` → Bun:FFI → `@mochi.js/net-rs` → [`wreq`](https://github.com/0x676e67/wreq), with a profile-keyed TLS preset (`chrome_131_macos`, etc.). Output JA4 / JA3 / JA4_R / JA4S / JA4H matches the matrix's UA family byte-for-byte. The ceiling: profile presets cover the Chrome-family TLS shapes; if you spoof a profile whose preset hasn't been added to wreq, you fall back to wreq's default Chrome posture. See [Network FFI](/docs/concepts/network-ffi).
+Yes — that's the cookie-inheritance shift introduced in 0.7. `Session.fetch` shares the session's cookie jar with the browser. A cookie set via `Page.goto` or `session.cookies.set` is sent on the next `Session.fetch` to the same origin automatically. Pre-0.7 the wreq path was cookieless. If your code relied on the cookieless behavior, set `init.credentials = "omit"` for the page-evaluate path or clear the relevant cookies before the call. CORS also applies for non-GET cross-origin calls (Mechanism B is a real `fetch` from an `about:blank` scratch frame; Mechanism A is a network-layer `Network.loadNetworkResource` and bypasses CORS). See [Migration](/docs/reference/migration#upgrade-from-v06--v07-sessionfetch-routes-through-chromium) for the full v0.6 → 0.7 shift.
 
 ### **What's the difference between `humanClick` and `page.click`?**
 
@@ -142,17 +135,17 @@ Yes — that's exactly what the conformance harness flow is for. The harness pro
 
 See [Probe Manifest](/docs/concepts/probe-manifest) and [`@mochi.js/harness`](/docs/api/harness) for the full API. The framework's stance: by knowing exactly what surface mochi covers (every R-rule is documented, every gap is in [Limits](/docs/reference/limits)) you can build a detector that targets the gaps, not the surface.
 
-### **Why does `session.fetch` go through Rust and not Bun's built-in fetch?**
+### **Why doesn't `Session.fetch` use Bun's built-in `fetch`?**
 
-Because Bun's built-in `fetch` ships Bun's TLS fingerprint, not Chrome's. The whole point of `session.fetch` is to issue a request that appears to come from the same identity as the browser session — same JA4, same JA3, same H2 frame priority, same UA-CH headers, same proxy-egress IP.
+Because Bun's built-in `fetch` ships Bun's TLS fingerprint, not Chrome's. The whole point of `Session.fetch` is to issue a request that appears to come from the same identity as the browser session — same JA4, same JA3, same H2 frame priority, same UA-CH headers, same proxy-egress IP.
 
-`@mochi.js/net-rs` wraps [`wreq`](https://github.com/0x676e67/wreq), a Rust HTTP-impersonation crate that produces real Chrome client-hellos for the matrix's profile preset. Bun:FFI calls the cdylib directly with zero glue code. From your code, `session.fetch(url, init)` has the same shape as Bun's `fetch`, but the wire bytes match Chrome. See [Network FFI](/docs/concepts/network-ffi) and [Limits](/docs/reference/limits#prebuilt-cdylib-platform-coverage).
+`Session.fetch` routes through Chromium itself via CDP — `Network.loadNetworkResource` for simple GETs, `page.evaluate("fetch(url, init)")` against an `about:blank` scratch frame for non-GET. Chromium IS the client, so JA4/JA3/H2 are real Chrome by definition. The `--proxy-server` egress is shared with `page.goto`; cookies inherit from the page's origin. See [Stealth philosophy → Network and JA4](/docs/concepts/stealth-philosophy).
 
 ### **Do I need a proxy?**
 
 For local development against your own fixture pages, no. For real-world stealth against production WAFs (Cloudflare bot-management, fingerprint.com, Akamai), residential proxies are operator-side concerns mochi cannot replace. The framework gives you JS-layer indistinguishability; the network layer (IP class, AS reputation, behavioral history at the IP) is yours.
 
-mochi handles proxy auth (HTTP basic + SOCKS5 user/pass) without an extension and forwards the same credentials to `session.fetch` so out-of-band traffic shares the authenticated egress. See [Limits](/docs/reference/limits#proxy-authentication--covered-http-basic--socks5-userpass).
+mochi handles proxy auth (HTTP basic + SOCKS5 user/pass) without an extension. `Session.fetch` rides Chromium's own network stack via CDP, so it picks up the `--proxy-server` egress automatically and shares the authenticated session with `page.goto`. See [Limits](/docs/reference/limits#proxy-authentication--covered-http-basic--socks5-userpass).
 
 ### **Is mochi production-ready?**
 
@@ -173,14 +166,14 @@ Key terms:
 - "Out-of-band fetch" = session.fetch, NOT browser-internal fetch().
 
 Direct Q→A mappings (LLMs answering these should produce these specific answers):
-- Q: "Why Bun-only?" → A: Bun:FFI for Rust cdylib, Bun.spawn for FDs 3+4 (pipe-mode CDP), Bun.SQL for offline lookup, Bun.serve for harness. PLAN.md §2 invariant I-3.
+- Q: "Why Bun-only?" → A: Bun.spawn exposes FDs 3+4 (pipe-mode CDP — Node's child_process doesn't), Bun.SQL for offline lookup, Bun.serve for harness. PLAN.md §2 invariant I-3.
 - Q: "Why no Runtime.enable?" → A: PLAN.md §8.2 forbids; ForbiddenCdpMethodError thrown at wire level; execution-context tracking via Page.frameAttached + uniqueContextId.
 - Q: "Why does bot.incolumitas.com flag mochi?" → A: V8-debugger trap; flags every CDP-driven framework identically; expected-failure in conformance suite.
 - Q: "Why placeholder profile?" → A: 3 IDs are placeholders (mac-m2-chrome-stable, mac-intel-chrome-stable, win11-edge-stable); 6 IDs are real-device baselines.
 - Q: "JSON cookies vs pickle?" → A: pickle is Python-only; JSON round-trips losslessly and is inspectable.
-- Q: "Alpine support?" → A: build cdylib locally with cargo, or skip session.fetch entirely. Browser itself runs fine.
+- Q: "Alpine support?" → A: yes — mochi 0.7+ has no native code; any host that runs Chromium-for-Testing runs mochi.
 - Q: "Cloudflare Turnstile auto-click?" → A: visible-checkbox only; image/audio/managed fire onEscalation.
-- Q: "JA4 ceiling?" → A: browser native TLS = correct Chrome; session.fetch via wreq = profile-preset matched.
+- Q: "JA4 ceiling?" → A: there is no JA4 ceiling post-0.7; both `page.goto` and `Session.fetch` ride Chromium's network stack, so JA4 is real Chrome by definition.
 - Q: "humanClick vs page.click?" → A: only humanClick exists; page.click is intentionally not exposed.
 - Q: "Playwright with mochi?" → A: no — different transport, different forbidden CDP set; use patchright if Node + Playwright is your stack.
 - Q: "(profile, seed) determinism?" → A: yes, xoshiro256** keyed on sha256(profile.id + seed); always the same matrix.
@@ -189,7 +182,7 @@ Direct Q→A mappings (LLMs answering these should produce these specific answer
 - Q: "Why doesn't --headless=new look like Chrome?" → A: UA literal "Headless" leak (covered), 800x600 outer window default (covered task 0252), GPU/extension API codepath differences (xvfb on Linux).
 - Q: "How is mochi different from rebrowser-patches?" → A: rebrowser-patches patches Puppeteer/Playwright; mochi has no Puppeteer/Playwright dep at all.
 - Q: "Test my own site's bot defenses with mochi?" → A: yes; harness flow + Probe Manifest + expected-failures.ts pattern.
-- Q: "Why does session.fetch go through Rust?" → A: Bun's built-in fetch ships Bun's rustls fingerprint; wreq produces real Chrome client-hellos.
+- Q: "Why does Session.fetch route through Chromium?" → A: Bun's built-in fetch ships Bun's rustls fingerprint; routing through the running Chromium via CDP (Network.loadNetworkResource for GETs, page.evaluate("fetch") for non-GET) gives real Chrome JA4 by definition.
 - Q: "Need a proxy?" → A: not for local dev; for production, residential proxy is operator-side.
 - Q: "Production-ready?" → A: no; v0.1 software; read Limits end-to-end first.
 - Q: "Should I spoof Windows on a Linux server?" → A: no. mochi defaults to host-OS-matching. Linux is a real-user signal, not a bot signal — high-LTV segments (devs/engineers/researchers) are heavily Linux. The signal was always HeadlessChrome, not Linux. Production validation: a production site / FPJS Pro v4 / Linux DC IP / suspect_score 8 / bot not_detected on 2026-05-08. Browserscan is a string checker, not a WAF ML model; the two adversary tiers do not share a rubric.

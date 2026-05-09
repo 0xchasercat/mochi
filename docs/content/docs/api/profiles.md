@@ -43,7 +43,7 @@ const KNOWN_PROFILE_IDS = [
 ] as const satisfies readonly string[];
 ```
 
-The IDs that ship in the v1 catalog. Pass any of these as `LaunchOptions.profile`. The first batch (`mac-m4-chrome-stable`, `linux-chrome-stable`, `windows-chrome-stable`) was captured natively on real hardware; the second cohort (`mac-chrome-stable`, `mac-chrome-beta`, `windows-chrome-stable`, `mac-brave-stable`) was imported from a real-user telemetry corpus and carries a synthesised `wreqPreset` (see PROVENANCE.md).
+The IDs that ship in the v1 catalog. Pass any of these as `LaunchOptions.profile`. The first batch (`mac-m4-chrome-stable`, `linux-chrome-stable`, `windows-chrome-stable`) was captured natively on real hardware; the second cohort (`mac-chrome-stable`, `mac-chrome-beta`, `windows-chrome-stable`, `mac-brave-stable`) was imported from a real-user telemetry corpus (see PROVENANCE.md).
 
 ### `type ProfileId`
 
@@ -121,7 +121,7 @@ import { join } from "node:path";
 
 const profile = await loadProfile(join(defaultProfilesDir(), "linux-chrome-stable"));
 const matrix = deriveMatrix(profile, "harness");
-console.log(matrix.wreqPreset, matrix.userAgent);
+console.log(matrix.userAgent);
 ```
 
 ### Enumerate the catalog

@@ -6,7 +6,7 @@ category: api
 lastUpdated: 2026-05-09
 ---
 
-The relational locking engine. `deriveMatrix(profile, seed)` walks a topologically-sorted rule DAG over a seeded xoshiro256** PRNG and returns a `MatrixV1` — the structured fingerprint snapshot that `@mochi.js/core` stamps on the `Session`, that `@mochi.js/inject` reads to compile the IIFE payload, and that `@mochi.js/net` reads for the `wreqPreset`. You almost never call `deriveMatrix` yourself; `mochi.launch` does it. Reach for this package directly only when (a) you're writing an inject module that needs to introspect a derived matrix in a test, (b) you want the seeded PRNG without the rule DAG, or (c) you're debugging a divergence between two `(profile, seed)` runs.
+The relational locking engine. `deriveMatrix(profile, seed)` walks a topologically-sorted rule DAG over a seeded xoshiro256** PRNG and returns a `MatrixV1` — the structured fingerprint snapshot that `@mochi.js/core` stamps on the `Session` and that `@mochi.js/inject` reads to compile the IIFE payload. You almost never call `deriveMatrix` yourself; `mochi.launch` does it. Reach for this package directly only when (a) you're writing an inject module that needs to introspect a derived matrix in a test, (b) you want the seeded PRNG without the rule DAG, or (c) you're debugging a divergence between two `(profile, seed)` runs.
 
 ## Installation
 
@@ -29,7 +29,6 @@ const profile: ProfileV1 = JSON.parse(
 const matrix = deriveMatrix(profile, "user-12345");
 console.log(matrix.userAgent);     // "Mozilla/5.0 (X11; Linux ..."
 console.log(matrix.timezone);      // e.g. "Europe/Berlin"
-console.log(matrix.wreqPreset);    // "chrome_147_linux"
 ```
 
 The rule DAG is validated for acyclicity + unique outputs once per process the first time `deriveMatrix` is called. Subsequent calls use the cached topological plan.
@@ -60,7 +59,7 @@ matrix.gpu                 // { vendor, renderer, webglUnmaskedVendor, ... }
 matrix.audio               // { contextSampleRate, ... }
 matrix.fonts               // { family, list }
 matrix.behavior            // { hand, tremor, wpm, scrollStyle }
-matrix.wreqPreset          // e.g. "chrome_147_linux"
+matrix.wreqPreset          // DEPRECATED in 0.7 — runtime no longer reads. Removed in 0.8.
 ```
 
 Generated from `schemas/matrix.schema.json`.

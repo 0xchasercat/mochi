@@ -53,7 +53,7 @@ These are not preferences. They are invariants. Any PR that violates one is wron
 
 **I-2. No proprietary integrations.** mochi never reaches for chaser, never branches on `MOCHI_USE_CHASER`, never carries env-var trapdoors that light up paid features. It is fully open-source, MIT-licensed, and equally useful to a solo developer with a laptop and to an enterprise with infrastructure.
 
-**I-3. Bun-only runtime.** Engines = `bun >= 1.1`. Node is not a target. Deno is not a target. We use Bun:FFI, `Bun.spawn`, Bun's WebSocket and file-descriptor APIs natively. The `package.json` engines field rejects non-Bun installs.
+**I-3. Bun-only runtime.** Engines = `bun >= 1.1`. Node is not a target. Deno is not a target. We use `Bun.spawn` (FDs 3+4 for pipe-mode CDP), `Bun.SQL`, `Bun.serve`, and Bun's file-descriptor APIs natively. The `package.json` engines field rejects non-Bun installs.
 
 **I-4. Stock Chromium binary.** Default = pinned [Chromium-for-Testing](https://googlechromelabs.github.io/chrome-for-testing/), auto-downloaded by `mochi browsers install`. BYO is supported via `binary: <path>`. We do **not** ship a patched fork.
 
@@ -61,7 +61,7 @@ These are not preferences. They are invariants. Any PR that violates one is wron
 
 **I-6. The Probe Manifest is the truth.** [Peekaboo's Probe Manifest schema](../Peekaboo/peekaboo/schemas/probe-manifest.schema.json) is the canonical surface description. mochi's harness produces and diffs Probe Manifests. If it's not in the manifest, it's not a tracked surface; if it's in the manifest and we don't cover it, that's a gap with an issue number.
 
-**I-7. The harness is the gate.** Every PR that changes `@mochi.js/consistency`, `@mochi.js/inject`, `@mochi.js/net`, or `@mochi.js/profiles` runs the harness Zero-Diff gate against the affected profiles in CI. A PR that breaks Zero-Diff cannot merge without explicit waiver and a follow-up issue.
+**I-7. The harness is the gate.** Every PR that changes `@mochi.js/consistency`, `@mochi.js/inject`, `@mochi.js/core`, or `@mochi.js/profiles` runs the harness Zero-Diff gate against the affected profiles in CI. A PR that breaks Zero-Diff cannot merge without explicit waiver and a follow-up issue.
 
 **I-8. Honesty over marketing.** `docs/limits.md` lists every fingerprint vector we know we don't cover, with a rationale. New gaps discovered must be added in the same PR that creates them.
 
@@ -75,7 +75,7 @@ Every locked decision, traceable to the brainstorm round that locked it. No deci
 |---|---|---|---|
 | 1 | Positioning | Standalone OSS, no proprietary integrations | R1 |
 | 2 | Browser binary | Stock Chromium-for-Testing (BYO + autodownload) | R1 |
-| 3 | Network impersonation | Vendor `wreq` via thin Rust crate exposed to Bun:FFI | R1 + R3 |
+| 3 | Network impersonation | `Session.fetch` routes through Chromium itself via CDP (`Network.loadNetworkResource` + `page.evaluate("fetch")`); JA4 is real Chrome by definition. No parallel HTTP layer. | R1 + R3 |
 | 4 | Engine spoofing scope (v1) | Chromium-family only (Chrome/Edge/Brave/Arc/Opera) | R1 |
 | 5 | Runtime | Bun-only, ≥ 1.1 | R2 |
 | 6 | Public API DX | Fresh — `mochi.launch / session.newPage / page.humanClick` | R2 |
@@ -107,23 +107,24 @@ Every locked decision, traceable to the brainstorm round that locked it. No deci
               │  - Page / Session objects   │      │  mochi harness   │
               │  - public types             │      │  mochi work      │
               └──┬─────────────┬─────────┬──┘      └──────────────────┘
-                 │             │         │
-       ┌─────────▼─┐  ┌────────▼─┐  ┌────▼─────────┐
-       │ @mochi.js/   │  │ @mochi.js/  │  │ @mochi.js/      │
-       │ inject    │  │ behav-   │  │ net          │
-       │ (payload) │  │ ioral    │  │ (TS facade)  │
-       └─────┬─────┘  └──────────┘  └──────┬───────┘
-             │                             │
-       ┌─────▼─────────────┐         ┌─────▼──────────┐
-       │ @mochi.js/           │         │ @mochi.js/net-rs  │
-       │ consistency       │         │ (Rust crate)   │
-       │ (Matrix engine)   │         │  + Bun:FFI     │
-       └─────┬─────────────┘         │  wraps `wreq`  │
-             │                       └────────────────┘
+                 │             │
+       ┌─────────▼─┐  ┌────────▼─┐
+       │ @mochi.js/   │  │ @mochi.js/  │
+       │ inject    │  │ behav-   │
+       │ (payload) │  │ ioral    │
+       └─────┬─────┘  └──────────┘
+             │
        ┌─────▼─────────────┐
-       │ @mochi.js/profiles   │
+       │ @mochi.js/        │
+       │ consistency       │
+       │ (Matrix engine)   │
+       └─────┬─────────────┘
+             │
+       ┌─────▼─────────────┐
+       │ @mochi.js/profiles│
        │ (data fixtures)   │
        └───────────────────┘
+       (Session.fetch lives in core; routes through CDP — no out-of-tree HTTP layer.)
 
                           ┌──────────────────────────┐
                           │  @mochi.js/harness          │
@@ -138,7 +139,7 @@ Every locked decision, traceable to the brainstorm round that locked it. No deci
 2. `@mochi.js/inject` builds a payload (a single JS bundle, JIT-friendly, ~50KB target) parameterized by the Matrix.
 3. `@mochi.js/core` spawns Chromium with `--remote-debugging-pipe` and a clean user-data-dir, attaches via Bun-native pipe FDs, and uses `Page.addScriptToEvaluateOnNewDocument` with `runImmediately: true` to install the payload at top-of-frame on every navigation.
 4. User calls `page.humanClick(sel)` → `@mochi.js/behavioral` synthesizes a path → `@mochi.js/core` issues `Input.dispatchMouseEvent` calls timed to the path.
-5. User calls `session.fetch(url)` → `@mochi.js/net` calls into `@mochi.js/net-rs` via Bun:FFI → `wreq` issues the request with the profile's TLS/H2 fingerprint preset.
+5. User calls `session.fetch(url)` → `@mochi.js/core`'s `Session.fetch` picks Mechanism A (`Network.loadNetworkResource` for simple GETs) or Mechanism B (`page.evaluate("fetch")` against an `about:blank` scratch frame for non-GET) and routes through Chromium's network stack via CDP. JA4/JA3/H2 are real Chrome by definition.
 6. CI runs `@mochi.js/harness` against the running session → captures a Probe Manifest → diffs against `@mochi.js/profiles/<profile>/baseline.manifest.json` → gate passes iff only GUID-class differences remain.
 
 **Contracts between packages.**
@@ -168,7 +169,7 @@ Each package owns one well-bounded responsibility. The internal map below is bin
 - Stealth payload generation (→ `@mochi.js/inject`)
 - Fingerprint determinism (→ `@mochi.js/consistency`)
 - Behavioral synthesis (→ `@mochi.js/behavioral`)
-- Out-of-band HTTP (→ `@mochi.js/net`)
+- Out-of-band HTTP (`Session.fetch` — Chromium-native via CDP; see §5.4)
 
 **Critical design choices.**
 - Pipe-mode default (`--remote-debugging-pipe`). No TCP port. WebSocket only as a future opt-in for remote debugging across machines (not v1).
@@ -217,22 +218,25 @@ Each package owns one well-bounded responsibility. The internal map below is bin
 - We never throw synchronously when a fingerprint API is called in an unexpected way — we mimic Chrome's exact native error type.
 - The payload self-deletes its own initialization globals (`delete window.__mochi__`) before yielding to page script.
 
-### 5.4 `@mochi.js/net` + `@mochi.js/net-rs`
+### 5.4 `Session.fetch` (Chromium-native)
 
-**Responsibility.** Out-of-band HTTP that matches the profile's wire fingerprint. The browser handles its own navigation/XHR/fetch using its native Chromium TLS — that already matches a Chrome profile. `@mochi.js/net` is for *additional* requests the user makes from Bun (pre-flight token fetches, captcha API calls, etc.) that need to share the browser's apparent identity.
+**Responsibility.** Out-of-band HTTP that shares the browser's apparent identity. Pre-0.7 this was a Rust+wreq layer behind a `@mochi.js/net` / `@mochi.js/net-rs` package pair; post-0.7 it's a CDP-driven path baked into `@mochi.js/core`. The two npm packages are deprecated.
 
-**`@mochi.js/net` (TS facade).** Owns the `Session.fetch(url, init)` API surface. Validates inputs, routes to the FFI binding, deserializes responses to standard `Response` objects.
+**How it works.** `Session.fetch(url, init?)` picks one of two CDP paths based on the call shape:
 
-**`@mochi.js/net-rs` (Rust crate).** Owns the FFI surface. Wraps `wreq` (Apache-2.0/MIT) with profile-name presets (e.g. `chrome_131_macos`). Single static C ABI: `mochi_net_open`, `mochi_net_request`, `mochi_net_close`. Tokio runtime managed inside the crate; FFI calls are blocking from Bun's perspective (Bun's main thread is not blocked because Bun:FFI runs ABI calls on a worker).
+- **Mechanism A — `Network.loadNetworkResource`.** Used for simple GETs (no `init` / no method override / no headers / no body). Bypasses CORS at the network layer; no `Origin` header. Body returns as an `IO.StreamHandle` drained via `IO.read` until EOF, then `IO.close`. Requires a `frameId` — the Session lazily allocates an `about:blank` scratch frame for this.
+- **Mechanism B — `page.evaluate("fetch(url, init)")` against the scratch frame's document.** Used for everything else. Cookies inherit from the page's origin; CORS applies the same as a real user's `fetch` from the console. Body shapes supported: `string`, `ArrayBuffer` / typed arrays, `URLSearchParams`. `Blob` / `FormData` / `ReadableStream` throw with a clear diagnostic.
+
+Both paths route through Chromium's network stack — same TLS / H2 / JA4 as `page.goto`. Because Chromium IS the client, JA4/JA3/H2 are real Chrome by definition. The proxy egress (`--proxy-server`) is shared with the browser navigation; no per-call proxy URL.
 
 **Does not own.**
-- Spoofing the *browser's own* TLS (out of scope — that's the binary's responsibility, and stock Chromium produces correct Chrome TLS already)
+- Spoofing the *browser's own* TLS (out of scope — that's the binary's responsibility, and stock Chromium produces correct Chrome TLS already).
+- `Blob` / `FormData` / `ReadableStream` request bodies (deferred to a future PR; needs a richer transport than the JSON-only page-evaluate seam).
 
 **Critical design choices.**
-- Prebuilt platform binaries: `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`, `windows-x64`. Distributed via npm postinstall fetching from GitHub Releases (esbuild-style).
-- The Rust crate is pure Rust + `wreq`. No `bindgen`, no system-library deps. `cargo build --release` produces a single `cdylib`.
-- Profile-to-wreq-preset mapping table is a JSON shipped in `@mochi.js/profiles`; `@mochi.js/net-rs` reads it via the FFI surface.
-- Proxy support: HTTP/HTTPS CONNECT, SOCKS5 (with auth), inherited from `wreq`.
+- No native code, no FFI, no cdylib to install or trust. Any host that runs Chromium-for-Testing runs `Session.fetch`.
+- The contract test `tests/contract/session-fetch-no-network-enable.contract.test.ts` empirically pins that `Network.loadNetworkResource` does NOT require `Network.enable` (which would be forbidden under §8.2). If Chromium ever changes that, the test fails loudly and the recovery is to drop Mechanism A and route everything via Mechanism B.
+- Cookies inherit from the session's cookie jar — a breaking change vs. the wreq path (cookieless). Documented in CHANGELOG and `reference/migration.md`.
 
 ### 5.5 `@mochi.js/behavioral`
 
@@ -371,7 +375,7 @@ All schemas live in `schemas/*.schema.json` (JSON Schema 2020-12). TS types are 
   "locale": "en-US",
   "languages": ["en-US", "en"],
   "behavior": { "hand": "right", "tremor": 0.18, "wpm": 65, "scrollStyle": "smooth" },
-  "wreqPreset": "chrome_131_macos",
+  "wreqPreset": "chrome_148_macos",  // DEPRECATED in 0.7 — runtime no longer reads. Removed in 0.8.
   "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ...",
   "uaCh": { /* full client hints — sec-ch-ua, sec-ch-ua-platform, sec-ch-ua-platform-version, sec-ch-ua-arch, ... */ },
   "entropyBudget": {
@@ -733,7 +737,7 @@ The 13 probe families from `chaser-recon/src/lib/fingerprint/*`:
 
 The `(matrix.timezone, matrix.locale)` axis is special: it's the only matrix-derived value whose canonical "consistent" value depends on a state OUTSIDE the matrix itself — namely, the **apparent exit IP** as seen by any server the session contacts. A US-West profile (matrix.timezone = `America/Los_Angeles`, matrix.locale = `en-US`) routed through an EU-egressing residential proxy puts every page call to `Date.getTimezoneOffset()` at -480min while the IP geolocates to UTC+1 — a direct mismatch fingerprint.
 
-Mochi closes this leak at launch via a 7-endpoint geo-probe (`packages/core/src/geo-probe.ts`) routed through wreq with the matrix's TLS preset (so the probe is itself indistinguishable from real session traffic). The probe is shuffled-sequential with a 4-attempt cap and 2s per-endpoint timeout; on all-fail it returns `null`. A reconciler (`packages/core/src/geo-consistency.ts`) cross-references the matrix tz/locale against the probed IP geolocation, applying one of four `LaunchOptions.geoConsistency` modes:
+Mochi closes this leak at launch via a 7-endpoint geo-probe (`packages/core/src/geo-probe.ts`) routed through Chromium's network stack via CDP (so the probe is itself indistinguishable from real session traffic — it IS real session traffic). The probe is shuffled-sequential with a 4-attempt cap and 2s per-endpoint timeout; on all-fail it returns `null`. A reconciler (`packages/core/src/geo-consistency.ts`) cross-references the matrix tz/locale against the probed IP geolocation, applying one of four `LaunchOptions.geoConsistency` modes:
 
 - `"privacy-fallback"` *(default)* — override the matrix to UTC + en-US on mismatch (or probe failure). Fingerprints as a privacy-conscious user (Tor / Brave / hardened-FF), which is benign in most threat models. Mismatched-tz-vs-IP is the canonical bot signature; UTC + en-US looks like every Tor user.
 - `"auto-correct"` — override the matrix's timezone with the IP's timezone and locale with a primary-locale guess for the IP's country. Trusts mochi's IP-derived defaults over the user's declared profile.
@@ -755,50 +759,24 @@ Probe results are NOT cached across sessions — proxy IPs rotate; stale cache i
 
 ---
 
-## 10. Network FFI design notes
+## 10. `Session.fetch` design notes (Chromium-native)
 
-### 10.1 The C ABI
+`Session.fetch(url, init?)` lives in `@mochi.js/core`. It picks one of two CDP paths based on the call shape:
 
-```c
-// Stable across mochi versions. Breaking changes bump @mochi.js/net-rs major.
+- **Mechanism A — `Network.loadNetworkResource`.** Used for simple GETs (no `init` / no method override / no headers / no body). The CDP method runs against the host's StoragePartition rather than the per-target `NetworkAgent`, so it does NOT require `Network.enable` (which is forbidden under §8.2). Body returns as an `IO.StreamHandle` drained via `IO.read` until EOF and then `IO.close`d. Requires a `frameId` — the Session lazily allocates an `about:blank` scratch frame for this.
+- **Mechanism B — `page.evaluate("fetch(url, init)")` against the scratch frame's document.** Used for everything else. The function source is bound via `Runtime.callFunctionOn` against the document's `objectId` — no `Runtime.enable`, no isolated worlds. Cookies inherit from the page's origin (the scratch frame is `about:blank`, but the cookie jar is shared via `Storage.setCookies`). CORS applies the same as a real user's `fetch`. Body shapes: `string`, `ArrayBuffer` / typed arrays, `URLSearchParams`. `Blob` / `FormData` / `ReadableStream` throw with a clear diagnostic.
 
-typedef struct mochi_net_ctx mochi_net_ctx;
-typedef struct mochi_net_response mochi_net_response;
+Both mechanisms route through Chromium's network stack, so the bytes a server observes on `Session.fetch` are byte-identical to what Chromium emits on `page.goto` to the same origin.
 
-mochi_net_ctx* mochi_net_open(const char* preset_json);
-int             mochi_net_request(
-                  mochi_net_ctx* ctx,
-                  const char* request_json,
-                  mochi_net_response** out);
-int             mochi_net_response_status(mochi_net_response* res);
-const char*     mochi_net_response_headers_json(mochi_net_response* res);
-const uint8_t*  mochi_net_response_body(mochi_net_response* res, size_t* out_len);
-void            mochi_net_response_free(mochi_net_response* res);
-void            mochi_net_close(mochi_net_ctx* ctx);
-const char*     mochi_net_last_error(void);
-```
+### What we don't try to do
 
-### 10.2 Bun:FFI binding
+- We do NOT MITM the browser's own connections. Browsing traffic uses Chromium's native TLS — `Session.fetch` rides the same stack via CDP rather than spinning up a parallel HTTP layer.
+- We do NOT ship a Rust HTTP-impersonation crate (the pre-0.7 `@mochi.js/net-rs` package is deprecated). The whole "JA4 spoof" idea is moot when Chromium IS the client.
+- We do NOT implement a separate page navigator. The browser is the browser.
 
-```typescript
-// @mochi.js/net/src/ffi.ts (sketch)
-import { dlopen, FFIType, suffix } from "bun:ffi";
+### Verification
 
-const lib = dlopen(`${__dirname}/../native/mochi-net.${suffix}`, {
-  mochi_net_open:        { args: ["cstring"], returns: "ptr" },
-  mochi_net_request:     { args: ["ptr", "cstring", "ptr"], returns: "i32" },
-  // ... etc
-});
-```
-
-### 10.3 Profile preset mapping
-
-`@mochi.js/profiles/<id>/profile.json#wreqPreset` is one of the values `wreq` accepts (e.g. `chrome_131_macos`, `edge_120_windows`). The Rust crate translates that to `wreq::Impersonate`.
-
-### 10.4 What we don't try to do
-
-- We do NOT MITM the browser's own connections. Browsing traffic uses Chromium's native TLS, which already produces correct Chrome JA3/JA4. Trying to replace it would require either patching Chromium (forbidden by I-1) or running a local proxy that becomes its own leak vector.
-- We do NOT implement a separate `wreq`-driven page navigator. The browser is the browser.
+`tests/contract/session-fetch-no-network-enable.contract.test.ts` empirically pins that `Network.loadNetworkResource` does NOT require `Network.enable`. If Chromium ever changes that, the test fails loudly; recovery is to drop Mechanism A and route everything via Mechanism B.
 
 ---
 
@@ -932,11 +910,11 @@ Each phase is a meaningful milestone — works end-to-end at the level of the su
 | **0.3** | Inject engine v0 | `@mochi.js/inject` builds a payload that overrides the v0.2 surface. `@mochi.js/core` injects via `addScriptToEvaluateOnNewDocument(runImmediately:true)`. | Manual probe-page check shows spoofed values; no `Runtime.enable` ever sent |
 | **0.4** | Capture tool | `mochi capture` works on a real Mac M2. `mac-m2-chrome-stable` profile + baseline manifest committed. | One real profile lives in repo, schema-valid, with PROVENANCE |
 | **0.5** | Harness MVP | `@mochi.js/harness` runs against the local probe-page fixture, normalizes + diffs + categorizes + reports. PR gate wired in CI. | First "Zero-Diff" run on `mac-m2-chrome-stable` for the v0.2-covered surface |
-| **0.6** | Network FFI | `@mochi.js/net-rs` builds a cdylib for darwin-arm64, exposes the C ABI, wraps `wreq`. `@mochi.js/net` Bun:FFI binding works. `Session.fetch` succeeds with profile-fingerprinted JA4. | Integration test against `https://tls.peet.ws/api/all` returns matching JA4 hash |
+| **0.6** | Network FFI (deprecated 0.7) | Initial `Session.fetch` shipped through Rust+wreq Bun:FFI. Replaced in 0.7 by Chromium-native CDP path; the `@mochi.js/net` and `@mochi.js/net-rs` packages are deprecated. | Historical — preserved for changelog continuity |
 | **0.7** | Consistency engine full | All 80+ rules implemented. WebGL, WebGPU, canvas, audio, media-devices, speech-synthesis, fonts. Audio bytes + canvas hash maps in profiles. | Full Zero-Diff against local probe-page on `mac-m2-chrome-stable` |
 | **0.8** | Behavioral engine | `@mochi.js/behavioral` synthesizes mouse/keyboard/scroll. `humanClick`, `humanType`, `humanScroll` work end-to-end. | Visual demo + a behavioral-tracker probe (chaser-recon's) sees human-shaped events |
 | **0.9** | Profile catalog complete | All 6 v1 profiles captured + Zero-Diff against local fixture + nightly Zero-Diff against creepjs/sannysoft. | All 6 profiles certified |
-| **0.10** | Cross-platform binaries | `@mochi.js/net-rs` prebuilds for `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`, `windows-x64`. npm postinstall fetches correct binary from GH Releases. | Install on each platform succeeds, `Session.fetch` works |
+| **0.10** | (deprecated 0.7) | Cross-platform `@mochi.js/net-rs` prebuilds were the original 0.10 deliverable. Removed when `Session.fetch` moved to Chromium-native in 0.7. | Historical — preserved for changelog continuity |
 | **0.11** | CLI + DX | `mochi` CLI feature-complete: `browsers install`, `capture`, `harness`, `work`, `version`. Quickstart docs. | Quickstart doc takes a new user from `bun add @mochi.js/core` to a successful spoofed page in under 5 minutes |
 | **0.12** | Examples | `examples/` directory with: basic-launch, login-flow, scrape-with-rotation, cloudflare-turnstile-page (read-only — we don't ship a solver), captcha-detection-not-bypass | All examples build + run as integration tests |
 | **0.13** | Docs site | `docs/` site (mintlify or astro-starlight). API ref auto-generated from TS. Limits page complete. | Public-readable, navigable, accurate against current main |
@@ -952,7 +930,7 @@ These are real open questions that we're consciously NOT answering in v1. Each h
 
 1. **Cross-engine spoofing.** Spoofing Safari (JavaScriptCore) or Firefox (SpiderMonkey) from a Chromium binary. v1 same-engine-family is realistic; cross-engine has fundamental FPU/JIT/regex divergence that can't be hidden from a determined probe without a Chromium fork. v2: surface-level only, with documented caveats. v2.x: investigate WebAssembly-based JIT-spoofing for Math.fround / regex output.
 2. **Mobile profiles.** Chrome-Android and Safari-iOS profiles. Touch event synthesis. Different default flag set. Different probe surface (sensors, orientation, vibration). v2.
-3. **HTTP/3 / QUIC fingerprint.** `wreq` supports it; profiles need to declare H3 expectations. v2.
+3. **HTTP/3 / QUIC fingerprint.** Chromium emits H3 / QUIC natively when negotiated, but mochi has no separate "H3 mode" toggle on `Session.fetch`. Profiles may want to declare H3 expectations explicitly. v2.
 4. **Captcha solvers.** Turnstile auto-click, hCaptcha solver, reCAPTCHA solver. Out of v1 scope on principle: solvers are a separate concern from a consistency framework, and bundling them blurs the value prop. Likely a separate `@mochi-extras/turnstile` package post-1.0.
 5. **Real-trace recording for behavioral.** v1.x deliverable. The contract is reserved (`humanClick`'s `trace?` parameter) but the implementation is post-1.0.
 6. **Remote debugging across machines.** Pipe-mode is local-only by definition. v2 may add an opt-in WebSocket transport for headless server scenarios; the leak surface needs careful design.
@@ -975,7 +953,7 @@ These are real open questions that we're consciously NOT answering in v1. Each h
 - **Pipe mode** — `--remote-debugging-pipe`. CDP over file descriptors instead of TCP/WebSocket.
 - **Worldname `""`** — the empty string as `worldName` parameter to `Page.addScriptToEvaluateOnNewDocument`, meaning "main world." Critical because any non-empty value creates a detectable isolated world.
 - **runImmediately** — boolean flag on `addScriptToEvaluateOnNewDocument`. When `true`, the script runs *before* any other page script in every new document. Mandatory for stealth.
-- **Out-of-band fetch** — `Session.fetch`. Profile-fingerprinted HTTP request issued from Bun (not from the browser). Uses `@mochi.js/net-rs` + `wreq`.
+- **Out-of-band fetch** — `Session.fetch`. HTTP request issued from Bun that routes through the running Chromium via CDP (`Network.loadNetworkResource` for simple GETs, `page.evaluate("fetch")` for non-GET). JA4/JA3/H2 are real Chrome by definition.
 - **Funnel** — the implicit pattern where users hitting mochi's JS-only ceiling go find their own next step. mochi does not steer them.
 
 ---

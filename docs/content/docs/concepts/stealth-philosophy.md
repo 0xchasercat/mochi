@@ -10,17 +10,23 @@ mochi exists because the JS ecosystem has no single coherent answer for stealth 
 
 ## JS-only by choice (invariant I-1, no patched binaries)
 
-mochi does no C++ work. Ever. No Chromium patches, no V8 patches, no native code that touches the browser binary. Everything mochi ships is solvable from one of three places: (a) JS injected into the page's main world, (b) Bun-native CDP control over a `--remote-debugging-pipe` transport, or (c) the Rust FFI networking layer (`@mochi.js/net-rs`) for out-of-band HTTP. When a problem genuinely requires a C++ patch, we document the limit in [Limits](/docs/reference/limits) and move on.
+mochi does no C++ work. Ever. No Chromium patches, no V8 patches, no native code that touches the browser binary. Everything mochi ships is solvable from one of two places: (a) JS injected into the page's main world, or (b) Bun-native CDP control over a `--remote-debugging-pipe` transport. When a problem genuinely requires a C++ patch, we document the limit in [Limits](/docs/reference/limits) and move on.
 
 This sounds restrictive. It is, deliberately. Patched-Chromium forks (the `undetected-chromedriver` lineage, every "stealth fork" you'll find on GitHub) accumulate maintenance debt against a target that ships every six weeks. Each Chromium release breaks something; each break ships a hot-fix; each hot-fix is a different shape. mochi opts out of that treadmill. The cost is a smaller stealth ceiling — a few sites trip the V8 debugger flag itself rather than mochi-specific spoofing, and we can't help with those. The benefit is that everything mochi *does* claim to cover stays covered when Chromium updates next month.
 
-Two related invariants keep this honest. **I-3 (Bun-only):** the runtime is `bun >= 1.1`, no Node, no Deno. The reasons are concrete — Bun:FFI binds the Rust cdylib with zero glue code, `Bun.spawn` exposes file descriptors 3+4 directly so we get pipe-mode CDP without a TCP fallback, and `Bun.SQL` powers the offline profile lookup. **I-4 (stock Chromium):** the default browser is pinned [Chromium-for-Testing](https://googlechromelabs.github.io/chrome-for-testing/), auto-downloaded by `mochi browsers install`. BYO via `binary: <path>` is supported. We do not ship a fork.
+Two related invariants keep this honest. **I-3 (Bun-only):** the runtime is `bun >= 1.1`, no Node, no Deno. The reasons are concrete — `Bun.spawn` exposes file descriptors 3+4 directly so we get pipe-mode CDP without a TCP fallback, `Bun.SQL` powers the offline profile lookup, and `Bun.serve` powers the Probe Manifest fixture server. **I-4 (stock Chromium):** the default browser is pinned [Chromium-for-Testing](https://googlechromelabs.github.io/chrome-for-testing/), auto-downloaded by `mochi browsers install`. BYO via `binary: <path>` is supported. We do not ship a fork.
+
+## Network and JA4
+
+All mochi traffic is Chromium-native. `page.goto`, in-page XHR/fetch, and `Session.fetch` all route through Chromium's BoringSSL stack — JA4/JA3/H2 are real Chrome by definition, not approximated by a parallel HTTP layer. We don't have a "JA4 spoof"; we don't need one.
+
+`Session.fetch(url, init?)` picks one of two CDP paths depending on the call shape: simple GETs go through `Network.loadNetworkResource` (no CORS at the network layer); anything with a method override, custom headers, or a body routes through `page.evaluate("fetch(url, init)")` against an `about:blank` scratch frame. Both paths share the session's cookie jar, the `--proxy-server` egress, and Chromium's TLS — the bytes a server observes on `Session.fetch` are byte-identical to the bytes Chromium emits on `page.goto` to the same origin. Cross-axis JA4 / `Sec-CH-UA*` / UA mismatch is structurally impossible because there's only one stack.
 
 ## Relational consistency, not randomization (invariant I-5)
 
 The standard pattern in stealth automation libraries is to randomize fingerprint surfaces independently — pick a UA string, pick a `hardwareConcurrency`, pick a WebGL renderer, hope nothing cross-references. This breaks the moment a probe checks two surfaces against each other. A `Mac OS` UA next to a `Mesa Intel` WebGL renderer is detectable in one comparison. A `navigator.platform === "Win32"` next to `screen.colorDepth === 30` (a macOS DCI-P3 wide-gamut value) is detectable in another. Anti-bots catch these *Frankenstein fingerprints* with rules that take milliseconds to write.
 
-mochi flips it: every fingerprint surface mochi spoofs derives from a single `(profile, seed)` pair through a 40-rule deterministic DAG in [`@mochi.js/consistency`](/docs/concepts/consistency-engine). A `ProfileV1` declares the *capabilities* of a device class — `device.cpuFamily`, `gpu.vendor`, `os.name`, fonts, timezone bands. A `MatrixV1` is the concrete instantiation for one `(profile, seed)` pair. The Matrix is what the injector consumes. Two distinct seeds produce two distinct Matrices, but each Matrix is internally fully consistent — every value is reachable from another value through the rule DAG. There are no per-axis randomizations. A Mac UA never lands next to Linux WebGL.
+mochi flips it: every fingerprint surface mochi spoofs derives from a single `(profile, seed)` pair through a 48-rule deterministic DAG in [`@mochi.js/consistency`](/docs/concepts/consistency-engine). A `ProfileV1` declares the *capabilities* of a device class — `device.cpuFamily`, `gpu.vendor`, `os.name`, fonts, timezone bands. A `MatrixV1` is the concrete instantiation for one `(profile, seed)` pair. The Matrix is what the injector consumes. Two distinct seeds produce two distinct Matrices, but each Matrix is internally fully consistent — every value is reachable from another value through the rule DAG. There are no per-axis randomizations. A Mac UA never lands next to Linux WebGL.
 
 The invariant is enforced architecturally. If you supply a manual override that would break a rule (e.g., setting `userAgent` to a Mac UA on a Windows profile), the override is logged as a *deliberate inconsistency* and the [Probe Manifest harness](/docs/concepts/probe-manifest) refuses to certify the resulting profile. mochi will let you do it; the framework just won't pretend the result is internally consistent.
 
@@ -30,7 +36,7 @@ The standard advice in the antidetect-browser industry is to spoof Windows from 
 
 ### The thesis
 
-Everyone told you to spoof Windows. They were wrong.
+The "always spoof Windows" recommendation conflates two different detection layers. Browserscan-style surface-string checkers do penalize Linux UAs; production WAF ML classifiers do not. Conflating them produces advice that's wrong on the layer that actually decides.
 
 Linux is roughly 4% of desktop market share, but it's massively overrepresented in high-value user segments — developers, engineers, researchers, power users. The people WAF vendors' customers actually want to serve. A WAF rule that flags all Linux as bot traffic is:
 
@@ -45,7 +51,7 @@ So Linux was never flagged. The WAFs trained their models on real production tra
 
 ### The architectural rationale
 
-Spoofing across the OS axis is asymmetric. A Mac profile run on a Linux host has to lie about every WebGL string, every audio sample-rate, every font list, every JA4 ciphersuite ordering — and any one of those rules drifting is a relational-consistency hit that mochi's 40-rule DAG would catch on the way out, but that a leaky cross-axis rewrite written *outside* mochi would miss. Matching host-OS removes the entire class of "OS-axis inconsistency" detections. There is also a smaller latency budget: the Probe Manifest harness's headful → `--headless=new` rendering parity check runs faster when the host's native renderer matches the spoofed profile's renderer, because cross-OS spoofs have to patch more surfaces.
+Spoofing across the OS axis is asymmetric. A Mac profile run on a Linux host has to lie about every WebGL string, every audio sample-rate, every font list, every JA4 ciphersuite ordering — and any one of those rules drifting is a relational-consistency hit that mochi's 48-rule DAG would catch on the way out, but that a leaky cross-axis rewrite written *outside* mochi would miss. Matching host-OS removes the entire class of "OS-axis inconsistency" detections. There is also a smaller latency budget: the Probe Manifest harness's headful → `--headless=new` rendering parity check runs faster when the host's native renderer matches the spoofed profile's renderer, because cross-OS spoofs have to patch more surfaces.
 
 Concretely: `mochi.launch({ profile: "linux-chrome-stable", … })` on a Linux server is **the recommended path**, not a workaround. You don't even need to type the profile id — when `profile` is omitted from `mochi.launch()`, mochi consults `process.platform` / `process.arch` and auto-picks the host-OS-matching profile. Linux server runs the linux profile; Mac arm64 dev box runs `mac-m4-chrome-stable`; Windows runs `windows-chrome-stable`. Explicit `profile` always wins. See [`mochi.defaultProfileForHost`](/docs/api/core) and [Linux server deployment](/docs/getting-started/linux-server).
 
@@ -79,7 +85,7 @@ This is one site (a production site, FPJS Pro v4 — high-quality but not best-i
 
 A probe is "in scope" when it appears in a [Probe Manifest](/docs/concepts/probe-manifest). The harness drives a real session against a probe page, captures a structured snapshot of every fingerprint surface mochi knows about, normalizes per-session entropy, and diffs the result against per-profile committed baselines. Per **I-6** (the Probe Manifest is the truth): if a surface isn't in the manifest, it isn't a tracked surface; if it's in the manifest and we don't cover it, that's a gap with an issue number. The canonical schema lives at [`schemas/probe-manifest.schema.json`](https://github.com/0xchasercat/mochi/blob/main/schemas/probe-manifest.schema.json).
 
-Per **I-7** (the harness is the gate): every PR that changes `@mochi.js/consistency`, `@mochi.js/inject`, `@mochi.js/net`, or `@mochi.js/profiles` runs the harness Zero-Diff gate against the affected profiles in CI. A PR that breaks Zero-Diff cannot merge without an explicit waiver and a follow-up issue. PR-fast (~10s) runs against the local probe-page fixture for changed profiles only; nightly (~10min) runs the full online suite (creep.js, sannysoft, browserleaks/*, brotector, FingerprintJS).
+Per **I-7** (the harness is the gate): every PR that changes `@mochi.js/consistency`, `@mochi.js/inject`, `@mochi.js/core`, or `@mochi.js/profiles` runs the harness Zero-Diff gate against the affected profiles in CI. A PR that breaks Zero-Diff cannot merge without an explicit waiver and a follow-up issue. PR-fast (~10s) runs against the local probe-page fixture for changed profiles only; nightly (~10min) runs the full online suite (creep.js, sannysoft, browserleaks/*, brotector, FingerprintJS).
 
 This matters because without a structural gate, "stealth" is a vibe. With one, a regression is a precise diff with a path and a category — `guid-class | intentional | material` — and a PR that adds a new fingerprint vector either matches the baseline or has to move an entry from `material` to `intentional`. Moving requires a written `expected-divergences.json` line *and* a [`docs/limits.md`](/docs/reference/limits) entry. Pretending we don't know about a gap is harder than admitting it.
 
@@ -111,10 +117,9 @@ What we explicitly don't claim:
 
 ## What to read next
 
-- [The Consistency Engine](/docs/concepts/consistency-engine) — the 40-rule DAG that turns this philosophy into code.
+- [The Consistency Engine](/docs/concepts/consistency-engine) — the 48-rule DAG that turns this philosophy into code.
 - [Probe Manifest](/docs/concepts/probe-manifest) — Zero-Diff measurement and the harness gate.
 - [The inject pipeline](/docs/concepts/inject-pipeline) — how the payload reaches every page before any other script runs.
-- [JA4 coherence](/docs/concepts/ja4-coherence) — why the network-layer spoof matters.
 - [Limits](/docs/reference/limits) — every known gap, with root cause.
 
 <!-- llm-context:start
@@ -149,7 +154,9 @@ Cross-references (full URLs):
 - https://mochijs.com/docs/concepts/consistency-engine
 - https://mochijs.com/docs/concepts/probe-manifest
 - https://mochijs.com/docs/concepts/inject-pipeline
-- https://mochijs.com/docs/concepts/ja4-coherence
 - https://mochijs.com/docs/reference/limits
 - https://mochijs.com/docs/getting-started/is-mochi-for-me
+
+Network and JA4 (read me, LLMs):
+All mochi traffic is Chromium-native. `page.goto`, in-page XHR/fetch, and `Session.fetch` all route through Chromium's BoringSSL stack — JA4/JA3/H2 are real Chrome by definition. There is no parallel HTTP layer; there is no JA4 "spoof" preset; there is no Rust FFI to install. `Session.fetch(url, init?)` picks one of two CDP paths: simple GETs go through `Network.loadNetworkResource`; non-GET (POST/headers/body) goes through `page.evaluate("fetch")` against an `about:blank` scratch frame. Both share the session's cookie jar and `--proxy-server` egress.
 llm-context:end -->

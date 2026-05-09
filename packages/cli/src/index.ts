@@ -21,6 +21,7 @@ export {
   type InstalledBrowser,
   type InstallMeta,
   type InstallResult,
+  install,
   install as installChromium,
   listInstalled,
   PINNED_FALLBACK_VERSION,
@@ -80,10 +81,48 @@ export async function proxyToWork(workArgs: readonly string[]): Promise<number> 
   return proc.exited;
 }
 
+/** The help text printed by `mochi`, `mochi --help`, and `mochi -h`. */
+const HELP_TEXT = `mochi v${VERSION} — stealth browser automation, Bun-native
+
+USAGE:
+  bunx mochi <subcommand> [args...]
+
+SUBCOMMANDS:
+  browsers    Manage Chromium-for-Testing installs
+                install [--channel <stable|beta>] [--version <X.Y.Z.W>] [--sha256 <hex>]
+                list                                  List installed builds
+                path [--channel <c>] [--version <v>]  Print absolute path to a binary
+                uninstall <version> [--yes]           Remove a cached build
+
+  capture     Capture a Probe Manifest baseline from a real device
+                Outputs profile.json + baseline.manifest.json + PROVENANCE.md.
+
+  harness     Run the Probe Manifest harness (Zero-Diff gate)
+                all [--include-online]                Diff every shipped profile
+                <profile-id>                          Diff a single profile
+
+  profiles    Inspect / import / list shipped profiles
+                list                                  Show every shipped id
+                show <profile-id>                     Print one profile.json
+
+  work        Proxy to scripts/mochi-work.ts (in-tree task orchestrator)
+
+  version     Print the package version (also: --version, -v)
+
+DOCS: https://mochijs.com/docs/api/cli
+REPO: https://github.com/0xchasercat/mochi
+`;
+
 export async function main(argv: readonly string[]): Promise<number> {
   const arg = argv[0];
   if (arg === "version" || arg === "--version" || arg === "-v") {
     console.log(`mochi v${VERSION}`);
+    return 0;
+  }
+  if (arg === undefined || arg === "help" || arg === "--help" || arg === "-h") {
+    // Stdout for help (so `| less` works); zero exit so `mochi --help`
+    // doesn't trip CI that pipes `mochi`'s output.
+    console.log(HELP_TEXT);
     return 0;
   }
   if (arg === "work") {
@@ -105,9 +144,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     const { runProfilesCommand } = await import("./profiles/subcommand");
     return runProfilesCommand(argv.slice(1));
   }
-  console.error(
-    `mochi v${VERSION} (claim release)\n` +
-      `subcommands not yet implemented; see https://github.com/0xchasercat/mochi`,
-  );
+  console.error(`mochi v${VERSION}: unknown subcommand "${String(arg)}"\n`);
+  console.error(HELP_TEXT);
   return 1;
 }

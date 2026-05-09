@@ -20,12 +20,6 @@ import {
 import type { MatrixV1 } from "@mochi.js/consistency";
 import { buildPayload, type PayloadResult } from "@mochi.js/inject";
 import {
-  openCtx as defaultOpenCtx,
-  requestOnCtx as defaultRequestOnCtx,
-  type NetCtx,
-  type NetFetchInit,
-} from "@mochi.js/net";
-import {
   type InitInjectorHandle,
   installInitInjector,
   wrapSelfRemovingPayload,
@@ -35,23 +29,6 @@ import type { AttachedToTargetEvent } from "./cdp/types";
 import { Page } from "./page";
 import type { ChromiumProcess } from "./proc";
 import { VERSION } from "./version";
-
-/**
- * Injection seam for the network FFI. Session uses this internally so tests
- * can stub the FFI layer without spinning up the cdylib. Production code
- * defaults to `@mochi.js/net`.
- *
- * @internal
- */
-export interface NetAdapter {
-  openCtx(spec: { preset: string; proxy?: string }): NetCtx;
-  requestOnCtx(ctx: NetCtx, url: string, init: NetFetchInit): Response;
-}
-
-const defaultNetAdapter: NetAdapter = {
-  openCtx: defaultOpenCtx,
-  requestOnCtx: defaultRequestOnCtx,
-};
 
 /**
  * Per-call timeout for the worker idOnly inject roundtrip. 5s, not the
@@ -101,13 +78,6 @@ export interface SessionInit {
    */
   bypassInject?: boolean;
   /**
-   * Optional outbound proxy URL forwarded to the network FFI for
-   * `Session.fetch` requests. Out-of-band requests honour this independently
-   * of the browser's `--proxy-server` flag (which already sees the proxy via
-   * the CDP launch path).
-   */
-  netProxy?: string;
-  /**
    * Optional proxy credentials. When set, the Session attaches a CDP
    * `Fetch.authRequired` listener so HTTP / SOCKS5 proxy auth challenges
    * are answered transparently. Undefined when no proxy is configured or
@@ -117,14 +87,6 @@ export interface SessionInit {
    * @see proxy-auth.ts for the §8.2 invariant rationale.
    */
   proxyAuth?: { username: string; password: string };
-  /**
-   * Network adapter override — tests inject a stub here to exercise the
-   * `Session.fetch` wiring without loading the cdylib. Production code does
-   * not pass this; the default uses `@mochi.js/net`.
-   *
-   * @internal
-   */
-  netAdapter?: NetAdapter;
   /**
    * Convenience layer toggles surfaced via
    * `LaunchOptions.challenges`. When `challenges.turnstile.autoClick` is
@@ -248,24 +210,30 @@ export class Session {
   private readonly _pages: Page[] = [];
   private closed = false;
   /**
-   * Proxy URL forwarded to `@mochi.js/net` for out-of-band fetches. Mirrors
-   * the launch-time `proxy` option but is held here because the net Ctx is
-   * created lazily on first `fetch`.
-   */
-  private readonly netProxy: string | undefined;
-  /**
-   * Lazily-opened Net Ctx for `Session.fetch`. One per Session — wreq's
-   * client pool inside the Rust crate handles connection reuse for repeated
-   * calls. Closed on `Session.close`.
-   */
-  private netCtx: NetCtx | undefined;
-  /**
-   * Pluggable seam for the network FFI. Defaults to `@mochi.js/net`.
-   * Tests inject a stub here.
+   * Lazily-created scratch frame used by {@link fetch} to satisfy the
+   * `frameId` requirement of `Network.loadNetworkResource` AND to host the
+   * `page.evaluate("fetch(...)")` path for non-GET calls. The frame
+   * navigates `about:blank` once and is reused across every `Session.fetch`
+   * call. Closed on {@link close}.
    *
    * @internal
    */
-  private readonly netAdapter: NetAdapter;
+  private scratchFrame: { targetId: string; sessionId: string; frameId: string } | undefined;
+  /**
+   * Mutex for {@link ensureScratchFrame} — without it, two concurrent
+   * `Session.fetch` calls race on `Target.createTarget` and produce two
+   * scratch frames (only one tracked). The promise resolves once the first
+   * caller has finished setup; subsequent callers reuse the cached frame.
+   *
+   * @internal
+   */
+  private scratchFramePromise:
+    | Promise<{
+        targetId: string;
+        sessionId: string;
+        frameId: string;
+      }>
+    | undefined;
   /**
    * The compiled inject payload for this session. Built once at construction
    * from the resolved {@link MatrixV1}; reused across every new page and
@@ -330,8 +298,6 @@ export class Session {
     this.profile = init.matrix;
     this.seed = init.seed;
     this.bypassInject = init.bypassInject === true;
-    this.netProxy = init.netProxy;
-    this.netAdapter = init.netAdapter ?? defaultNetAdapter;
     this.challengesOpts = init.challenges;
     // Skip payload compilation entirely when bypassed — capture flows must
     // not pay the build cost AND must not see the matrix-derived bytes.
@@ -589,81 +555,343 @@ export class Session {
   }
 
   /**
-   * Out-of-band fetch — issues a request via the Rust `wreq` cdylib so the
-   * wire fingerprint matches the session's profile preset. The browser's
-   * own navigation/XHR/fetch are unaffected (they use Chromium's native
-   * TLS, which already matches a Chrome profile). Returns a standard Web
-   * `Response`. PLAN.md §5.4 / §10.
+   * Out-of-band fetch — routes through Chromium itself so JA4/JA3/H2 are
+   * real Chrome by definition. Returns a standard Web `Response`.
    *
-   * Lazy: the per-Session `NetCtx` (Tokio runtime + wreq Client) is created
-   * on the first call and reused for subsequent calls. Closed on
-   * {@link close}.
+   * ### Dual-mechanism routing
+   *
+   * The implementation picks one of two CDP paths based on the call shape.
+   * Both paths run inside the browser, so both inherit the session's
+   * cookie jar, proxy (`--proxy-server`), and TLS stack — the bytes a
+   * server observes are byte-identical to what Chromium sends on its own
+   * navigation.
+   *
+   *   - **Mechanism A — `Network.loadNetworkResource`.** Used when the call
+   *     is a simple GET (no `init.method` other than `"GET"`, no
+   *     `init.headers`, no `init.body`). The CDP method bypasses the
+   *     same-origin policy at the network layer — there is no CORS preflight
+   *     and no `Origin` header is sent. Body is returned as an
+   *     {@link IO.StreamHandle} which we drain via `IO.read` until EOF and
+   *     then close. Requires a `frameId`; we lazily allocate an
+   *     `about:blank` scratch frame and reuse it across calls.
+   *
+   *   - **Mechanism B — `page.evaluate("fetch(url, init).then(...)")`.** Used
+   *     for everything else (POST/PUT/DELETE, custom headers, request body).
+   *     Full {@link RequestInit} semantics pass through: cookies inherit
+   *     from the page's origin (the scratch frame is `about:blank`), CORS
+   *     applies same as a real user's browser, redirects follow per
+   *     `init.redirect`. Bodies are forwarded as `string` /
+   *     `ArrayBuffer` / `URLSearchParams`; `Blob` / `FormData` /
+   *     `ReadableStream` are not yet supported (rejected with a clear
+   *     diagnostic). The response is reconstructed from a base64-encoded
+   *     ArrayBuffer + a status / headers tuple.
+   *
+   * ### Cookie semantics (breaking change vs. 0.6)
+   *
+   * Both mechanisms share the browser's cookie jar. A cookie set via
+   * `Page.goto` or `session.cookies.set` is sent on the next
+   * `session.fetch` call to the same origin — no manual `Cookie` header
+   * propagation. The pre-0.7 wreq-routed `Session.fetch` was cookieless.
+   *
+   * ### What changed vs. 0.6
+   *
+   * - **No more Rust FFI.** The `@mochi.js/net` and `@mochi.js/net-rs`
+   *   packages are gone; there is no cdylib to install or trust.
+   * - **Cookies inherit** (above).
+   * - **Non-GET respects CORS.** Mechanism B is a real `fetch` from the
+   *   page's main world; cross-origin POSTs without `Access-Control-Allow-Origin`
+   *   fail the same way they would for a user.
+   *
+   * @see PLAN.md §5.4 / §7
    */
   async fetch(url: string, init?: RequestInit): Promise<Response> {
     this.assertOpen();
-    const ctx = this.ensureNetCtx();
-    const headers = this.headersToRecord(init?.headers);
-    const body = this.bodyToString(init?.body);
-    return this.netAdapter.requestOnCtx(ctx, url, {
-      method: init?.method ?? "GET",
-      headers,
-      body,
-      preset: this.profile.wreqPreset,
-      ...(this.netProxy !== undefined ? { proxy: this.netProxy } : {}),
-    });
-  }
-
-  /** Lazy-create the per-Session Net Ctx (one Tokio runtime + wreq client). */
-  private ensureNetCtx(): NetCtx {
-    if (this.netCtx === undefined) {
-      this.netCtx = this.netAdapter.openCtx({
-        preset: this.profile.wreqPreset,
-        ...(this.netProxy !== undefined ? { proxy: this.netProxy } : {}),
-      });
-    }
-    return this.netCtx;
-  }
-
-  /** Coerce a Web `Headers` / record / array-pair shape into a plain record. */
-  private headersToRecord(h: HeadersInit | undefined): Record<string, string> {
-    if (h === undefined) return {};
-    if (h instanceof Headers) {
-      const out: Record<string, string> = {};
-      h.forEach((v, k) => {
-        out[k] = v;
-      });
-      return out;
-    }
-    if (Array.isArray(h)) {
-      const out: Record<string, string> = {};
-      for (const pair of h) {
-        const k = pair[0];
-        const v = pair[1];
-        if (typeof k === "string" && typeof v === "string") out[k] = v;
-      }
-      return out;
-    }
-    return { ...(h as Record<string, string>) };
+    const isSimpleGet =
+      init === undefined ||
+      ((init.method === undefined || init.method.toUpperCase() === "GET") &&
+        init.headers === undefined &&
+        init.body === undefined);
+    if (isSimpleGet) return this.fetchViaLoadNetworkResource(url);
+    // Mechanism B: serialize the init eagerly so unsupported body shapes
+    // (FormData / Blob / ReadableStream) throw BEFORE we allocate any CDP
+    // resources — a no-op on the wire if the call would have failed
+    // anyway.
+    const initSerialized = serializeRequestInitForFetch(init as RequestInit);
+    return this.fetchViaPageEvaluate(url, initSerialized);
   }
 
   /**
-   * Coerce a `RequestInit.body` to a UTF-8 string (the only shape the v0.6
-   * FFI surface accepts). `null`/`undefined` map to `null`. ArrayBuffer-style
-   * inputs are decoded as UTF-8; binary bodies are deferred per task brief.
+   * Mechanism A: drive `Network.loadNetworkResource` against the scratch
+   * frame, then drain the resulting `IO.StreamHandle` until EOF.
+   *
+   * `Network.loadNetworkResource` is exposed by the browser-side network
+   * handler and runs against the host's StoragePartition rather than the
+   * per-target `NetworkAgent`'s request observer. It does NOT require
+   * `Network.enable` (the contract test
+   * `tests/contract/session-fetch-no-network-enable.contract.test.ts`
+   * pins this empirically — if Chromium ever changes its mind, the test
+   * fails loudly and we fall back to mechanism B exclusively).
+   *
+   * Returned options are intentionally narrow: the CDP method only takes
+   * `disableCache` and `includeCredentials`. We default
+   * `includeCredentials: true` so cookies inherit (the whole point of a
+   * shared-identity fetch).
+   *
+   * @internal
    */
-  private bodyToString(b: BodyInit | null | undefined): string | null {
-    if (b === undefined || b === null) return null;
-    if (typeof b === "string") return b;
-    if (b instanceof ArrayBuffer) return new TextDecoder().decode(b);
-    if (ArrayBuffer.isView(b)) {
-      // Includes Uint8Array, Buffer, etc.
-      return new TextDecoder().decode(b as ArrayBufferView);
-    }
-    if (b instanceof URLSearchParams) return b.toString();
-    // Blob / FormData / ReadableStream — out of v0.6 scope.
-    throw new Error(
-      "[mochi] Session.fetch: only string, ArrayBuffer/View, and URLSearchParams bodies are supported in v0.6",
+  private async fetchViaLoadNetworkResource(url: string): Promise<Response> {
+    const { frameId } = await this.ensureScratchFrame();
+    const res = await this.router.send<{ resource: LoadNetworkResourcePageResult }>(
+      "Network.loadNetworkResource",
+      {
+        frameId,
+        url,
+        options: { disableCache: false, includeCredentials: true },
+      },
     );
+    if (!res.resource.success) {
+      const name = res.resource.netErrorName ?? "fetch failed";
+      const httpStatus =
+        res.resource.httpStatusCode !== undefined
+          ? ` (httpStatus=${res.resource.httpStatusCode})`
+          : "";
+      throw new Error(`[mochi] Session.fetch: ${name}${httpStatus}`);
+    }
+    const status =
+      typeof res.resource.httpStatusCode === "number" && res.resource.httpStatusCode > 0
+        ? res.resource.httpStatusCode
+        : 200;
+    const headers = new Headers();
+    if (res.resource.headers !== undefined) {
+      for (const [k, v] of Object.entries(res.resource.headers)) {
+        try {
+          headers.append(k, String(v));
+        } catch {
+          // ignore unmappable header names
+        }
+      }
+    }
+    if (res.resource.stream === undefined) {
+      // Empty body — no stream allocated. Common for 204 / HEAD-style
+      // responses though `loadNetworkResource` is GET-only.
+      return new Response(uint8ToArrayBuffer(new Uint8Array(0)), { status, headers });
+    }
+    const body = await this.readIoStream(res.resource.stream);
+    return new Response(uint8ToArrayBuffer(body), { status, headers });
+  }
+
+  /**
+   * Drain an `IO.StreamHandle` produced by `Network.loadNetworkResource`.
+   *
+   * The CDP `IO.read` method returns chunks tagged with a `base64Encoded`
+   * boolean — text bodies arrive verbatim, binary bodies arrive base64-
+   * decoded. We accumulate raw bytes (decoding base64 when needed) and
+   * close the handle on EOF. `IO.close` is best-effort: a failure to
+   * close doesn't prevent the response from being returned.
+   *
+   * Chunk size: 64 KiB — the same window the DevTools frontend uses.
+   *
+   * @internal
+   */
+  private async readIoStream(handle: string): Promise<Uint8Array> {
+    const chunks: Uint8Array[] = [];
+    let totalLen = 0;
+    // 64 KiB per chunk — DevTools frontend uses the same window. Larger
+    // values risk fragmenting the CDP frame; smaller values triple the
+    // round-trip count for a realistic JSON body.
+    const READ_SIZE = 64 * 1024;
+    for (;;) {
+      const r = await this.router.send<{ data: string; eof: boolean; base64Encoded?: boolean }>(
+        "IO.read",
+        { handle, size: READ_SIZE },
+      );
+      if (r.data.length > 0) {
+        const bytes =
+          r.base64Encoded === true ? base64ToBytes(r.data) : new TextEncoder().encode(r.data);
+        chunks.push(bytes);
+        totalLen += bytes.byteLength;
+      }
+      if (r.eof) break;
+    }
+    try {
+      await this.router.send("IO.close", { handle });
+    } catch {
+      // best-effort — handle may have auto-released on EOF
+    }
+    if (chunks.length === 0) return new Uint8Array(0);
+    if (chunks.length === 1) return chunks[0] as Uint8Array;
+    const out = new Uint8Array(totalLen);
+    let offset = 0;
+    for (const c of chunks) {
+      out.set(c, offset);
+      offset += c.byteLength;
+    }
+    return out;
+  }
+
+  /**
+   * Mechanism B: forward the call into the page's main-world `fetch` via
+   * `Runtime.callFunctionOn`. The function returns
+   * `{ status, headers, bodyB64 }`; the body round-trips as base64 so
+   * binary responses survive intact.
+   *
+   * Cookies inherit from the scratch page's origin (`about:blank`), which
+   * means cookies set via `Page.goto` (any origin) plus
+   * `Storage.setCookies` reach the call exactly as if a user typed `fetch`
+   * into the browser console. CORS applies — cross-origin POSTs without
+   * the right ACAO header fail the same way they would for a user.
+   *
+   * @internal
+   */
+  private async fetchViaPageEvaluate(url: string, initSerialized: string): Promise<Response> {
+    const { sessionId } = await this.ensureScratchFrame();
+    const documentObjectId = await this.scratchDocumentObjectId(sessionId);
+    // The function source is small and self-contained. We avoid any
+    // `Runtime.evaluate` (per §8.2 / `Runtime.enable` is forbidden, plus
+    // we want a deterministic context) and bind to the document objectId
+    // so the call lands in the page's main world.
+    const fnDeclaration = `async function(urlArg, initJson) {
+      const init = JSON.parse(initJson);
+      let bodyOut = init.__body;
+      if (init.__bodyB64 !== undefined) {
+        const bin = atob(init.__bodyB64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        bodyOut = bytes;
+      }
+      delete init.__body;
+      delete init.__bodyB64;
+      if (bodyOut !== undefined) init.body = bodyOut;
+      const r = await fetch(urlArg, init);
+      const buf = await r.arrayBuffer();
+      let b64 = "";
+      const view = new Uint8Array(buf);
+      // Chunked btoa to dodge call-stack overflow on big bodies.
+      const CHUNK = 0x8000;
+      for (let i = 0; i < view.length; i += CHUNK) {
+        let s = "";
+        const end = Math.min(i + CHUNK, view.length);
+        for (let j = i; j < end; j++) s += String.fromCharCode(view[j]);
+        b64 += btoa(s);
+      }
+      const headers = {};
+      r.headers.forEach((v, k) => { headers[k] = v; });
+      return { status: r.status, headers, bodyB64: b64 };
+    }`;
+    const callRes = await this.router.send<{
+      result: {
+        value?: { status: number; headers: Record<string, string>; bodyB64: string };
+        type: string;
+      };
+      exceptionDetails?: { exception?: { description?: string }; text?: string };
+    }>(
+      "Runtime.callFunctionOn",
+      {
+        functionDeclaration: fnDeclaration,
+        objectId: documentObjectId,
+        arguments: [{ value: url }, { value: initSerialized }],
+        returnByValue: true,
+        awaitPromise: true,
+      },
+      { sessionId },
+    );
+    if (callRes.exceptionDetails !== undefined) {
+      const desc =
+        callRes.exceptionDetails.exception?.description ??
+        callRes.exceptionDetails.text ??
+        "page-evaluate fetch threw";
+      throw new Error(`[mochi] Session.fetch: ${desc}`);
+    }
+    const out = callRes.result.value;
+    if (out === undefined) {
+      throw new Error("[mochi] Session.fetch: page-evaluate fetch returned undefined");
+    }
+    const headers = new Headers();
+    for (const [k, v] of Object.entries(out.headers)) {
+      try {
+        headers.append(k, v);
+      } catch {
+        // ignore unmappable header names
+      }
+    }
+    const body = base64ToBytes(out.bodyB64);
+    return new Response(uint8ToArrayBuffer(body), { status: out.status, headers });
+  }
+
+  /**
+   * Lazily create the scratch frame used by {@link fetch}. The first call
+   * spawns an `about:blank` page (kept off the public {@link pages} list),
+   * attaches a flat-mode session, enables `Page` (for the `frameNavigated`
+   * event), records the main-frame id, and caches the result. Subsequent
+   * calls reuse the cache. Closed on {@link close}.
+   *
+   * Concurrent first-callers share the same in-flight promise so we don't
+   * race on `Target.createTarget`.
+   *
+   * @internal
+   */
+  private async ensureScratchFrame(): Promise<{
+    targetId: string;
+    sessionId: string;
+    frameId: string;
+  }> {
+    if (this.scratchFrame !== undefined) return this.scratchFrame;
+    if (this.scratchFramePromise !== undefined) return this.scratchFramePromise;
+    this.scratchFramePromise = (async () => {
+      const created = await this.router.send<{ targetId: string }>("Target.createTarget", {
+        url: "about:blank",
+      });
+      const attached = await this.router.send<{ sessionId: string }>("Target.attachToTarget", {
+        targetId: created.targetId,
+        flatten: true,
+      });
+      // Page.enable surfaces `Page.frameNavigated`; we need it to capture
+      // the main-frame id deterministically (`Page.getFrameTree` is also
+      // an option but adds a CDP round-trip).
+      await this.router.send("Page.enable", undefined, { sessionId: attached.sessionId });
+      const tree = await this.router.send<{ frameTree: { frame: { id: string } } }>(
+        "Page.getFrameTree",
+        undefined,
+        { sessionId: attached.sessionId },
+      );
+      this.scratchFrame = {
+        targetId: created.targetId,
+        sessionId: attached.sessionId,
+        frameId: tree.frameTree.frame.id,
+      };
+      return this.scratchFrame;
+    })();
+    try {
+      const frame = await this.scratchFramePromise;
+      return frame;
+    } finally {
+      this.scratchFramePromise = undefined;
+    }
+  }
+
+  /**
+   * Resolve the scratch page's `document` objectId for `Runtime.callFunctionOn`.
+   * `DOM.getDocument` is the canonical "give me a fresh root NodeId"
+   * method; `DOM.resolveNode` then returns its `objectId`. Both are §8.2-
+   * clean (no `Runtime.enable`, no isolated worlds).
+   *
+   * @internal
+   */
+  private async scratchDocumentObjectId(sessionId: string): Promise<string> {
+    const doc = await this.router.send<{ root: { nodeId: number } }>(
+      "DOM.getDocument",
+      { depth: 0 },
+      { sessionId },
+    );
+    const resolved = await this.router.send<{ object: { objectId?: string } }>(
+      "DOM.resolveNode",
+      { nodeId: doc.root.nodeId },
+      { sessionId },
+    );
+    if (resolved.object.objectId === undefined) {
+      throw new Error("[mochi] Session.fetch: scratch document objectId unresolved");
+    }
+    return resolved.object.objectId;
   }
 
   /**
@@ -692,16 +920,17 @@ export class Session {
         // ignore — best-effort
       }
     }
-    // Tear down the per-Session Net Ctx if one was opened. `close()` is
-    // idempotent on the Net Ctx as well; calling on never-opened sessions
-    // is a no-op since `netCtx` stays undefined.
-    if (this.netCtx !== undefined) {
+    // Close the scratch frame used by Session.fetch (mechanisms A + B).
+    // `Target.closeTarget` is idempotent server-side; we only call when
+    // a scratch frame was actually opened.
+    if (this.scratchFrame !== undefined) {
+      const targetId = this.scratchFrame.targetId;
+      this.scratchFrame = undefined;
       try {
-        this.netCtx.close();
+        await this.router.send("Target.closeTarget", { targetId });
       } catch (err) {
-        console.warn("[mochi] net ctx close failed:", err);
+        if (!this.closed) console.warn("[mochi] scratch frame close failed:", err);
       }
-      this.netCtx = undefined;
     }
     // Drop the unified init-injector subscription (and its `Fetch.disable`)
     // BEFORE we tear down the router so the disable round-trip can still
@@ -1279,4 +1508,141 @@ function createCookieJar(session: Session): CookieJar {
       await router.send("Storage.setCookies", { cookies: toLoad });
     },
   };
+}
+
+// ---- Session.fetch helpers --------------------------------------
+
+/**
+ * Shape of the `Network.loadNetworkResource` reply per the CDP `tot`
+ * spec. The `stream` handle, when present, is an {@link IO.StreamHandle}
+ * that must be drained via `IO.read` until EOF and then `IO.close`d.
+ *
+ * @internal
+ * @see https://chromedevtools.github.io/devtools-protocol/tot/Network/#method-loadNetworkResource
+ */
+interface LoadNetworkResourcePageResult {
+  success: boolean;
+  netError?: number;
+  netErrorName?: string;
+  httpStatusCode?: number;
+  /** `IO.StreamHandle` — drain via `IO.read` until EOF. Undefined on empty body. */
+  stream?: string;
+  headers?: Record<string, string>;
+}
+
+/**
+ * Convert a `Uint8Array` to a fresh `ArrayBuffer` slice — TS's lib.dom
+ * `BodyInit` rejects `Uint8Array<ArrayBufferLike>` in some configurations
+ * (Bun ships its own DOM types here), so we hand `Response` an ArrayBuffer
+ * directly. Zero-copy when possible (the underlying buffer is already a
+ * plain `ArrayBuffer`); falls back to a copy slice otherwise.
+ *
+ * @internal
+ */
+function uint8ToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+/**
+ * Decode a base64-encoded string into a `Uint8Array`. Used by
+ * {@link Session.fetch}'s mechanisms A (when `IO.read` returns
+ * `base64Encoded: true`) and B (the page-evaluate path always returns
+ * base64 so binary responses round-trip intact).
+ *
+ * Bun ships `atob` natively; we use it for the chunked decode.
+ *
+ * @internal
+ */
+function base64ToBytes(b64: string): Uint8Array {
+  if (b64.length === 0) return new Uint8Array(0);
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/**
+ * Serialize a {@link RequestInit} into a JSON-safe shape the page-evaluate
+ * fetch path can consume. Headers / method / redirect / mode / credentials
+ * pass through unchanged. The body is the tricky part:
+ *
+ *   - `string` / `URLSearchParams` → forwarded as the `__body` string field.
+ *   - `ArrayBuffer` / typed array → base64-encoded into `__bodyB64` so
+ *     binary survives the JSON-only round-trip; the page-side glue
+ *     decodes back to a Uint8Array before passing to `fetch`.
+ *   - `null` / `undefined` → no body field.
+ *   - `Blob` / `FormData` / `ReadableStream` → throws with a clear
+ *     diagnostic. Future work; needs a separate channel because they're
+ *     not JSON-serializable.
+ *
+ * @internal
+ */
+function serializeRequestInitForFetch(init: RequestInit): string {
+  const out: Record<string, unknown> = {};
+  if (init.method !== undefined) out.method = init.method;
+  if (init.headers !== undefined) out.headers = headersInitToRecord(init.headers);
+  if (init.redirect !== undefined) out.redirect = init.redirect;
+  if (init.mode !== undefined) out.mode = init.mode;
+  if (init.credentials !== undefined) out.credentials = init.credentials;
+  if (init.referrer !== undefined) out.referrer = init.referrer;
+  if (init.referrerPolicy !== undefined) out.referrerPolicy = init.referrerPolicy;
+  if (init.cache !== undefined) out.cache = init.cache;
+  if (init.integrity !== undefined) out.integrity = init.integrity;
+  if (init.keepalive !== undefined) out.keepalive = init.keepalive;
+  const b = init.body;
+  if (b !== undefined && b !== null) {
+    if (typeof b === "string") {
+      out.__body = b;
+    } else if (b instanceof URLSearchParams) {
+      out.__body = b.toString();
+    } else if (b instanceof ArrayBuffer) {
+      out.__bodyB64 = bytesToBase64(new Uint8Array(b));
+    } else if (ArrayBuffer.isView(b)) {
+      const view = b as ArrayBufferView;
+      out.__bodyB64 = bytesToBase64(new Uint8Array(view.buffer, view.byteOffset, view.byteLength));
+    } else {
+      // Blob / FormData / ReadableStream — would need a separate transport
+      // (multipart / streaming) that the JSON-only page-evaluate seam can't
+      // express today. The brief explicitly defers these to a follow-up.
+      throw new Error(
+        "[mochi] Session.fetch: Blob, FormData, and ReadableStream bodies are not yet supported — " +
+          "use string / ArrayBuffer / URLSearchParams or wait for the streaming-body PR.",
+      );
+    }
+  }
+  return JSON.stringify(out);
+}
+
+/** Coerce a Web `Headers` / record / array-pair shape into a plain record. */
+function headersInitToRecord(h: HeadersInit): Record<string, string> {
+  if (h instanceof Headers) {
+    const out: Record<string, string> = {};
+    h.forEach((v, k) => {
+      out[k] = v;
+    });
+    return out;
+  }
+  if (Array.isArray(h)) {
+    const out: Record<string, string> = {};
+    for (const pair of h) {
+      const k = pair[0];
+      const v = pair[1];
+      if (typeof k === "string" && typeof v === "string") out[k] = v;
+    }
+    return out;
+  }
+  return { ...(h as Record<string, string>) };
+}
+
+/** Encode a `Uint8Array` to base64. Chunked to dodge call-stack overflow. */
+function bytesToBase64(bytes: Uint8Array): string {
+  let out = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    let s = "";
+    const end = Math.min(i + CHUNK, bytes.length);
+    for (let j = i; j < end; j++) s += String.fromCharCode(bytes[j] as number);
+    out += btoa(s);
+  }
+  return out;
 }

@@ -105,7 +105,7 @@ try {
 - **Forgetting `setup-bun@v2` and using `npm`.** `bun add @mochi.js/core` is the supported install. mochi uses `Bun.file`, `Bun.write`, `Bun.serve` for the CLI — Node lacks these. The package will install on Node but fail at first call.
 - **GitHub Actions `secrets.PROXY_URL` with reserved characters.** A `@` or `:` in the password breaks the URL parse. Use the explicit `ProxyConfig` shape (`proxy: { server, username, password }`) and split the values across multiple secrets.
 - **Cache key drift.** `mochi-browsers-${{ runner.os }}-v1` doesn't include the CfT version, so a stale cache lingers across mochi releases. Bump the suffix when you bump `@mochi.js/core`.
-- **`bunx mochi browsers install` failing with `EACCES`.** mochi writes to `~/.mochi`. On runners with a custom HOME, set `MOCHI_BROWSERS_DIR` to a path the runner can write to.
+- **`bunx mochi browsers install` failing with `EACCES`.** mochi writes to `~/.mochi`. On runners with a custom HOME, set `MOCHI_BROWSERS_ROOT` to a path the runner can write to.
 - **The runner kills your job at `timeout-minutes`.** Mochi sessions don't auto-checkpoint. Wrap long flows in `try/finally { await session.close() }` so SIGTERM at least closes the browser cleanly before the runner reaps the job.
 
 ## See also
@@ -154,7 +154,7 @@ apt runtime deps for Chromium on ubuntu-latest (24.04+):
 
 Env vars mochi reads:
   MOCHI_CHROMIUM_PATH      — explicit binary override
-  MOCHI_BROWSERS_DIR       — alternative install root (default ~/.mochi/browsers)
+  MOCHI_BROWSERS_ROOT       — alternative install root (default ~/.mochi/browsers)
   MOCHI_EXTRA_ARGS         — appended to Chromium argv
 
 Cross-references on mochijs.com:

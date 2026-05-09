@@ -1,6 +1,6 @@
 {
   "name": "@mochi.js/core",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Bun-native browser automation framework — relational fingerprint locking, zero-jitter injection, behavioral playback. The primary entry point.",
   "license": "MIT",
   "type": "module",
@@ -52,8 +52,7 @@
     "@mochi.js/behavioral": "workspace:*",
     "@mochi.js/challenges": "workspace:*",
     "@mochi.js/consistency": "workspace:*",
-    "@mochi.js/inject": "workspace:*",
-    "@mochi.js/net": "workspace:*"
+    "@mochi.js/inject": "workspace:*"
   },
   "publishConfig": {
     "access": "public"

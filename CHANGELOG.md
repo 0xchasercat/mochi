@@ -6,6 +6,29 @@ The mochi monorepo uses **independent versioning**. The "release" of mochi is th
 
 ---
 
+## v0.7.0 — 2026-05-09
+
+`@mochi.js/core` 0.7.0 drops the Rust `wreq` HTTP layer. `Session.fetch` now routes through Chromium itself via CDP — `Network.loadNetworkResource` for simple GETs (CORS-bypassed at the network layer), `page.evaluate("fetch")` against an `about:blank` scratch frame for non-GET. JA4/JA3/H2 are real Chrome by definition because Chromium is the client; cookies inherit from the page's origin; CORS applies for non-GET cross-origin calls.
+
+**Breaking changes**
+
+- **Cookie inheritance.** `Session.fetch` shares the session's cookie jar with the browser. Pre-0.7 the wreq path was cookieless. Set `init.credentials = "omit"` for the page-evaluate path or clear the relevant cookies before the call to recover the previous behavior.
+- **CORS for non-GET.** Mechanism B obeys CORS; cross-origin POSTs without `Access-Control-Allow-Origin` will fail in 0.7 where they may have succeeded in 0.6.
+- **Body shapes.** `Blob` / `FormData` / `ReadableStream` request bodies throw with a clear diagnostic. `string` / `ArrayBuffer` / typed arrays / `URLSearchParams` continue to work.
+
+**Deprecations**
+
+- `@mochi.js/net` and `@mochi.js/net-rs` are deprecated and no longer published. The cdylib install friction (the `bunx mochi pm trust @mochi.js/net-rs` step, the cross-platform prebuild matrix, the `cargo build` fallback) is gone.
+- `ProfileV1.wreqPreset` and `MatrixV1.wreqPreset` are deprecated. The runtime no longer reads either field; the schema retains them for one release for migration. Drops in 0.8.
+
+**`ALL_BROWSER_PERMISSIONS` retuned for Chromium 148**
+
+The constant matches `Browser.PermissionType` on Chromium 148. Removed: `accessibilityEvents`, `captureHandle`, `flash`, `videoCapturePanTiltZoom`. Added: `ar`, `vr`, `handTracking`, `automaticFullscreen`, `cameraPanTiltZoom`, `capturedSurfaceControl`, `keyboardLock`, `pointerLock`, `localNetwork`, `localNetworkAccess`, `loopbackNetwork`, `smartCard`, `webPrinting`. Calls to `page.grantAllPermissions()` against an older Chromium fall through with no behavior change; calls against 148 stop tripping the `Unknown permission type: accessibilityEvents` runtime error.
+
+Migration: see [docs/reference/migration#upgrade-from-v06--v07-sessionfetch-routes-through-chromium](https://mochijs.com/docs/reference/migration).
+
+---
+
 ## v0.1.1 — 2026-05-08 (hot-fix, queued)
 
 **Severity:** install-blocking for v0.1.0.

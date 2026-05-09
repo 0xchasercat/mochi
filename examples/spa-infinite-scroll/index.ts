@@ -33,9 +33,12 @@ try {
   let stagnantPasses = 0;
 
   while (Date.now() < deadline) {
-    // page.evaluate is ZERO-arg in mochi. Close over the selector inline.
+    // page.evaluate is ZERO-arg in mochi. Interpolate the selector into the
+    // function source so it stays consistent with the env-driven
+    // ITEM_SELECTOR rather than hard-coding the default.
+    const selectorJson = JSON.stringify(ITEM_SELECTOR);
     const count = await page.evaluate(
-      () => document.querySelectorAll("[data-testid=job-card]").length,
+      new Function(`return document.querySelectorAll(${selectorJson}).length`) as () => number,
     );
 
     if (count >= BUDGET_ITEMS) {

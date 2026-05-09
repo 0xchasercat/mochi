@@ -205,9 +205,9 @@ await page.localStorage.set({ lastVisit: Date.now().toString() });
 
 → Full surface: [`guides/cookies-and-storage`](/docs/guides/cookies-and-storage).
 
-## "I need a JA4-coherent side-channel API call"
+## "I need an out-of-band side-channel API call"
 
-`Session.fetch(url, init?)` runs through the per-Session `NetCtx` (Rust `wreq`). Wire fingerprint matches the matrix's `wreqPreset` so the side-channel API call is JA4-coherent with the browser navigation. Same proxy, automatically.
+`Session.fetch(url, init?)` rides Chromium's own network stack via CDP — `Network.loadNetworkResource` for simple GETs, `page.evaluate("fetch")` for non-GET. JA4/JA3/H2 are real Chrome by definition. Same `--proxy-server` egress as the browser navigation; cookies inherit from the page's origin.
 
 ```ts
 const apiResp = await session.fetch("https://api.example.com/v1/me", {
@@ -216,7 +216,7 @@ const apiResp = await session.fetch("https://api.example.com/v1/me", {
 console.log(apiResp.status, await apiResp.json());
 ```
 
-→ Surface reference: [`api/core`](/docs/api/core), [`concepts/network-ffi`](/docs/concepts/network-ffi), [`concepts/ja4-coherence`](/docs/concepts/ja4-coherence).
+→ Surface reference: [`api/core`](/docs/api/core), [`concepts/network-ffi`](/docs/concepts/network-ffi), [`concepts/stealth-philosophy`](/docs/concepts/stealth-philosophy).
 
 ## "The site uses closed shadow roots (Cloudflare Challenge pages, etc.)"
 
@@ -289,7 +289,7 @@ Cross-cutting links (existing surface guides under /docs/guides/):
 Key API symbols touched (verified against packages/core/src/index.ts as of 2026-05-09):
   mochi.launch(opts: LaunchOptions): Promise<Session>
   Session.cookies: CookieJar (getter)
-  Session.fetch(url, init?): Promise<Response>     // JA4-coherent via wreqPreset
+  Session.fetch(url, init?): Promise<Response>     // JA4-coherent (Chromium-native)
   Session.close(): Promise<void>
   Page.goto(url, opts?)
   Page.humanScroll({ to, duration? })
@@ -331,10 +331,7 @@ Cross-references on mochijs.com:
   - https://mochijs.com/docs/guides/capture-a-profile
   - https://mochijs.com/docs/guides/conformance-suite
   - https://mochijs.com/docs/api/core
-  - https://mochijs.com/docs/concepts/inject-pipeline
-  - https://mochijs.com/docs/concepts/network-ffi
-  - https://mochijs.com/docs/concepts/ja4-coherence
-  - https://mochijs.com/docs/concepts/probe-manifest
+  - https://mochijs.com/docs/concepts/inject-pipeline  - https://mochijs.com/docs/concepts/probe-manifest
   - https://mochijs.com/docs/reference/limits
   - https://mochijs.com/docs/reference/faq
 llm-context:end -->

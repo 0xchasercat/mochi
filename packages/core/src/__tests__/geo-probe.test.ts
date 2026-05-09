@@ -8,8 +8,10 @@
  *     / parser-null and respects the 4-attempt cap.
  *   - all-fail returns `null`.
  *
- * The probe's `fetch` injection seam is an internal — production wires it
- * to `@mochi.js/net`'s `fetch`, which carries the matrix's wreq preset.
+ * Post-0.7 the probe's `fetch` seam delegates to `globalThis.fetch` by
+ * default; production launch paths inject a `Session.fetch`-backed
+ * adapter so the probe rides Chromium's network stack (real Chrome JA4
+ * by definition).
  *
  * @see packages/core/src/geo-probe.ts
  */
@@ -17,7 +19,7 @@
 import { describe, expect, it } from "bun:test";
 import { ADAPTERS, type ProbeFetch, probeExitGeo } from "../geo-probe";
 
-const MATRIX_STUB = { wreqPreset: "chrome_131_macos" };
+const MATRIX_STUB = {};
 
 /** Build a `ProbeFetch` that returns canned JSON for each URL. */
 function fakeFetch(
@@ -334,10 +336,10 @@ describe("probeExitGeo — strategy", () => {
     expect(calls).toBe(4);
   });
 
-  it("forwards proxy + matrix.wreqPreset to the fetch impl", async () => {
-    let captured: { url?: string; preset?: string; proxy?: string } = {};
+  it("forwards proxy diagnostic to the fetch impl", async () => {
+    let captured: { url?: string; proxy?: string } = {};
     const fetchSpy: ProbeFetch = async (url, init) => {
-      captured = { url, preset: init.preset, proxy: init.proxy };
+      captured = { url, proxy: init.proxy };
       return new Response(
         JSON.stringify({
           proxy: { ip: "1" },
@@ -348,22 +350,21 @@ describe("probeExitGeo — strategy", () => {
       );
     };
     await probeExitGeo({
-      matrix: { wreqPreset: "chrome_131_linux" },
+      matrix: MATRIX_STUB,
       proxy: "http://user:pass@proxy.example:8080",
       fetch: fetchSpy,
       shuffle: noShuffle,
       maxAttempts: 1,
       perEndpointTimeoutMs: 100,
     });
-    expect(captured.preset).toBe("chrome_131_linux");
     expect(captured.proxy).toBe("http://user:pass@proxy.example:8080");
   });
 
-  it("synchronous throw from fetch (e.g. dlopen failure) → null, NEVER propagates", async () => {
+  it("synchronous throw from fetch → null, NEVER propagates", async () => {
     const fetchSpy: ProbeFetch = () => {
-      // Simulate the cdylib-missing case: throws synchronously off the
-      // top of the body, before Promise.resolve.
-      throw new Error("dlopen: libmochi-net.dylib not found");
+      // Simulate a transport-level synchronous throw — e.g. a Session
+      // that's already been closed when the probe fires.
+      throw new Error("transport unavailable");
     };
     const geo = await probeExitGeo({
       matrix: MATRIX_STUB,

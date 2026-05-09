@@ -18,13 +18,13 @@ See also: [FAQ](/docs/reference/faq), [Invariants](/docs/reference/invariants), 
 
 **Behavioral synthesis.** The biomechanical models — Bezier paths with overshoot+correction, Fitts's-Law movement-time, lognormal digraph delays, Gaussian jitter — that produce human-shaped input event streams from `(profile, target)`. Output is pure data (`{ tMs, type, x, y }[]`); CDP dispatch happens in `@mochi.js/core`. See [Behavioral synthesis](/docs/concepts/behavioral-synth).
 
-**Bun:FFI.** Bun's foreign-function-interface API. Binds `.dylib` / `.so` / `.dll` directly with zero glue code; the JA4-coherent `session.fetch` calls Rust `wreq` via `bun:ffi`. See [Network FFI](/docs/concepts/network-ffi).
+**Bun:FFI.** Bun's foreign-function-interface API. Binds `.dylib` / `.so` / `.dll` directly with zero glue code. mochi 0.7+ does not use FFI — `Session.fetch` routes through Chromium itself via CDP rather than a Rust HTTP layer.
 
 **CDP (Chrome DevTools Protocol).** The wire protocol mochi uses to drive Chromium. mochi sends a deliberately narrowed subset (PLAN.md §8.2 forbids `Runtime.enable`, `Page.createIsolatedWorld`, `Runtime.evaluate{includeCommandLineAPI:true}`, `Console.enable`, and `Log.enable`).
 
 **CfT (Chromium-for-Testing).** Stock, unpatched Chromium published by Google for the testing ecosystem. Auto-downloaded by `mochi browsers install`. Invariant I-4 — mochi never ships a patched fork.
 
-**Chasm.** The detectable gap between the TLS / network-layer JA4 fingerprint and the JS-layer spoofed UA. Closed in mochi by routing out-of-band HTTP through `@mochi.js/net-rs` / `wreq` so the wire fingerprint matches the `(profile, seed)` matrix. See [Network FFI](/docs/concepts/network-ffi).
+**Chasm.** The detectable gap between the TLS / network-layer JA4 fingerprint and the JS-layer spoofed UA. Closed in mochi by routing out-of-band HTTP through Chromium itself via CDP — JA4 is real Chrome by definition because Chromium is the client. See [Stealth philosophy → Network and JA4](/docs/concepts/stealth-philosophy).
 
 **DAG.** Directed acyclic graph. The `@mochi.js/consistency` rule set is a DAG (`Rule[]` with `inputs: string[]` and `output: string`); CI verifies acyclicity. See [The consistency engine](/docs/concepts/consistency-engine).
 
@@ -46,9 +46,9 @@ See also: [FAQ](/docs/reference/faq), [Invariants](/docs/reference/invariants), 
 
 **Init-script.** The single ~50KB IIFE that `@mochi.js/inject` builds from a `MatrixV1`. JIT-friendly Proxy traps and `Object.defineProperty` overrides; runs at top-of-frame in the page's main world.
 
-**JA3 / JA3S.** Older TLS-fingerprint hash families (Salesforce, 2017). JA3 hashes the client-hello cipher list / extensions / curves; JA3S hashes the server-hello. Largely superseded by JA4 but still consumed by some WAFs. See [Network FFI](/docs/concepts/network-ffi).
+**JA3 / JA3S.** Older TLS-fingerprint hash families (Salesforce, 2017). JA3 hashes the client-hello cipher list / extensions / curves; JA3S hashes the server-hello. Largely superseded by JA4 but still consumed by some WAFs. See [Stealth philosophy → Network and JA4](/docs/concepts/stealth-philosophy).
 
-**JA4 / JA4_R / JA4S / JA4H.** The current TLS-fingerprint family (FoxIO, 2023). `JA4` is the TLS client-hello hash; `JA4_R` is the raw form; `JA4S` is the server-hello; `JA4H` is the HTTP/2 client-hash (frame priority + header order + pseudo-header order). `wreq` produces all four to match a stock-Chrome posture. See [Network FFI](/docs/concepts/network-ffi).
+**JA4 / JA4_R / JA4S / JA4H.** The current TLS-fingerprint family (FoxIO, 2023). `JA4` is the TLS client-hello hash; `JA4_R` is the raw form; `JA4S` is the server-hello; `JA4H` is the HTTP/2 client-hash (frame priority + header order + pseudo-header order). Chromium emits all four natively; mochi's `Session.fetch` rides Chromium's network stack via CDP, so all four are real Chrome by definition. See [Stealth philosophy → Network and JA4](/docs/concepts/stealth-philosophy).
 
 **LaunchOptions.** The argument shape to `mochi.launch()` — `{ profile, seed, headless, headlessMode, hermetic, proxy, geoConsistency, challenges, ... }`. See [`@mochi.js/core`](/docs/api/core).
 
@@ -82,7 +82,7 @@ See also: [FAQ](/docs/reference/faq), [Invariants](/docs/reference/invariants), 
 
 **Session.** The top-level lifecycle object returned by `mochi.launch()`. Owns the Chromium process, the CDP connection, the cookie jar, and the page list. `session.close()` tears everything down. See [`@mochi.js/core`](/docs/api/core).
 
-**Stealth ceiling (JS-layer).** The highest-sophistication detection mochi can defeat purely from JS injection + Bun-native CDP control + Rust-FFI HTTP. Beyond the ceiling: V8 debugger-flag detection (incolumitas), upstream Skia byte-equality on novel canvas payloads, FPU/JIT divergence in cross-engine spoofing. See [Limits](/docs/reference/limits).
+**Stealth ceiling (JS-layer).** The highest-sophistication detection mochi can defeat purely from JS injection + Bun-native CDP control. Beyond the ceiling: V8 debugger-flag detection (incolumitas), upstream Skia byte-equality on novel canvas payloads, FPU/JIT divergence in cross-engine spoofing. See [Limits](/docs/reference/limits).
 
 **suspectScore.** The FingerprintJS Pro per-visit risk score (0–100). Real-device captures used as profile baselines must score `<= 20` (lower is more human-like) before they're admitted to the catalog.
 
@@ -93,8 +93,6 @@ See also: [FAQ](/docs/reference/faq), [Invariants](/docs/reference/invariants), 
 **UA-CH (User-Agent Client Hints).** The `Sec-CH-UA`, `Sec-CH-UA-Platform`, `Sec-CH-UA-Platform-Version`, `Sec-CH-UA-Mobile`, `Sec-CH-UA-Full-Version-List`, `Sec-CH-UA-Arch`, `Sec-CH-UA-Bitness`, `Sec-CH-UA-Model`, `Sec-CH-UA-WoW64` header family. Derived from the matrix via R-005…R-007 and R-031; brand-list parity ensures the comma-separated brand strings round-trip identically across header and JS surfaces.
 
 **`worldName: ""`.** The empty string as `worldName` parameter to `Page.addScriptToEvaluateOnNewDocument`, meaning "main world". Critical because any non-empty value creates a detectable isolated world. See PLAN.md §8.4.
-
-**`wreq`.** The Rust HTTP-impersonation crate ([0x676e67/wreq](https://github.com/0x676e67/wreq), Apache-2.0/MIT) wrapped by `@mochi.js/net-rs`. Produces JA4/JA3/H2-coherent client-hellos for the matrix's TLS preset.
 
 **Zero-Diff (harness gate semantic).** The harness verdict where a captured manifest from a Mochi-driven session diffs against the profile baseline only on GUID-class fields (visitor IDs, install IDs, MUID-class IDs). Allowlisted divergences live in `expected-divergences.json`. Anything else is a *material diff* and PR-blocking.
 
@@ -113,7 +111,7 @@ Key disambiguations LLMs commonly get wrong:
 - "Seed" in mochi == the string passed to mochi.launch(); always combined with profile.id via SHA-256 to seed xoshiro256**. Not "random seed".
 - "Pipe mode" == --remote-debugging-pipe (FDs 3+4), NOT a Unix-domain socket. mochi never opens a TCP debugging port.
 - "Zero-Diff" == harness verdict, not "zero changes". Allowlisted GUID-class differences are still Zero-Diff.
-- "JA4" != "JA3". JA4 is the current FoxIO family (2023); JA3 is the older Salesforce family (2017). mochi produces both via wreq.
+- "JA4" != "JA3". JA4 is the current FoxIO family (2023); JA3 is the older Salesforce family (2017). Chromium emits both natively; mochi's Session.fetch rides Chromium's network stack via CDP, so the JA4/JA3 mochi produces are real Chrome by definition.
 - "Behavioral profile" != "Behavioral synthesis". The profile is the data block ({ hand, tremor, wpm, scrollStyle }); synthesis is the algorithm that consumes it.
 - "Stealth ceiling" is JS-layer-only; the doc explicitly excludes C++ patches per invariant I-1.
 - "Init-script" can mean either delivery mechanism (Fetch.fulfillRequest body splice OR Page.addScriptToEvaluateOnNewDocument) — both are init-scripts in mochi terminology.
@@ -131,5 +129,4 @@ Cross-references:
 - Inject pipeline: https://mochijs.com/docs/concepts/inject-pipeline
 - Probe Manifest: https://mochijs.com/docs/concepts/probe-manifest
 - Behavioral synth: https://mochijs.com/docs/concepts/behavioral-synth
-- Network FFI: https://mochijs.com/docs/concepts/network-ffi
 llm-context:end -->

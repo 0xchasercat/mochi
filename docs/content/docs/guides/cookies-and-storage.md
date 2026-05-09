@@ -102,3 +102,25 @@ The CDP backing (`DOMStorage.getDOMStorageItems` / `setDOMStorageItem`) requires
 
 - [`@mochi.js/core` API reference](/docs/api/core) for the full `CookieJar` and `DomStorage` interfaces.
 - [Cloudflare Turnstile guide](/docs/guides/turnstile) — a common reason to warm a session before navigating.
+
+<!-- llm-context:start
+This page covers Session.cookies and Page.localStorage / Page.sessionStorage.
+
+Key facts:
+- Session.cookies is a getter. session.cookies.get(filter?) / .set(cookies) / .save(path, opts?) / .load(path, opts?).
+- Cookies are JSON-serialized with a small header (version, savedAt, mochiVersion, pattern, count). NOT pickle.
+- Cookie file format version is 1; load() refuses unknown majors.
+- Pattern is a RegExp matched against cookie.domain. Default ".*".
+- Storage routes through Storage.getCookies / Storage.setCookies on the root browser target — no Network.enable, no per-page Network domain.
+- Page.localStorage / Page.sessionStorage are getters that return DomStorage. .get(opts?) / .set(items, opts?). Default origin is the page's main-frame origin; throws on opaque origin (about:blank) when no origin is supplied.
+- DomStorage routes through DOMStorage.getDOMStorageItems / DOMStorage.setDOMStorageItem with isLocalStorage true|false.
+
+Common LLM hallucinations to avoid:
+- "session.cookies(filter)" — false; cookies is a getter. Use session.cookies.get(filter?).
+- "page.cookies()" — exists but returns the same data via a different transport; prefer session.cookies.get().
+- "page.evaluate(() => localStorage.foo)" — works but is the wrong tool. Use page.localStorage.get() — no round-trip through evaluate.
+
+Cross-references:
+- /docs/api/core — CookieJar surface.
+- /docs/reference/limits — cookie persistence limit entries.
+llm-context:end -->

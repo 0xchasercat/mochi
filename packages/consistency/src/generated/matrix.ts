@@ -2,7 +2,7 @@
 // Source schema lives in schemas/. See scripts/codegen.ts.
 
 /**
- * A ProfileV1 instantiated for a specific seed. Same shape as ProfileV1 (every property re-declared via $ref to profile.schema.json), with three additional required fields: seed, derivedAt, consistencyEngineVersion. Consumed by @mochi.js/inject. JSON-serializable; round-trips losslessly. See PLAN.md §6.2.
+ * A ProfileV1 instantiated for a specific seed. Same shape as ProfileV1 (every property re-declared via $ref to profile.schema.json), with three additional required fields: seed, derivedAt, consistencyEngineVersion. Consumed by @mochi.js/inject. JSON-serializable; round-trips losslessly. NOTE: `wreqPreset` is DEPRECATED in 0.7 (runtime no longer reads it; `Session.fetch` routes through Chromium directly) and removed in 0.8. See PLAN.md §6.2.
  */
 export type MatrixV1 = ProfileV1 & {
   /**
@@ -156,7 +156,8 @@ export interface ProfileV1 {
     scrollStyle: "smooth" | "stepped" | "inertial";
   };
   /**
-   * Preset name accepted by the wreq Rust crate, e.g. 'chrome_131_macos'. Maps profile -> TLS/H2 fingerprint.
+   * @deprecated
+   * DEPRECATED in 0.7 — removed entirely in 0.8. The runtime no longer reads this field; `Session.fetch` routes through Chromium's network stack via CDP, so JA4 is real Chrome by definition. Kept in the schema for one release for migration. Historical: preset name accepted by the wreq Rust crate (e.g. 'chrome_131_macos').
    */
   wreqPreset: string;
   /**

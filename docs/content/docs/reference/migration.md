@@ -44,6 +44,26 @@ v1.0 is the production-ready inflection point. Targeted changes:
 
 Anything that would violate an invariant (PLAN.md §2 / I-1 through I-8) is by definition not in the v1.0 plan. Migrations across major-bumps will get a dedicated section here when they exist.
 
+## Upgrade from v0.6 → v0.7 (Session.fetch routes through Chromium)
+
+`@mochi.js/core@0.7.0` drops the Rust `wreq` HTTP layer. `Session.fetch` now routes through Chromium itself via CDP — JA4/JA3/H2 are real Chrome by definition because Chromium is the client. The two npm packages that wrapped wreq (`@mochi.js/net`, `@mochi.js/net-rs`) are deprecated and no longer published.
+
+**Breaking change you have to know about — cookie inheritance.** `Session.fetch` now shares the session's cookie jar with the browser. A cookie set via `Page.goto` or `session.cookies.set` is sent on the next `Session.fetch` to the same origin automatically. Pre-0.7 the wreq path was cookieless. If your code relied on the cookieless behavior, the migration is one of:
+
+- Set `init.credentials = "omit"` for the page-evaluate path (POST / non-GET).
+- Clear the relevant cookies before the call (`session.cookies.set([])` or pattern-filtered).
+- Pass the cookie explicitly via `init.headers["Cookie"]` only if you also clear the jar; the page's `fetch` will merge with what's in the jar otherwise.
+
+**CORS applies for non-GET cross-origin calls.** Mechanism A (simple GET) bypasses CORS at the network layer; Mechanism B (POST / custom headers / body) routes through `page.evaluate("fetch")` and obeys the same CORS rules a user's browser would. Cross-origin POSTs to an endpoint without `Access-Control-Allow-Origin` will fail in 0.7 where they may have succeeded in 0.6.
+
+**Body shapes.** `Blob`, `FormData`, and `ReadableStream` request bodies throw with a clear diagnostic. `string`, `ArrayBuffer` / typed arrays, and `URLSearchParams` continue to work. Richer bodies land in a follow-up PR.
+
+**No cdylib install.** `bunx mochi pm trust @mochi.js/net-rs` and the `cargo build` fallback are gone. There is nothing to install or trust beyond Chromium itself.
+
+**Profile fields.** `ProfileV1.wreqPreset` and `MatrixV1.wreqPreset` are deprecated; the runtime no longer reads them. The schema retains them for one release for migration and drops in 0.8.
+
+**Permission list retuned for Chromium 148.** `ALL_BROWSER_PERMISSIONS` matches the `Browser.PermissionType` enum on Chromium 148. Removed: `accessibilityEvents`, `captureHandle`, `flash`, `videoCapturePanTiltZoom`. Added: XR cluster, `automaticFullscreen`, `cameraPanTiltZoom`, `capturedSurfaceControl`, `keyboardLock`, `pointerLock`, network-permission cluster, `smartCard`, `webPrinting`. Calls to `page.grantAllPermissions()` against an older Chromium will fall through with no behavior change; calls against 148 stop tripping the `Unknown permission type: accessibilityEvents` runtime error.
+
 ## Upgrade-from-v0.1 notes
 
 The v0.2 wave-4 surfaces are **additive**. If you're on `@mochi.js/core` `0.1.0` or `0.1.1` and you upgrade to `0.1.4`, no existing code breaks; you just gain new APIs. Specifically:
@@ -68,7 +88,7 @@ The fix is in v0.1.1+ via `scripts/rewrite-workspace-deps.ts` (publish-time pre-
 bun add @mochi.js/core@latest @mochi.js/cli@latest
 ```
 
-Affected packages bumped to `0.1.1`: `@mochi.js/core`, `@mochi.js/cli`, `@mochi.js/inject`, `@mochi.js/net`, `@mochi.js/behavioral`, `@mochi.js/harness`, `@mochi.js/profiles`. `@mochi.js/consistency` and `@mochi.js/net-rs` were leaf packages with no internal deps; they remain at `0.1.0`.
+Affected packages bumped to `0.1.1`: `@mochi.js/core`, `@mochi.js/cli`, `@mochi.js/inject`, `@mochi.js/core`, `@mochi.js/behavioral`, `@mochi.js/harness`, `@mochi.js/profiles`. `@mochi.js/consistency` was a leaf package with no internal deps and remained at `0.1.0`.
 
 ## Profile-ID stability
 

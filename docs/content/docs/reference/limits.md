@@ -164,7 +164,7 @@ These limits were discovered porting CloakBrowser's `tests/test_stealth.py` to a
 **Status:** covered
 **Root cause:** mochi previously treated `(matrix.timezone, matrix.locale)` as canonical regardless of where the proxy egressed. A US-West profile (`America/Los_Angeles` + `en-US`) routed through an EU residential proxy produced a mismatch between `Date.getTimezoneOffset()` (-480min) and the IP's geolocation (UTC+1) — the canonical bot signature.
 **Affected probes:** any fingerprinter that cross-references the page-side timezone offset against the request IP's geolocation. Common in CreepJS-style aggregators and bespoke WAF heuristics.
-**Mitigation:** at launch, mochi probes the apparent exit IP through wreq (using the matrix's TLS preset, so the geo service sees the same JA4 / headers as user traffic). 7-endpoint registry, shuffled-sequential, 4-attempt cap, 2s per endpoint. The reconciler cross-references against the matrix and applies one of four `LaunchOptions.geoConsistency` modes:
+**Mitigation:** at launch, mochi probes the apparent exit IP through Chromium's network stack via CDP (so the geo service sees the same JA4 / headers as user traffic — it IS user traffic). 7-endpoint registry, shuffled-sequential, 4-attempt cap, 2s per endpoint. The reconciler cross-references against the matrix and applies one of four `LaunchOptions.geoConsistency` modes:
   - `"privacy-fallback"` *(default)* — override matrix to `UTC` + `en-US` on mismatch (or probe failure). Fingerprints as a Tor / hardened-FF user.
   - `"auto-correct"` — override matrix tz/locale with IP-derived values.
   - `"strict"` — throw `GeoMismatchError` on mismatch.
@@ -255,26 +255,27 @@ JS-side timezone is delivered via CDP `Emulation.setTimezoneOverride` per-target
 
 ---
 
-## v0.10 (cross-platform prebuilds) — known limits
+## `Session.fetch` semantics — covered, with caveats
 
-### Prebuilt cdylib platform coverage
+### Cookie inheritance + CORS scope
 
-**Status:** partial coverage
+**Status:** documented surface
 
-**Supported (postinstall download from GH Releases):**
-- `darwin-arm64` (macOS, Apple Silicon)
-- `darwin-x64` (macOS, Intel)
-- `linux-x64` (Linux x86_64, glibc)
-- `linux-arm64` (Linux aarch64, glibc — cross-compiled with `cargo-zigbuild`)
-- `win32-x64` (Windows, MSVC)
+**Root cause:** post-0.7, `Session.fetch` routes through Chromium itself via CDP. Two paths:
 
-**Not covered:**
-- FreeBSD / OpenBSD / Alpine musl / Linux ia32 / Windows arm64 — no prebuilt assets shipped. Consumers can build from source via `cargo build --release --manifest-path packages/net-rs/Cargo.toml`; the loader (`packages/net/src/ffi.ts`) walks both the postinstall `native/` directory AND `target/release/`, so a local cargo build Just Works.
+- **Mechanism A — `Network.loadNetworkResource`.** Used for simple GETs (no `init` / no method override / no headers / no body). Bypasses CORS at the network layer; no `Origin` header is sent.
+- **Mechanism B — `page.evaluate("fetch(url, init)")` against an `about:blank` scratch frame.** Used for everything else. Cookies inherit from the page's origin; CORS applies the same as a real user's `fetch` from the console.
 
-**Root cause:** PLAN.md §14 phase 0.10 scopes prebuilds to the 5 tuples that cover ~95% of the npm install base. Adding more (musl, Windows arm64) is a workflow-matrix entry, not a fundamental gap.
-**Mitigation:** the postinstall script (`packages/net-rs/scripts/install-prebuild.ts`) emits a friendly message and exits 0 on unsupported platforms; install never blocks. Set `MOCHI_NET_SKIP_POSTINSTALL=1` to bypass the download entirely.
-**User workaround:** cargo-build the cdylib locally; the loader picks it up from `packages/net-rs/target/release/`.
-**Tracking:** none — driven by demand.
+Both paths share Chromium's network stack with `page.goto`, so JA4/JA3/H2 are real Chrome by definition.
+
+**Caveats:**
+
+- **Cookie-inheritance shift vs. 0.6.** Pre-0.7, the wreq path was cookieless. Post-0.7, both mechanisms share the session's cookie jar with the browser. Set `init.credentials = "omit"` for the page-evaluate path or clear the relevant cookies before the call if you need the cookieless behavior.
+- **CORS for non-GET cross-origin calls.** Mechanism B obeys CORS; cross-origin POSTs to an endpoint without `Access-Control-Allow-Origin` will fail in 0.7 where they may have succeeded in 0.6.
+- **Request body shapes.** `string`, `ArrayBuffer` / typed arrays, and `URLSearchParams` are supported. `Blob`, `FormData`, and `ReadableStream` throw with a clear diagnostic — they need a richer transport than the JSON-only page-evaluate seam, and land in a follow-up PR.
+- **No per-call timeout knob on Mechanism A.** `Network.loadNetworkResource` has no timeout parameter; wrap the call with `AbortController` if you need one (Mechanism B respects `init.signal`).
+
+**Mitigation / migration:** [Migration → v0.6 → 0.7](/docs/reference/migration#upgrade-from-v06--v07-sessionfetch-routes-through-chromium) covers the breaking shifts in detail.
 
 ### CfT download integrity (no upstream-published SHA256)
 

@@ -22,7 +22,7 @@ await session.close();
 
 ## Status
 
-`v0.4.x` (v0.2 wave-4 surfaces). `mochi.launch()` is fully wired: pipe-mode CDP transport, relational `(profile, seed)` Matrix, JIT-friendly inject delivered via `Fetch.fulfillRequest` body splice (with `Page.addScriptToEvaluateOnNewDocument({ runImmediately: true, worldName: "" })` as the `about:blank` / `data:` fallback), behavioral synth, and JA4-coherent `session.fetch` via Rust+wreq.
+`v0.7.x`. `mochi.launch()` is fully wired: pipe-mode CDP transport, relational `(profile, seed)` Matrix, JIT-friendly inject delivered via `Fetch.fulfillRequest` body splice (with `Page.addScriptToEvaluateOnNewDocument({ runImmediately: true, worldName: "" })` as the `about:blank` / `data:` fallback), behavioral synth, and a Chromium-native `session.fetch` (routes through CDP — `Network.loadNetworkResource` for simple GETs, `page.evaluate("fetch")` for non-GET — so JA4 is real Chrome by definition).
 
 The full [v0.1.4 → v0.2] surface lands as additive minor bumps. See [`CHANGELOG.md`](https://github.com/0xchasercat/mochi/blob/main/CHANGELOG.md).
 
@@ -31,7 +31,7 @@ The full [v0.1.4 → v0.2] surface lands as additive minor bumps. See [`CHANGELO
 - `mochi.launch(opts)` — spawn a Chromium-for-Testing instance with a relationally-locked fingerprint matrix derived from `(profile, seed)`. Options include `proxy`, `headless`, `binary`, `timeout`, `geoConsistency` (IP/TZ/locale exit reconciliation), and `challenges` (Turnstile auto-click).
 - `Session` and `Page` — the runtime objects you drive.
 - `page.humanClick / humanType / humanScroll` — biomechanically-shaped input synthesis (Bezier + Fitts + Gaussian jitter).
-- `session.fetch` — out-of-band requests with profile-matching JA3/JA4/H2 via the Rust+wreq backend.
+- `session.fetch` — out-of-band requests routed through Chromium itself via CDP. JA4/JA3/H2 are real Chrome by definition because Chromium is the client; cookies inherit from the page's origin; CORS applies for non-GET cross-origin calls.
 - `page.screenshot(opts?)` — PNG / JPEG / WebP via CDP `Page.captureScreenshot`. Options: `format`, `quality`, `fullPage`, `clip`, `omitBackground`, `encoding`. Element-bounded capture (`{ element: handle }`) is deferred — see <https://mochijs.com/docs/reference/limits>.
 - `session.cookies.{save,load}(path, { pattern? })` — JSON cookie jar with version header + regex domain filter. Round-trips losslessly via `Storage.getCookies` / `Storage.setCookies`.
 - `page.localStorage.{get,set}` and `page.sessionStorage.{get,set}` — direct `DOMStorage` CDP access, frame-scoped (defaults to current main-frame origin; pass `{ origin }` for cross-origin).

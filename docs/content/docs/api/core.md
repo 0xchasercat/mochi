@@ -166,12 +166,12 @@ class Session {
 }
 ```
 
-- `profile` — the resolved `MatrixV1` (NOT the input `ProfileV1`). Read it for `userAgent`, `locale`, `timezone`, `display.{width,height}`, `wreqPreset`, etc.
+- `profile` — the resolved `MatrixV1` (NOT the input `ProfileV1`). Read it for `userAgent`, `locale`, `timezone`, `display.{width,height}`, etc.
 - `newPage()` — opens a tab via `Target.createTarget` + `Target.attachToTarget({ flatten: true })`, then wires the inject payload through both the session-level Fetch splice AND the per-page `Page.addScriptToEvaluateOnNewDocument` fallback. Returns a `Page`.
 - `cookies` — see `CookieJar` below.
-- `fetch(url, init)` — out-of-band HTTP through the per-Session `NetCtx` (Rust `wreq`). The wire fingerprint matches the matrix's `wreqPreset`. v0.6 limits: string / `ArrayBuffer` / `URLSearchParams` bodies only — no streaming, no `FormData`, no `Blob`.
+- `fetch(url, init)` — out-of-band HTTP routed through Chromium itself via CDP. Simple GETs (no `init` / no method override / no headers / no body) use `Network.loadNetworkResource` (no CORS at the network layer); anything else uses `page.evaluate("fetch(url, init)")` against an `about:blank` scratch frame. JA4/JA3/H2 are real Chrome by definition because Chromium is the client. Cookies inherit from the page's origin; CORS applies for non-GET cross-origin calls. Body shapes: `string`, `ArrayBuffer` / typed arrays, `URLSearchParams`. `Blob` / `FormData` / `ReadableStream` throw with a clear diagnostic.
 - `storage()` — snapshot `{ cookies, localStorage: {}, sessionStorage: {} }`. localStorage / sessionStorage are placeholders today; for live read/write use `Page.localStorage` / `Page.sessionStorage`.
-- `close()` — disposes challenge handles, closes every page, drops the net Ctx, removes the init-injector subscription, closes the router, kills Chromium (SIGTERM → 2s grace → SIGKILL), removes the user-data-dir.
+- `close()` — disposes challenge handles, closes every page, closes the scratch frame used by `Session.fetch`, removes the init-injector subscription, closes the router, kills Chromium (SIGTERM → 2s grace → SIGKILL), removes the user-data-dir.
 
 ```ts
 const session = await mochi.launch({ profile: "mac-m4-chrome-stable", seed: "u-1" });
@@ -500,7 +500,7 @@ interface ExitGeo {
 }
 interface ProbeOptions {
   readonly proxy?: string;
-  readonly matrix: Pick<MatrixV1, "wreqPreset">;
+  readonly matrix?: Partial<MatrixV1>;
   readonly maxAttempts?: number;
   readonly perEndpointTimeoutMs?: number;
   readonly fetch?: ProbeFetch;
@@ -509,7 +509,7 @@ interface ProbeOptions {
 function probeExitGeo(opts: ProbeOptions): Promise<ExitGeo | null>;
 ```
 
-`probeExitGeo` issues a single GET via wreq using the matrix's `wreqPreset` (4-attempt cap, 2s per endpoint). `reconcileGeoConsistency` cross-references `(matrix.timezone, matrix.locale)` against the IP's country/timezone and applies the policy. `launch` calls both internally when `geoConsistency !== "off"`.
+`probeExitGeo` issues a single GET through the session's Chromium-native network stack (4-attempt cap, 2s per endpoint). `reconcileGeoConsistency` cross-references `(matrix.timezone, matrix.locale)` against the IP's country/timezone and applies the policy. `launch` calls both internally when `geoConsistency !== "off"`.
 
 ### `function parseProxyUrl(url: string): ParsedProxy`
 
@@ -658,7 +658,6 @@ if (handle !== null) {
 
 - [Concepts → Inject pipeline](/docs/concepts/inject-pipeline)
 - [Concepts → Profiles](/docs/concepts/profiles)
-- [Concepts → Network FFI](/docs/concepts/network-ffi)
 - [Guides → Cookies and storage](/docs/guides/cookies-and-storage)
 - [Guides → Proxy auth](/docs/guides/proxy-auth)
 - [Guides → Cloudflare Turnstile](/docs/guides/turnstile)
@@ -666,7 +665,6 @@ if (handle !== null) {
 - [API → @mochi.js/consistency](/docs/api/consistency)
 - [API → @mochi.js/inject](/docs/api/inject)
 - [API → @mochi.js/challenges](/docs/api/challenges)
-- [API → @mochi.js/net](/docs/api/net)
 - [API → mochi CLI](/docs/api/cli)
 - [Reference → Limits](/docs/reference/limits)
 
@@ -838,9 +836,7 @@ Cross-references:
 - /docs/api/profiles
 - /docs/api/cli
 - /docs/concepts/inject-pipeline
-- /docs/concepts/profiles
-- /docs/concepts/network-ffi
-- /docs/concepts/consistency-engine
+- /docs/concepts/profiles- /docs/concepts/consistency-engine
 - /docs/concepts/behavioral-synth
 - /docs/getting-started/linux-server
 - /docs/guides/proxy-auth

@@ -59,7 +59,7 @@ interface ProfileV1 {
   locale: string;                          // BCP-47, "en-US"
   languages: string[];
   behavior: { hand: "left" | "right"; tremor: number; wpm: number; scrollStyle: "smooth" | "step" };
-  wreqPreset: string;                      // "chrome_131_macos"
+  wreqPreset: string;                      // DEPRECATED in 0.7 — runtime no longer reads. Removed in 0.8.
   userAgent: string;
   uaCh: Record<string, string>;
   entropyBudget: { fixed: string[]; perSeed: string[] };

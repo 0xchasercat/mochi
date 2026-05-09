@@ -11,7 +11,14 @@
     "url": "git+https://github.com/0xchasercat/mochi.git"
   },
   "workspaces": [
-    "packages/*"
+    "packages/behavioral",
+    "packages/challenges",
+    "packages/cli",
+    "packages/consistency",
+    "packages/core",
+    "packages/harness",
+    "packages/inject",
+    "packages/profiles"
   ],
   "engines": {
     "bun": ">=1.1"
@@ -33,8 +40,6 @@
     "conformance:stealth:online": "MOCHI_ONLINE=1 bun test packages/harness/src/conformance/stealth/__tests__/",
     "codegen": "bun scripts/codegen.ts",
     "build": "bun run --filter '*' build",
-    "rust:build": "cargo build --release --manifest-path packages/net-rs/Cargo.toml",
-    "rust:test": "cargo test --manifest-path packages/net-rs/Cargo.toml",
     "changeset": "bunx --bun @changesets/cli",
     "version-packages": "bunx --bun @changesets/cli version",
     "release": "bun run build && bun scripts/rewrite-workspace-deps.ts && bunx --bun @changesets/cli publish",

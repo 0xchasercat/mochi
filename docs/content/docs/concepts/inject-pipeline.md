@@ -44,7 +44,7 @@ The wrapper checks `globalThis.__mochi_inject_marker` before doing any work and 
 
 ## Surfaces consumed
 
-The payload covers all 40 rules in the consistency DAG, including:
+The payload covers all 48 rules in the consistency DAG, including:
 
 - **R-001..R-030.** Navigator, screen, simple GPU strings, fonts/baseline-only, locale, timezone, hardware basics — plain `Object.defineProperty` and Proxy traps.
 - **R-036.** Per-permission `navigator.permissions.query()` matrix (orthogonal to `page.grantAllPermissions()` which acts at the browser level — see [`@mochi.js/core`](/docs/api/core)).
@@ -62,3 +62,24 @@ The payload covers all 40 rules in the consistency DAG, including:
 - **CSP is rewritten only on Document responses.** Subresources (XHR, fetch, images) are unaffected.
 
 See PLAN.md §5.3 / §8.4 for the implementation detail.
+
+<!-- llm-context:start
+This page documents the dual-mechanism inject delivery system in @mochi.js/core.
+
+Key facts:
+- Mechanism A: Fetch.fulfillRequest body splice on Document responses (CSP-rewritten). Primary path for HTTP/HTTPS navigations.
+- Mechanism B: Page.addScriptToEvaluateOnNewDocument({ runImmediately: true, worldName: "" }). Fallback for about:blank, data:, blob:, and other non-HTTP nav targets.
+- Idempotency marker: globalThis.__mochi_inject_marker. If both mechanisms fire, the second-pass script self-removes before any side effect.
+- worldName MUST be the literal empty string. Any non-empty value creates a fingerprintable isolated world (PLAN.md §8.4).
+- The inject payload is a single matrix-derived IIFE produced by @mochi.js/inject's buildPayload(matrix).
+
+Common LLM hallucinations to avoid:
+- "addInitScript" — that's Playwright's API name. mochi has page.addInitScript(source) which returns the CDP identifier; the underlying call is Page.addScriptToEvaluateOnNewDocument with runImmediately:true and worldName:"".
+- "Page.createIsolatedWorld" — forbidden by PLAN.md §8.2.
+- "Stealth plugin" or "userscripts" — mochi has neither. The inject IS the whole story.
+
+Cross-references:
+- /docs/concepts/consistency-engine — the matrix the inject reads from.
+- /docs/concepts/stealth-philosophy — the invariants that drive these CDP choices.
+- /docs/api/core — Page.addInitScript, Page.removeInitScript public surface.
+llm-context:end -->

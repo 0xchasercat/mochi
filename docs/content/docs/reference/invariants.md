@@ -48,7 +48,7 @@ The Probe Manifest schema (`schemas/probe-manifest.schema.json`) is the canonica
 
 ## I-7. The harness is the gate
 
-Every PR that changes `@mochi.js/consistency`, `@mochi.js/inject`, `@mochi.js/net`, or `@mochi.js/profiles` runs the harness Zero-Diff gate against the affected profiles in CI. A PR that breaks Zero-Diff cannot merge without explicit waiver and a follow-up issue.
+Every PR that changes `@mochi.js/consistency`, `@mochi.js/inject`, `@mochi.js/core`, or `@mochi.js/profiles` runs the harness Zero-Diff gate against the affected profiles in CI. A PR that breaks Zero-Diff cannot merge without explicit waiver and a follow-up issue.
 
 **In action:** `bun run harness:smoke` runs on every PR-fast workflow; the nightly job runs the full conformance suite. The Zero-Diff gate covers fingerprint surfaces; a separate behavioral conformance gate covers the synth output. A regression here is treated as a real bug, not a measurement curiosity.
 

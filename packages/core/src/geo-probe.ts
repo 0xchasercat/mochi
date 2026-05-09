@@ -9,11 +9,13 @@
  * first half of the fix (the second half is {@link reconcileGeoConsistency}
  * in `launch.ts`).
  *
- * The probe issues a single GET through the same `wreq` preset the session
- * would use for user traffic, so the geolocation service sees the **same
- * JA4 / headers** as the actual page — the probe doesn't itself become
- * detectable. The probe respects the `proxy` option; if unset, the probe
- * goes direct (which is fine — the user's exit IP is the host's IP).
+ * Post-0.7 the probe rides Chromium itself — same network stack as
+ * `page.goto`, same TLS / H2 / JA4 by definition. The default `ProbeFetch`
+ * adapter delegates to `globalThis.fetch` so {@link probeExitGeo} can run
+ * in a test runner without requiring a live Session; production callers
+ * inject a `Session.fetch`-backed adapter via `launch.ts`. The probe
+ * respects the `proxy` option as a diagnostic-only field — Chromium picks
+ * up `--proxy-server` from the launch flags directly.
  *
  * ### Endpoint registry (verified working 2026-05-09)
  *
@@ -40,7 +42,6 @@
  */
 
 import type { MatrixV1 } from "@mochi.js/consistency";
-import { fetch as netFetch } from "@mochi.js/net";
 
 /**
  * Normalised geolocation derived from one of the probe endpoints. The
@@ -428,22 +429,30 @@ const DEFAULT_PER_ENDPOINT_TIMEOUT_MS = 2000;
 
 /**
  * Injection seam for the underlying HTTP transport. Production uses
- * `@mochi.js/net`'s `fetch` (so the probe carries the same JA4/headers as
- * user traffic). Tests inject a stub.
+ * `Session.fetch` (so the probe carries the same JA4/headers as user
+ * traffic — it IS the browser). Tests inject a stub.
+ *
+ * The `proxy` field is forwarded for diagnostic purposes only; the
+ * actual proxy egress is wired at the Chromium `--proxy-server` flag.
  *
  * @internal
  */
 export type ProbeFetch = (
   url: string,
-  init: { preset: string; proxy?: string; timeoutMs: number },
+  init: { proxy?: string; timeoutMs: number },
 ) => Promise<Response>;
 
 /** Options for {@link probeExitGeo}. */
 export interface ProbeOptions {
-  /** Optional outbound proxy URL — `user:pass@host:port` form is fine. */
+  /** Optional outbound proxy URL — diagnostic-only post-0.7. */
   readonly proxy?: string;
-  /** The matrix whose `wreqPreset` drives the TLS fingerprint of the probe. */
-  readonly matrix: Pick<MatrixV1, "wreqPreset">;
+  /**
+   * The matrix is retained on the API surface for forward-compat (so any
+   * future per-locale endpoint shuffle can read from it) and to keep
+   * call sites stable across the 0.6 → 0.7 transition. The probe itself
+   * no longer reads any field — Chromium owns the TLS fingerprint.
+   */
+  readonly matrix?: Partial<MatrixV1>;
   /**
    * Override the default 4-attempt cap. Tests use 2 to keep wall-time low;
    * production sticks with 4.
@@ -453,7 +462,9 @@ export interface ProbeOptions {
   readonly perEndpointTimeoutMs?: number;
   /**
    * Inject a custom `fetch` transport (for tests). Defaults to
-   * `@mochi.js/net`'s `fetch` so the probe shares the session's TLS preset.
+   * `globalThis.fetch` (test/standalone use) — production calls override
+   * this with a `Session.fetch`-backed adapter so the probe rides the
+   * same Chromium network stack as user traffic.
    * @internal
    */
   readonly fetch?: ProbeFetch;
@@ -466,27 +477,23 @@ export interface ProbeOptions {
 }
 
 /**
- * Default `ProbeFetch` — issues the request through `@mochi.js/net`'s
- * one-shot `fetch` so the geo service sees the same JA4 as user traffic.
+ * Default `ProbeFetch` — falls back to `globalThis.fetch` so the probe
+ * works standalone in tests without a live Session. Production launch
+ * paths inject a `Session.fetch`-backed adapter so the probe shares
+ * Chromium's network stack (and therefore JA4) with user traffic.
  *
- * The per-call timeout is mapped onto the wreq `timeoutMs` field; we do
- * NOT also wrap with `AbortController` because Bun's `Response` from the
- * FFI path is synchronous and we want the wreq layer to own the timeout
- * (a layered `AbortController` would race with the Rust handle drop).
+ * The per-call timeout is enforced via `AbortController`.
  */
 const defaultFetch: ProbeFetch = (url, init) => {
-  return Promise.resolve(
-    netFetch(url, {
-      preset: init.preset,
-      ...(init.proxy !== undefined ? { proxy: init.proxy } : {}),
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), init.timeoutMs);
+  return globalThis
+    .fetch(url, {
       method: "GET",
       headers: { Accept: "application/json" },
-      timeoutMs: init.timeoutMs,
-      // Connect timeout matches the per-endpoint cap — a stuck SYN is the
-      // dominant failure mode against rate-limited endpoints.
-      connectTimeoutMs: init.timeoutMs,
-    }),
-  );
+      signal: ac.signal,
+    })
+    .finally(() => clearTimeout(timer));
 };
 
 /** Fisher-Yates shuffle — non-deterministic, Math.random-backed. */
@@ -569,7 +576,6 @@ export async function probeExitGeo(opts: ProbeOptions): Promise<ExitGeo | null> 
       new Promise<Response>((resolve, reject) => {
         try {
           fetchFn(adapter.url, {
-            preset: opts.matrix.wreqPreset,
             ...(opts.proxy !== undefined ? { proxy: opts.proxy } : {}),
             timeoutMs: perEndpointTimeoutMs,
           }).then(resolve, reject);

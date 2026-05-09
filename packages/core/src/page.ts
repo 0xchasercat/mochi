@@ -252,43 +252,61 @@ export interface DomStorage {
 /**
  * Every browser-level permission descriptor `Browser.grantPermissions` accepts.
  *
- * Pinned to the CDP `Browser.PermissionType` enum on Chromium ≥ 131 (the
- * mochi profile floor — same baseline the worker idOnly bootstrap relies on).
- * The list is verbose-on-purpose: we want a contract test to catch the day
- * Chromium adds a new permission so we can decide whether to forward it.
+ * Pinned to the CDP `Browser.PermissionType` enum on Chromium 148 (the
+ * post-0.7 profile floor — verified `2026-05-09` against the live CDP
+ * reference). The list is verbose-on-purpose: we want a contract test
+ * to catch the day Chromium adds a new permission so we can decide
+ * whether to forward it.
+ *
+ * Drift history:
+ *   - 0.7: removed `accessibilityEvents`, `captureHandle`, `flash`,
+ *     `videoCapturePanTiltZoom` (gone or renamed in 148). Added the XR
+ *     cluster (`ar`, `vr`, `handTracking`), `automaticFullscreen`,
+ *     `cameraPanTiltZoom`, `capturedSurfaceControl`, `keyboardLock`,
+ *     `pointerLock`, `localNetwork`, `localNetworkAccess`,
+ *     `loopbackNetwork`, `smartCard`, `webPrinting`.
  *
  * @see https://chromedevtools.github.io/devtools-protocol/tot/Browser/#type-PermissionType
  */
 export const ALL_BROWSER_PERMISSIONS = [
-  "accessibilityEvents",
+  "ar",
   "audioCapture",
-  "backgroundSync",
+  "automaticFullscreen",
   "backgroundFetch",
-  "captureHandle",
+  "backgroundSync",
+  "cameraPanTiltZoom",
+  "capturedSurfaceControl",
   "clipboardReadWrite",
   "clipboardSanitizedWrite",
   "displayCapture",
   "durableStorage",
-  "flash",
   "geolocation",
+  "handTracking",
   "idleDetection",
+  "keyboardLock",
   "localFonts",
+  "localNetwork",
+  "localNetworkAccess",
+  "loopbackNetwork",
   "midi",
   "midiSysex",
   "nfc",
   "notifications",
   "paymentHandler",
   "periodicBackgroundSync",
+  "pointerLock",
   "protectedMediaIdentifier",
   "sensors",
-  "storageAccess",
+  "smartCard",
   "speakerSelection",
+  "storageAccess",
   "topLevelStorageAccess",
   "videoCapture",
-  "videoCapturePanTiltZoom",
+  "vr",
   "wakeLockScreen",
   "wakeLockSystem",
   "webAppInstallation",
+  "webPrinting",
   "windowManagement",
 ] as const;
 

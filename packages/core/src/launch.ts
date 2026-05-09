@@ -235,10 +235,11 @@ export interface LaunchOptions {
    * - `"off"` — skip the probe entirely. Use in offline tests / when
    *   the probe service is rate-limited.
    *
-   * The probe is a single GET through wreq (using the matrix's
-   * `wreqPreset`, so the geo service sees the same JA4/headers as user
-   * traffic). 4-attempt cap, 2s per endpoint. Probe results are NOT
-   * cached across sessions — proxy IPs rotate.
+   * The probe is a single GET through Chromium itself (Session.fetch via
+   * CDP `Network.loadNetworkResource`), so the geo service sees the same
+   * JA4 / headers as user traffic by definition. 4-attempt cap, 2s per
+   * endpoint. Probe results are NOT cached across sessions — proxy IPs
+   * rotate.
    *
    * @see PLAN.md §9 (relational consistency, IP/TZ/Locale axis)
    */
@@ -288,9 +289,10 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
 
   // Task 0262 — exit-IP / TZ / locale reconciliation.
   //
-  // Probe the apparent exit IP through the configured proxy (using wreq
-  // with the matrix's `wreqPreset` so the geo service sees the same JA4
-  // / headers as user traffic). Then cross-reference against
+  // Probe the apparent exit IP through the configured proxy. Post-0.7
+  // the probe runs through Chromium itself (Session.fetch via CDP
+  // `Network.loadNetworkResource`), so the geo service sees the same
+  // JA4 / headers as user traffic by definition. Cross-reference against
   // `(matrix.timezone, matrix.locale)` and apply `geoConsistency`. The
   // adjusted matrix flows into BOTH `spawnChromium` (so `--lang` reflects
   // any override) AND `Session` (so inject + the CDP `Emulation.set
@@ -302,7 +304,7 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
   let adjustedMatrix = matrix;
   if (geoMode !== "off") {
     const geo = await probeExitGeo({
-      ...(normalized?.netProxy !== undefined ? { proxy: normalized.netProxy } : {}),
+      ...(normalized?.proxy !== undefined ? { proxy: normalized.proxy } : {}),
       matrix,
     });
     // Strict mode throws GeoMismatchError on real mismatch; let it
@@ -394,10 +396,11 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
     seed: opts.seed,
     ...(opts.timeout !== undefined ? { defaultTimeoutMs: opts.timeout } : {}),
     ...(opts.bypassInject === true ? { bypassInject: true } : {}),
-    // Forward the same proxy (with auth, if any) to the net FFI so
-    // out-of-band Session.fetch traffic shares the apparent egress.
-    // `@mochi.js/net` (wreq) accepts the full `user:pass@host` URL form.
-    ...(normalized !== undefined ? { netProxy: normalized.netProxy } : {}),
+    // Proxy auth is the only piece that needs explicit Session-side
+    // wiring (the `--proxy-server` flag is already on Chromium's command
+    // line above). Out-of-band `Session.fetch` traffic rides Chromium's
+    // network stack post-0.7, so it inherits the `--proxy-server` egress
+    // automatically — no per-call proxy URL needed.
     ...(normalized?.auth !== undefined ? { proxyAuth: normalized.auth } : {}),
     ...(opts.challenges !== undefined ? { challenges: opts.challenges } : {}),
   });
@@ -461,9 +464,10 @@ export function resolveHeadlessMode(
  * Reconcile the two `LaunchOptions.proxy` shapes (URL string and
  * `ProxyConfig` record) into a single normalized record carrying:
  *   - `server`: auth-stripped URL safe to feed `--proxy-server=`.
- *   - `netProxy`: the URL handed to the network FFI. Preserves credentials
- *     (wreq accepts `user:pass@host` inline) so out-of-band fetches
- *     authenticate against the same proxy.
+ *   - `proxy`: the auth-stripped URL forwarded to the geo-probe so it
+ *     can record the egress on diagnostics. (Kept for API parity even
+ *     though the probe now rides Session.fetch + Chromium's network
+ *     stack — i.e. picks up `--proxy-server` automatically.)
  *   - `auth`: parsed credentials for the CDP auth handler. Undefined when
  *     no creds were supplied.
  *
@@ -472,7 +476,7 @@ export function resolveHeadlessMode(
 function normalizeProxy(p: LaunchOptions["proxy"]):
   | {
       server: string;
-      netProxy: string;
+      proxy: string;
       auth?: { username: string; password: string };
     }
   | undefined {
@@ -482,7 +486,7 @@ function normalizeProxy(p: LaunchOptions["proxy"]):
     const parsed = parseProxyUrl(p);
     return {
       server: parsed.server,
-      netProxy: p,
+      proxy: parsed.server,
       ...(parsed.auth !== undefined ? { auth: parsed.auth } : {}),
     };
   }
@@ -491,29 +495,11 @@ function normalizeProxy(p: LaunchOptions["proxy"]):
   const parsed = parseProxyUrl(p.server);
   const auth =
     p.username !== undefined ? { username: p.username, password: p.password ?? "" } : parsed.auth;
-  // Reconstruct the netProxy URL preserving any explicit auth (wreq path).
-  const netProxy = auth !== undefined ? injectAuth(parsed.server, auth) : parsed.server;
   return {
     server: parsed.server,
-    netProxy,
+    proxy: parsed.server,
     ...(auth !== undefined ? { auth } : {}),
   };
-}
-
-/**
- * Inject `username:password@` into a server URL, percent-encoding both
- * components so reserved characters round-trip cleanly through wreq's URL
- * parser.
- */
-function injectAuth(server: string, auth: { username: string; password: string }): string {
-  const u = encodeURIComponent(auth.username);
-  const p = encodeURIComponent(auth.password);
-  // server is `<protocol>://<host>:<port>` (per parseProxyUrl).
-  const idx = server.indexOf("://");
-  if (idx < 0) return server;
-  const head = server.slice(0, idx + 3);
-  const tail = server.slice(idx + 3);
-  return `${head}${u}:${p}@${tail}`;
 }
 
 /**
@@ -596,7 +582,9 @@ function synthesizePlaceholderProfile(profile: ProfileId): ProfileV1 {
     locale: "en-US",
     languages: ["en-US", "en"],
     behavior: { hand: "right", tremor: 0.18, wpm: 60, scrollStyle: "smooth" },
-    wreqPreset: "chrome_131_linux",
+    // Deprecated — kept for one release for migration; runtime no longer
+    // reads the field. Drops in 0.8.
+    wreqPreset: "chrome_148_linux",
     userAgent:
       "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     uaCh: {},
