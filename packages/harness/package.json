@@ -1,6 +1,6 @@
 {
   "name": "@mochi.js/harness",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Probe Manifest validation harness for mochi — captures, normalizes, and diffs against committed baselines. The Zero-Diff PR gate.",
   "license": "MIT",
   "type": "module",
