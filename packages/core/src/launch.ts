@@ -11,11 +11,7 @@
  */
 
 import { deriveMatrix, type ProfileV1 } from "@mochi.js/consistency";
-import {
-  getProfile,
-  ProfileBaselineMissingError,
-  UnknownProfileIdError,
-} from "@mochi.js/profiles";
+import { getProfile, ProfileBaselineMissingError, UnknownProfileIdError } from "@mochi.js/profiles";
 import { resolveBinary } from "./binary";
 import { defaultProfileForHost, unsupportedHostMessage } from "./default-profile";
 import { type GeoConsistencyMode, reconcileGeoConsistency } from "./geo-consistency";

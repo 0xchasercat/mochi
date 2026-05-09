@@ -60,6 +60,8 @@ describe("@mochi.js/profiles", () => {
 
   it("getProfile throws UnknownProfileIdError for ids outside the catalog", async () => {
     // Cast through unknown — callers using `as ProfileId` may slip past TS.
-    await expect(getProfile("not-a-real-profile-id" as never)).rejects.toThrow(UnknownProfileIdError);
+    await expect(getProfile("not-a-real-profile-id" as never)).rejects.toThrow(
+      UnknownProfileIdError,
+    );
   });
 });
