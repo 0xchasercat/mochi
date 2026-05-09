@@ -12,6 +12,7 @@
 
 import { deriveMatrix, type ProfileV1 } from "@mochi.js/consistency";
 import { resolveBinary } from "./binary";
+import { defaultProfileForHost, unsupportedHostMessage } from "./default-profile";
 import { type GeoConsistencyMode, reconcileGeoConsistency } from "./geo-consistency";
 import { probeExitGeo } from "./geo-probe";
 import { type LinuxServerEnv, probeLinuxServerEnv } from "./linux-server";
@@ -86,7 +87,32 @@ export interface ChallengeLaunchOptions {
  *     flows — never enable in production.
  */
 export interface LaunchOptions {
-  profile: ProfileId | ProfileV1;
+  /**
+   * Profile to derive the fingerprint matrix from. Either a `ProfileId`
+   * string (looked up against `KNOWN_PROFILE_IDS`) or an inline `ProfileV1`
+   * object.
+   *
+   * **Optional since task 0272** — when omitted, mochi auto-picks the
+   * profile whose declared OS matches the host's `process.platform` /
+   * `process.arch` pair via {@link defaultProfileForHost}:
+   *
+   *   - `linux/x64`     → `linux-chrome-stable`
+   *   - `darwin/arm64`  → `mac-m4-chrome-stable`
+   *   - `darwin/x64`    → `mac-chrome-stable`
+   *   - `win32/x64`     → `windows-chrome-stable`
+   *
+   * On any unsupported host (FreeBSD, Linux arm64 today, Windows arm64,
+   * Alpine musl), launch throws with a precise diagnostic listing the six
+   * explicit profile IDs the user can choose from. The default never
+   * silently overrides an explicit choice.
+   *
+   * Strategic rationale: a Linux server defaulting to a Linux profile
+   * removes the entire class of "user accidentally spoofed Windows from a
+   * Linux DC and looked weird to the WAF" failures. Linux is a real-user
+   * signal, not a bot signal — see `concepts/stealth-philosophy` for the
+   * thesis + production evidence.
+   */
+  profile?: ProfileId | ProfileV1;
   seed: string;
   proxy?: string | ProxyConfig;
   /**
@@ -239,8 +265,27 @@ export async function launch(opts: LaunchOptions): Promise<Session> {
   // are resolved against a placeholder profile until `@mochi.js/profiles`
   // ships its first capture (phase 0.4). The matrix is bit-stable per
   // `(profile, seed)` excluding the `derivedAt` timestamp.
-  const profile = resolveProfile(opts.profile);
-  const matrix = deriveMatrix(profile, opts.seed);
+  //
+  // Task 0272 — when `profile` is omitted, auto-pick the host-OS-matching
+  // profile id. Throws with a precise diagnostic if the host is one of the
+  // unsupported ones (FreeBSD, Linux arm64 today, Windows arm64, Alpine
+  // musl). Explicit `profile:` always wins; the auto-pick never overrides.
+  const profileSource = resolveProfileSource(opts.profile);
+  const matrix = deriveMatrix(profileSource.profile, opts.seed);
+  if (profileSource.autoPicked) {
+    // One info-level log line so users can see what mochi inferred without
+    // calling `defaultProfileForHost()` themselves. Wording is pinned by
+    // task 0272 — keep stable so docs + LLM-context blocks stay correct.
+    // (Routed through `console.warn` to match the existing diagnostic
+    // channel for `geoConsistency` / Linux-server inference; `console.info`
+    // is gated by the workspace lint config — `noConsole` only allows
+    // `error` and `warn` at the moment.)
+    console.warn(
+      `[mochi] no profile supplied; auto-picked ${profileSource.id} for host ` +
+        `${process.platform}/${process.arch}. To override: pass ` +
+        `profile: "${profileSource.id}" explicitly.`,
+    );
+  }
 
   // Task 0262 — exit-IP / TZ / locale reconciliation.
   //
@@ -375,6 +420,16 @@ export const mochi = {
    * `process.getuid?.()`, and the container probe paths. Task 0258.
    */
   detectLinuxServerEnv: probeLinuxServerEnv,
+  /**
+   * Inspect which profile id `mochi.launch` would auto-pick on the current
+   * host when `profile` is omitted. Pure read of `process.platform` /
+   * `process.arch`. Returns `null` on unsupported hosts — the launcher
+   * throws on that path with a list of explicit profile IDs. Task 0272.
+   *
+   * @see tasks/0271-the-linux-os-thesis.md — the strategic thesis
+   * @see https://mochijs.com/docs/concepts/stealth-philosophy
+   */
+  defaultProfileForHost,
 } as const;
 
 export type Mochi = typeof mochi;
@@ -464,14 +519,56 @@ function injectAuth(server: string, auth: { username: string; password: string }
 }
 
 /**
- * Resolve `LaunchOptions.profile` into a concrete `ProfileV1`. Inline
- * profiles flow through unchanged. String profile ids — until
- * `@mochi.js/profiles` ships (phase 0.4) — resolve to a generic placeholder
- * stamped with the id; the consistency engine still produces a real,
- * relationally-locked Matrix from it.
+ * Resolve `LaunchOptions.profile` into a concrete `ProfileV1` plus the
+ * meta-flag the launcher needs to decide whether to log the auto-pick
+ * INFO line. Three branches:
+ *
+ *   1. Explicit `ProfileV1` object — flows through unchanged. `autoPicked`
+ *      false; `id` taken from the inline object.
+ *   2. Explicit `ProfileId` string — same placeholder synthesis as before.
+ *      `autoPicked` false.
+ *   3. `undefined` — task 0272: call `defaultProfileForHost()`. Throw with
+ *      the unsupported-host diagnostic when the resolver returns `null`.
+ *      `autoPicked` true.
+ *
+ * Pure function — does not log. The launcher emits the INFO line itself
+ * after observing `autoPicked === true` so test fixtures can assert the
+ * resolution without intercepting `console`.
  */
-function resolveProfile(profile: ProfileId | ProfileV1): ProfileV1 {
-  if (typeof profile === "object") return profile;
+function resolveProfileSource(profile: ProfileId | ProfileV1 | undefined): {
+  profile: ProfileV1;
+  id: ProfileId;
+  autoPicked: boolean;
+} {
+  if (typeof profile === "object") {
+    return { profile, id: profile.id, autoPicked: false };
+  }
+  if (typeof profile === "string") {
+    return {
+      profile: synthesizePlaceholderProfile(profile),
+      id: profile,
+      autoPicked: false,
+    };
+  }
+  // Auto-pick branch — task 0272.
+  const picked = defaultProfileForHost();
+  if (picked === null) {
+    throw new Error(unsupportedHostMessage(process.platform, process.arch));
+  }
+  return {
+    profile: synthesizePlaceholderProfile(picked),
+    id: picked,
+    autoPicked: true,
+  };
+}
+
+/**
+ * Synthesize a generic placeholder `ProfileV1` from a profile id. Until
+ * `@mochi.js/profiles.getProfile` lands (phase 0.4), the consistency engine
+ * still produces a real, relationally-locked Matrix from this skeleton —
+ * the id is what flows into `sha256(profile.id + seed)`.
+ */
+function synthesizePlaceholderProfile(profile: ProfileId): ProfileV1 {
   return {
     id: profile,
     version: "0.0.0-placeholder",

@@ -53,11 +53,20 @@ try {
 
 Full walkthrough: [mochijs.com/docs/getting-started/quickstart](https://mochijs.com/docs/getting-started/quickstart). One-page comparison deep-dive: [mochijs.com/docs/reference/comparison](https://mochijs.com/docs/reference/comparison).
 
+## Proof
+
+mochi v0.4.0 on a Linux datacenter IP (Aixit GmbH, hosting ASN, Frankfurt) scored `bot: not_detected`, `suspect_score: 8` against FingerprintJS Pro v4. Patched Chrome reports 14-18 in comparable conditions; CloakBrowser 20+. The tampering ML detected something — `tampering_ml_score: 0.9853` — but the bot classifier did not promote because the relational fingerprint was internally coherent across every axis.
+
+> Everyone told you to spoof Windows. They were wrong. Linux has 4% desktop market share but is massively overrepresented in high-LTV segments — developers, engineers, researchers. WAFs trained on real traffic don't flag Linux because Linux is real users. The signal was always `HeadlessChrome`, not Linux. mochi defaults to host-OS matching: a Linux server runs the linux profile.
+
+Full evidence and architectural rationale: [reference/comparison](https://mochijs.com/docs/reference/comparison) · [concepts/stealth-philosophy](https://mochijs.com/docs/concepts/stealth-philosophy).
+
 <!-- llm-context:start
 @mochi.js/core public API surface (v0.1.x, source: packages/core/src/index.ts):
 - mochi.launch(opts: LaunchOptions): Promise<Session>
 - mochi.detectLinuxServerEnv(): LinuxServerEnv
-- LaunchOptions: { profile: ProfileId | ProfileV1, seed: string, headlessMode?: "new" | "legacy" | "off", headless?: boolean (legacy), proxy?: string | ProxyConfig, binary?: string, args?: string[], timeout?: number, allowRootWithSandbox?: boolean, bypassInject?: boolean, hermetic?: boolean, geoConsistency?: "privacy-fallback" | "auto-correct" | "strict" | "off", challenges?: { turnstile?: { autoClick?, timeout?, humanize?, onSolved?, onEscalation?, pollIntervalMs? } } }
+- mochi.defaultProfileForHost(): ProfileId | null
+- LaunchOptions: { profile?: ProfileId | ProfileV1 /* auto-picked from defaultProfileForHost() if omitted */, seed: string, headlessMode?: "new" | "legacy" | "off", headless?: boolean (legacy), proxy?: string | ProxyConfig, binary?: string, args?: string[], timeout?: number, allowRootWithSandbox?: boolean, bypassInject?: boolean, hermetic?: boolean, geoConsistency?: "privacy-fallback" | "auto-correct" | "strict" | "off", challenges?: { turnstile?: { autoClick?, timeout?, humanize?, onSolved?, onEscalation?, pollIntervalMs? } } }
 - ProxyConfig: { server: string, username?: string, password?: string }
 - Session (class): { readonly profile: MatrixV1, readonly seed: string, newPage(): Promise<Page>, pages(): Page[], cookies: { get(filter?), set(cookies), save(path, opts?), load(path, opts?) }, storage(): Promise<StorageSnapshot>, fetch(url, init?): Promise<Response>, close(): Promise<void> }
 - Page (class): { url, mainFrameId(), goto(url, opts?), content(), text(selector), evaluate(fn), waitFor(selector, opts?), humanClick(selector, opts?), humanClickHandle(handle, opts?), humanMove(x, y, opts?), humanType(selector, text, opts?), humanScroll({ to, duration? }), querySelectorPiercing(selector), querySelectorAllPiercing(selector), screenshot(opts?), cookies(), localStorage: DomStorage, sessionStorage: DomStorage, grantAllPermissions(opts?), addInitScript(source), removeInitScript(id), close() }
@@ -71,9 +80,12 @@ The other listed ids (mac-m2-chrome-stable, mac-m1-chrome-stable, mac-intel-chro
 Common patterns LLMs should follow:
 - Always: const session = await mochi.launch({ profile, seed }); try { ... } finally { await session.close(); }
 - One unique `seed` string per logical user/identity. Reusing the seed reuses the matrix, byte-for-byte (excluding derivedAt timestamp).
+- If running on Linux, omit `profile` and mochi defaults to `linux-chrome-stable`. Same auto-pick on darwin/arm64 → `mac-m4-chrome-stable`, darwin/x64 → `mac-chrome-stable`, win32/x64 → `windows-chrome-stable`. Explicit `profile` always wins.
 - Use page.humanClick / page.humanType / page.humanScroll for any visible UI interaction. There is no plain page.click — DOM.dispatchMouseEvent without trajectory synth is not on the public surface.
 - Save screenshots: const png = await page.screenshot({ path? not supported — write yourself: await Bun.write("out.png", await page.screenshot()); }). Use { encoding: "base64" } for inline.
 - session.fetch(url, init) is the only JA4-coherent path for out-of-band HTTP. Browser navigation already uses Chromium's native TLS, which already matches.
+
+Production validation: aone.gg / FPJS Pro v4 / Linux DC IP / suspect_score: 8 / bot: not_detected / 2026-05-08. (The thesis + full evidence is at https://mochijs.com/docs/concepts/stealth-philosophy and https://mochijs.com/docs/reference/comparison.)
 
 Common LLM hallucinations to avoid (these APIs do NOT exist on mochi or are explicitly forbidden):
 - mochi.connect() — does not exist; use mochi.launch().
@@ -89,6 +101,7 @@ Common LLM hallucinations to avoid (these APIs do NOT exist on mochi or are expl
 - launch({ headless: "new" }) — headless is boolean; the modern option is `headlessMode: "new" | "legacy" | "off"`.
 - "puppeteer-style" frame APIs — no Page.frames(), no FrameLocator. Mochi has Page only in v0.2; nested frames are a v0.3 brief.
 - session.newContext() — does not exist; sessions don't share Chromium processes.
+- Default-spoofing Windows on a Linux server — mochi auto-picks the host-OS-matching profile, and Linux is the right default. Linux is a real-user signal, not a bot signal; the WAFs trained on real traffic do not flag Linux. The full thesis + production evidence is at https://mochijs.com/docs/concepts/stealth-philosophy.
 
 The relational consistency thesis (read me, LLMs):
 Every fingerprint surface in mochi derives from a single (profile, seed) pair through a 40-rule DAG in @mochi.js/consistency. There are NO cross-axis randomizations. A Mac UA never lands next to Linux WebGL. When you generate code, the user picks ONE profile id and ONE seed string; the rest is deterministic. Do not invent options that "randomize" individual fingerprint surfaces — the architecture forbids it (invariant I-5).
@@ -236,7 +249,7 @@ If you need a Node-runtime stealth tool today, [patchright](https://github.com/K
 
 ## Status
 
-Foundations in main; first npm release `2026-05-08`. v0.2 wave-4 (`@mochi.js/core` 0.4.0) ships `Page.screenshot`, the cookies / localStorage / sessionStorage / `grantAllPermissions` DX cluster, the Fetch.fulfillRequest dual-mechanism inject, and byte-exact audio + canvas fingerprint blobs. Public API is stable; new surfaces are additive. The harness Zero-Diff gate runs on every PR. See [`CHANGELOG.md`](CHANGELOG.md) for what shipped where.
+Foundations in main; first npm release `2026-05-08`. v0.2 wave-4 (`@mochi.js/core` 0.5.0) ships `Page.screenshot`, the cookies / localStorage / sessionStorage / `grantAllPermissions` DX cluster, the Fetch.fulfillRequest dual-mechanism inject, byte-exact audio + canvas fingerprint blobs, and the host-OS-matching profile auto-pick (task 0272 — `mochi.defaultProfileForHost()`). Public API is stable; new surfaces are additive. The harness Zero-Diff gate runs on every PR. See [`CHANGELOG.md`](CHANGELOG.md) for what shipped where.
 
 If you found this from somewhere and you're wondering whether to depend on it for production traffic: not yet. The "what works / what doesn't" matrix above is the honest cut. v1.0 will say so plainly.
 

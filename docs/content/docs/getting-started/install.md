@@ -40,6 +40,8 @@ You can disable the cdylib postinstall (offline / firewalled environments) with 
 
 ## Confirm it works
 
+Since task 0272, `profile` is optional in `mochi.launch()` — mochi consults `process.platform` / `process.arch` and auto-picks the host-OS-matching real-device profile (Linux x64 → `linux-chrome-stable`, Mac arm64 → `mac-m4-chrome-stable`, Mac x64 → `mac-chrome-stable`, Windows x64 → `windows-chrome-stable`). On unsupported hosts (Linux arm64 today, FreeBSD, Alpine musl, Windows arm64) launch throws with a precise diagnostic and a pointer to [Choose your profile](/docs/guides/choose-your-profile). Most users no longer need to type `profile: "linux-chrome-stable"` explicitly — passing the id still wins when you want it. The strategic rationale lives in [Stealth philosophy → Default to the host OS](/docs/concepts/stealth-philosophy#default-to-the-host-os-not-windows). Use `mochi.defaultProfileForHost()` to introspect the pick before launching.
+
 ```ts
 // hello-mochi.ts
 import { mochi } from "@mochi.js/core";

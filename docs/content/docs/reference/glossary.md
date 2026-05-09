@@ -36,6 +36,8 @@ See also: [FAQ](/docs/reference/faq), [Invariants](/docs/reference/invariants), 
 
 **Honesty over marketing.** Invariant I-8. Every known fingerprint gap is documented in [Limits](/docs/reference/limits) with root cause and tracking link. New gaps must be added in the same PR that creates them.
 
+**Host-OS asymmetry.** The relational-consistency cost of spoofing across the OS axis. A Mac profile run on a Linux host has to lie about every WebGL string, every audio sample-rate, every font list, every JA4 ciphersuite ordering — any one of those rules drifting is a cross-axis hit. Matching host-OS (mochi's task 0272 default) removes the entire class of "OS-axis inconsistency" detections. See [Comparison → Default profile strategy](/docs/reference/comparison#default-profile-strategy) and [Stealth philosophy → Default to the host OS](/docs/concepts/stealth-philosophy#default-to-the-host-os-not-windows).
+
 **HumanClick / HumanType / HumanScroll.** The behavioral surface on `Page` — `page.humanClick(sel)`, `page.humanType(sel, text)`, `page.humanScroll(opts)`. Each consumes the profile's `behavior` block and synthesizes events through `@mochi.js/behavioral`. See [Behavioral synthesis](/docs/concepts/behavioral-synth).
 
 **Idempotency marker (`__mochi_inject_marker`).** A `globalThis` symbol set by the inject IIFE on first run. If both inject mechanisms (Mechanism A `Fetch.fulfillRequest` and Mechanism B `Page.addScriptToEvaluateOnNewDocument`) fire on the same document, the second-pass script self-removes without re-running. See [The inject pipeline](/docs/concepts/inject-pipeline).
@@ -60,6 +62,8 @@ See also: [FAQ](/docs/reference/faq), [Invariants](/docs/reference/invariants), 
 
 **Pipe-mode CDP (`--remote-debugging-pipe`).** CDP over file descriptors 3+4 instead of TCP/WebSocket. No localhost listener, no fingerprintable port. Bun-native because `Bun.spawn` exposes FDs to user code; Node's `child_process` doesn't. See [Why Bun-only?](https://github.com/0xchasercat/mochi/blob/main/README.md#why-bun-only).
 
+**Privacy-fallback (`geoConsistency`).** The default `LaunchOptions.geoConsistency` mode. On `(matrix.timezone, matrix.locale)` mismatch with the proxy's exit-IP geolocation (or probe failure), the matrix flips to UTC + `en-US` so the session reads as a privacy-conscious user (Tor / Brave / hardened-FF style) rather than a tampered Asia/Bangkok→Europe/Berlin mismatch. Validated in production: the 2026-05-08 aone.gg / FingerprintJS Pro v4 capture recorded `vpn_origin_timezone: "UTC"` (the privacy signal we wanted) while keeping `vpn: false` (the classification we wanted). See [Limits](/docs/reference/limits#exit-ip--timezone--locale-consistency--covered-task-0262) and [Comparison → Default profile strategy](/docs/reference/comparison#default-profile-strategy) for the matching FPJS Pro v4 fields.
+
 **Probe Manifest (`ProbeManifestV1`).** The canonical JSON schema describing a page's full capture surface. Vendored from Peekaboo. mochi's harness produces and diffs Probe Manifests; the diff is the PR gate. See [Probe Manifest](/docs/concepts/probe-manifest).
 
 **Profile (`ProfileV1`).** A JSON document describing a device class — UA, UA-CH, screen, GPU, audio sample rates, fonts, behavior block. Lives in `packages/profiles/data/<id>/profile.json` next to a captured `baseline.manifest.json`. Six real-device profiles ship in v0.1. See [Profiles](/docs/concepts/profiles).
@@ -81,6 +85,8 @@ See also: [FAQ](/docs/reference/faq), [Invariants](/docs/reference/invariants), 
 **Stealth ceiling (JS-layer).** The highest-sophistication detection mochi can defeat purely from JS injection + Bun-native CDP control + Rust-FFI HTTP. Beyond the ceiling: V8 debugger-flag detection (incolumitas), upstream Skia byte-equality on novel canvas payloads, FPU/JIT divergence in cross-engine spoofing. See [Limits](/docs/reference/limits).
 
 **suspectScore.** The FingerprintJS Pro per-visit risk score (0–100). Real-device captures used as profile baselines must score `<= 20` (lower is more human-like) before they're admitted to the catalog.
+
+**Tampering ML score.** The FingerprintJS Pro v4 detector for browser anti-detect tooling, surfaced as `tampering_ml_score` (0.0–1.0) on each FPJS Pro response. The 2026-05-08 aone.gg capture recorded `tampering_ml_score: 0.9853` (high) but the bot classifier did not promote because the relational fingerprint was internally coherent across every axis — exactly the prediction of the relational-consistency thesis. Cross-axis agreement is the dominant signal; ML drift on a single axis is not enough to trip the bot gate alone. See the evidence section on [Comparison → Default profile strategy](/docs/reference/comparison#default-profile-strategy).
 
 **Trusted Publishing (npm).** OIDC-based npm publish that ties package provenance to the GitHub Actions workflow that built it. mochi releases via Trusted Publishing; provenance attestations land alongside each tarball.
 

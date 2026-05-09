@@ -23,11 +23,12 @@ export const mochi: {
   readonly version: string;
   readonly launch: (opts: LaunchOptions) => Promise<Session>;
   readonly detectLinuxServerEnv: () => LinuxServerEnv;
+  readonly defaultProfileForHost: () => ProfileId | null;
 };
 export type Mochi = typeof mochi;
 ```
 
-The default import surface. `mochi.launch` is the one function 99% of users call; `mochi.version` exposes the package's `VERSION` constant; `mochi.detectLinuxServerEnv()` runs the same probe `launch` runs internally to decide the headless default.
+The default import surface. `mochi.launch` is the one function 99% of users call; `mochi.version` exposes the package's `VERSION` constant; `mochi.detectLinuxServerEnv()` runs the same probe `launch` runs internally to decide the headless default; `mochi.defaultProfileForHost()` returns the profile id `launch` would auto-pick if `profile` were omitted (task 0272).
 
 ```ts
 import { mochi } from "@mochi.js/core";
@@ -49,7 +50,7 @@ Same function as `mochi.launch`, exposed as a named export for users who tree-sh
 
 ```ts
 interface LaunchOptions {
-  profile: ProfileId | ProfileV1;
+  profile?: ProfileId | ProfileV1;
   seed: string;
   proxy?: string | ProxyConfig;
   headless?: boolean;
@@ -66,7 +67,7 @@ interface LaunchOptions {
 }
 ```
 
-- `profile` — required. A `ProfileId` string (looked up under `packages/profiles/data/<id>/profile.json`) or an inline `ProfileV1` object.
+- `profile` — **optional since task 0272**. A `ProfileId` string (looked up under `packages/profiles/data/<id>/profile.json`) or an inline `ProfileV1` object. When omitted, mochi calls [`defaultProfileForHost`](#function-defaultprofileforhost-profileid--null) and auto-picks the profile whose declared OS matches the host's `process.platform` / `process.arch` pair (`linux/x64` → `linux-chrome-stable`, `darwin/arm64` → `mac-m4-chrome-stable`, `darwin/x64` → `mac-chrome-stable`, `win32/x64` → `windows-chrome-stable`). On unsupported hosts (FreeBSD, Linux arm64 today, Windows arm64, Alpine musl) launch throws with a precise diagnostic listing the six explicit profile IDs. Explicit `profile` always wins. The strategic rationale lives in [Stealth philosophy → Default to the host OS](/docs/concepts/stealth-philosophy#default-to-the-host-os-not-windows).
 - `seed` — required. Drives the consistency engine PRNG. Same `(profile, seed)` produces a byte-identical Matrix (excluding `derivedAt`).
 - `proxy` — `"http://user:pass@host:port"` URL form, `"socks5://host:1080"` form, or `{ server, username?, password? }`. Credentials get stripped from the `--proxy-server=` flag and replayed via a CDP `Fetch.authRequired` handler.
 - `headlessMode` — `"new"` (modern headless), `"legacy"`, or `"off"` (headful). When unset, mochi infers `"new"` on Linux without `DISPLAY` / `WAYLAND_DISPLAY`, `"off"` everywhere else. The legacy `headless: boolean` knob still works (`true` → `"new"`, `false` → `"off"`) but `headlessMode` wins when both are set.
@@ -120,6 +121,33 @@ function resolveHeadlessMode(
 ```
 
 Pure resolver for the headless dispatch table. Exposed so unit tests (and downstream tooling) can assert what mode `launch` would pick without spawning a Chromium.
+
+### `function defaultProfileForHost(): ProfileId | null`
+
+```ts
+function defaultProfileForHost(): ProfileId | null;
+function resolveDefaultProfileForHost(
+  platform: NodeJS.Platform,
+  arch: string,
+): ProfileId | null;
+```
+
+Returns the profile id `launch` would auto-pick on the current host when `profile` is omitted from `LaunchOptions`. Pure read of `process.platform` / `process.arch`. Returns `null` on unsupported hosts (FreeBSD, Linux arm64 today, Windows arm64, Alpine musl) — `launch` throws on that path with a list of the six explicit profile IDs. Task 0272.
+
+```ts
+import { mochi, defaultProfileForHost } from "@mochi.js/core";
+
+console.log(defaultProfileForHost());
+// On a Linux x64 server: "linux-chrome-stable"
+// On a Mac arm64 dev box: "mac-m4-chrome-stable"
+// On linux/arm64:         null  (unsupported — pass profile explicitly)
+
+// The auto-pick happens transparently when `profile` is omitted:
+const session = await mochi.launch({ seed: "u-1" });
+// [mochi] no profile supplied; auto-picked linux-chrome-stable for host linux/x64. ...
+```
+
+The strategic rationale: spoofing Windows from a Linux server is the wrong default — Linux is a real-user signal, not a bot signal — see [Stealth philosophy → Default to the host OS](/docs/concepts/stealth-philosophy#default-to-the-host-os-not-windows). `resolveDefaultProfileForHost` is the same table exposed for tests that want to drive both axes without stubbing `process`.
 
 ### `class Session`
 
@@ -676,6 +704,10 @@ Re-exports:
   ProxyConfig                                        (type)
   resolveHeadlessMode(opts, env)                     (function)
 
+  defaultProfileForHost(): ProfileId | null          (function, from "./default-profile")
+  resolveDefaultProfileForHost(platform, arch)       (function — pure resolver for tests)
+  EXPLICIT_PROFILE_IDS                               (const tuple of 6 real-device profile IDs)
+
   detectLinuxServerEnv(probes): LinuxServerEnv       (function, from "./linux-server")
   LinuxServerEnv                                     (type)
   LinuxServerProbes                                  (type)
@@ -720,6 +752,18 @@ mochi namespace shape:
   mochi.version: string
   mochi.launch(opts: LaunchOptions): Promise<Session>
   mochi.detectLinuxServerEnv(): LinuxServerEnv
+  mochi.defaultProfileForHost(): ProfileId | null  // task 0272 host-OS auto-pick
+
+LaunchOptions:
+  - profile is OPTIONAL (task 0272). When omitted, mochi auto-picks via defaultProfileForHost():
+      linux/x64    → linux-chrome-stable
+      darwin/arm64 → mac-m4-chrome-stable
+      darwin/x64   → mac-chrome-stable
+      win32/x64    → windows-chrome-stable
+    Unsupported hosts throw with a list of the 6 explicit profile IDs.
+    Explicit `profile` always wins.
+  - On Linux servers, omit `profile`; the default is the right answer.
+  - Strategic rationale: https://mochijs.com/docs/concepts/stealth-philosophy#default-to-the-host-os-not-windows
 
 Session methods:
   session.profile: MatrixV1
@@ -777,6 +821,7 @@ Common LLM hallucinations for this package (DO NOT use these — they do not exi
 - `page.screenshot({ path: "..." })` — there is no `path` option; the call returns bytes. Write yourself with `Bun.write(path, bytes)`
 - `page.pdf()` / `Page.printToPDF` — not implemented
 - `mochi.launch({ headless: "new" })` — `headless` is boolean. Use `headlessMode: "new"`
+- `mochi.launch({ profile: "windows-chrome-stable" })` from a Linux server — that's the wrong default per task 0271 thesis. On Linux, omit `profile` (mochi auto-picks `linux-chrome-stable`) or pass it explicitly. Linux is a real-user signal, not a bot signal — full thesis at https://mochijs.com/docs/concepts/stealth-philosophy
 - `LaunchOptions.userDataDir` — not a public option; mochi manages a per-Session ephemeral user-data-dir
 - `LaunchOptions.viewport` — derive viewport from the profile/matrix, not at launch
 - `LaunchOptions.executablePath` — use `binary`

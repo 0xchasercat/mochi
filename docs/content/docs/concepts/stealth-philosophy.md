@@ -24,6 +24,62 @@ mochi flips it: every fingerprint surface mochi spoofs derives from a single `(p
 
 The invariant is enforced architecturally. If a user supplies a manual override that would break a rule (e.g., setting `userAgent` to a Mac UA on a Windows profile), the override is logged as a *deliberate inconsistency* and the [Probe Manifest harness](/docs/concepts/probe-manifest) refuses to certify the resulting profile. mochi will let you do it; the framework just won't pretend the result is internally consistent.
 
+## Default to the host OS, not Windows
+
+The standard advice in the antidetect-browser industry is to spoof Windows from every host because browserscan-style surface checks penalize Linux UAs. The design team's position is that this is wrong, and that the entire industry built Windows spoofing on a false premise.
+
+### The thesis
+
+The user's voice on this, preserved verbatim from the task brief:
+
+> Everyone told you to spoof Windows. They were wrong. Here's the proof.
+>
+> Linux has like 4% desktop market share, but it's massively overrepresented in high-value user segments — developers, engineers, researchers, power users. The people WAF vendors' customers actually want to serve.
+>
+> A CTO who flags all Linux as bot traffic is:
+> - Blocking their own engineering team
+> - Blocking developers evaluating their product
+> - Blocking a disproportionately high-LTV user segment
+> - Creating false positive rates that destroy trust in the detection system
+>
+> Nobody would ship that. It's business suicide.
+>
+> So Linux was never flagged. The WAFs trained their models on real traffic and Linux users are real users. The signal was always `HeadlessChrome`, not Linux.
+>
+> The entire antidetect browser industry built Windows spoofing on a false premise. They assumed Linux was penalized because browserscan said so. Browserscan is a surface-level string checker, not a WAF ML model.
+
+### The architectural rationale
+
+Spoofing across the OS axis is asymmetric. A Mac profile run on a Linux host has to lie about every WebGL string, every audio sample-rate, every font list, every JA4 ciphersuite ordering — and any one of those rules drifting is a relational-consistency hit that mochi's 40-rule DAG would catch on the way out, but that a leaky cross-axis rewrite written *outside* mochi would miss. Matching host-OS removes the entire class of "OS-axis inconsistency" detections. There is also a smaller latency budget: the Probe Manifest harness's headful → `--headless=new` rendering parity check runs faster when the host's native renderer matches the spoofed profile's renderer, because cross-OS spoofs have to patch more surfaces.
+
+Concretely: `mochi.launch({ profile: "linux-chrome-stable", … })` on a Linux server is **the recommended path**, not a workaround. As of task 0272 the user does not even type the profile id — when `profile` is omitted from `mochi.launch()`, mochi consults `process.platform` / `process.arch` and auto-picks the host-OS-matching profile. Linux server runs the linux profile; Mac arm64 dev box runs `mac-m4-chrome-stable`; Windows runs `windows-chrome-stable`. Explicit `profile` always wins. See [`mochi.defaultProfileForHost`](/docs/api/core) and [Linux server deployment](/docs/getting-started/linux-server).
+
+### The proof
+
+Captured against [aone.gg](https://aone.gg/) (FingerprintJS Pro v4) on 2026-05-08, from a Linux DC server (Frankfurt, Aixit GmbH ASN 29551, ASN type `hosting`, `datacenter_result: true`):
+
+```json
+{
+  "bot": "not_detected",
+  "suspect_score": 8,
+  "tampering": true,
+  "tampering_confidence": "medium",
+  "tampering_ml_score": 0.9853,
+  "tampering_details": { "anomaly_score": 0, "anti_detect_browser": true },
+  "vpn": false,
+  "vpn_confidence": "high",
+  "vpn_origin_timezone": "UTC"
+}
+```
+
+Three things this confirms:
+
+- **`bot: not_detected` from a hosting ASN** is the headline. Datacenter IPs are normally a strong bot signal; FPJS Pro's classifier did not fire. `suspect_score: 8` on the 0-100 scale (lower is more legitimate) puts mochi well below peer-reported scores under the same conditions: patched Chrome (own build) ~14-18; CloakBrowser ~20+.
+- **`tampering_ml_score: 0.9853` but the classifier did not promote.** The tampering ML *can* tell something is off. It does not promote that to a bot classification because the rest of the fingerprint is internally coherent — exactly what the relational-consistency thesis predicts. Cross-axis agreement is the dominant signal; ML drift on a single axis is not enough to trip the gate alone.
+- **`vpn: false` despite `vpn_origin_timezone: "UTC"`.** The privacy-fallback `geoConsistency` architecture working in production. The session ran with matrix tz `UTC` against a Frankfurt IP. A naive spoof would produce `os_mismatch: true` or `timezone_mismatch: true`; mochi's privacy-fallback presents as a privacy-conscious user (UTC) rather than a tampered Asia/Bangkok→Europe/Berlin mismatch. FPJS recorded `vpn_origin_timezone: "UTC"` (the privacy signal we wanted) and kept `vpn: false` (the classification we wanted).
+
+This is one site (aone.gg, FPJS Pro v4 — high-quality but not best-in-class adversary). Cloudflare bot-management, Akamai Bot Manager, DataDome, Kasada, PerimeterX in their max-aggressiveness modes have not been tested against this run. The [Limits page](/docs/reference/limits) stays the canonical "what we don't claim". The raw FPJS Pro v4 JSON lives in [`tasks/0271`](https://github.com/0xchasercat/mochi/blob/main/tasks/0271-the-linux-os-thesis.md).
+
 ## Probe Manifest as gate (invariants I-6, I-7)
 
 A probe is "in scope" when it appears in a [Probe Manifest](/docs/concepts/probe-manifest). The harness drives a real session against a probe page, captures a structured snapshot of every fingerprint surface mochi knows about, normalizes per-session entropy, and diffs the result against per-profile committed baselines. Per **I-6** (the Probe Manifest is the truth): if a surface isn't in the manifest, it isn't a tracked surface; if it's in the manifest and we don't cover it, that's a gap with an issue number. The schema is [vendored from Peekaboo](https://github.com/0xchasercat/mochi/blob/main/schemas/probe-manifest.schema.json) verbatim and synced quarterly.

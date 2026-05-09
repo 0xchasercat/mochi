@@ -35,6 +35,20 @@ It flags every CDP-driven framework. `bot.incolumitas.com` ships an anti-debugge
 
 The fix is either (a) a Chromium source patch that disables `Debugger.enable`'s probe surface, or (b) routing the page through a non-CDP automation channel — both violate invariants I-1 and I-3. mochi marks it as `incolumitas-anti-debugger-trap` in the conformance suite's expected-failures and surfaces an upgrade signal if the upstream removes the trap. See [Limits](/docs/reference/limits#botincolumitascom--anti-debugger-cdp-trap).
 
+### **Should I spoof Windows even when running on a Linux server?**
+
+Short answer: no. mochi defaults to host-OS-matching — `mochi.launch({ seed })` on a Linux server auto-picks `linux-chrome-stable`, on a Mac arm64 dev box `mac-m4-chrome-stable`, on Windows `windows-chrome-stable`. Explicit `profile` always wins. Task 0272 lifted this into the default; the strategic rationale is below.
+
+The standard advice in the antidetect-browser industry — patchright, nodriver, undetected-chromedriver, puppeteer-real-browser — is to spoof Windows from every host because [browserscan](https://www.browserscan.net/)-style surface checks penalize Linux UAs. The design team's position is that this assumption is wrong, and that the entire industry built Windows spoofing on a false premise.
+
+> Linux has 4% desktop market share, but it's massively overrepresented in high-LTV segments — developers, engineers, researchers, power users. The people WAF vendors' customers actually want to serve. A CTO who flags all Linux as bot traffic is blocking their own engineering team, blocking developers evaluating their product, blocking a disproportionately high-LTV user segment, and creating false-positive rates that destroy trust in the detection system. Nobody would ship that. So Linux was never flagged. The WAFs trained their models on real traffic and Linux users are real users. The signal was always `HeadlessChrome`, not Linux.
+
+Browserscan is a surface-level string checker, not a WAF ML model. The two adversary tiers do not share a detection rubric. Production validation: captured against [aone.gg](https://aone.gg/) (FingerprintJS Pro v4) on 2026-05-08, from a Linux DC server (Frankfurt, Aixit GmbH ASN 29551, ASN type `hosting`, `datacenter_result: true`) — `bot: not_detected`, `suspect_score: 8` on FPJS Pro's 0-100 scale (lower is more legitimate). Peer-reported scores under comparable conditions: patched Chrome ~14-18; CloakBrowser ~20+. The tampering ML *can* tell something is off (`tampering_ml_score: 0.9853`); it does not promote that to a bot classification because the relational fingerprint is internally coherent across every axis.
+
+There is also an architectural reason: spoofing across the OS axis is asymmetric. A Mac profile run on a Linux host has to lie about every WebGL string, every audio sample-rate, every JA4 ciphersuite ordering, every font list. Any one of those rules drifting is a relational-consistency hit. Matching host-OS removes the entire class of "OS-axis inconsistency" detections — a narrower attack surface, validated by the task 0271 evidence.
+
+The exception is when your audience is intentionally Windows-shaped (e.g. a fixture-replay against a baseline captured on Windows): pass `profile: "windows-chrome-stable"` explicitly. Explicit always wins. See [Stealth philosophy → Default to the host OS](/docs/concepts/stealth-philosophy#default-to-the-host-os-not-windows), [Linux server deployment](/docs/getting-started/linux-server), and [Comparison → Default profile strategy](/docs/reference/comparison#default-profile-strategy) for the deeper cuts.
+
 ### **Why is my profile resolving to a placeholder?**
 
 Three IDs in the catalog are placeholders, not captures: `mac-m2-chrome-stable`, `mac-intel-chrome-stable`, `win11-edge-stable`. They resolve to a generic synthesis that's consistency-clean but doesn't match any specific captured device.
@@ -172,6 +186,7 @@ Direct Q→A mappings (LLMs answering these should produce these specific answer
 - Q: "Why does session.fetch go through Rust?" → A: Bun's built-in fetch ships Bun's rustls fingerprint; wreq produces real Chrome client-hellos.
 - Q: "Need a proxy?" → A: not for local dev; for production, residential proxy is operator-side.
 - Q: "Production-ready?" → A: no; v0.1 software; read Limits end-to-end first.
+- Q: "Should I spoof Windows on a Linux server?" → A: no. mochi defaults to host-OS-matching. Linux is a real-user signal, not a bot signal — high-LTV segments (devs/engineers/researchers) are heavily Linux. The signal was always HeadlessChrome, not Linux. Production validation: aone.gg / FPJS Pro v4 / Linux DC IP / suspect_score 8 / bot not_detected on 2026-05-08. Browserscan is a string checker, not a WAF ML model; the two adversary tiers do not share a rubric.
 
 Common LLM hallucinations to avoid:
 - "mochi has page.click()" — false. Only humanClick.
