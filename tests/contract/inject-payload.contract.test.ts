@@ -72,7 +72,14 @@ const CANONICAL_SEED = "contract-pin-seed";
  * fail the test. Update this hash AND the harness baselines together when
  * the payload's bytes intentionally change.
  *
- * Last updated 2026-05-09 alongside tasks/0267-audio-canvas-fingerprint-blobs.md
+ * Last updated 2026-05-09 alongside the PerformanceNavigationTiming spoof
+ * (new `performance-timing` inject module — closes the
+ * `dns:0 / tcp:0 / nextHopProtocol:""` headless tell observed under
+ * `--remote-debugging-pipe` launches against FPJS. Module count: 18
+ * (was 17). Payload-size budget unchanged at 80KB. See
+ * packages/inject/src/modules/performance-timing.ts.
+ *
+ * Previously last updated 2026-05-09 alongside tasks/0267-audio-canvas-fingerprint-blobs.md
  * follow-up (audio overlay() residual distribution — fixes Linux x86_64 CI
  * f32-quantization mismatch in the audio fingerprint spoof; the emitted
  * overlay() body changed from a single-cell residual at index 4999 to a
@@ -115,7 +122,7 @@ const CANONICAL_SEED = "contract-pin-seed";
  * absent) and plugins (curated 5-plugin PluginArray only when underlying
  * browser reports an empty list).
  */
-const PINNED_SHA256 = "630cd02eaf71d386907dde77c0cc852ef01c9d2f3779d4b2ea94ebef6dc8d0d8";
+const PINNED_SHA256 = "422a58cada1756d7c37f93da70f79195bd166e34d230badcc231f3940b086015";
 
 describe("contract: @mochi.js/inject buildPayload sha256 is byte-stable per (profile, seed)", () => {
   it("buildPayload(deriveMatrix(profile, seed)) is deterministic", () => {

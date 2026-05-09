@@ -35,6 +35,7 @@ import { emitMediaDevicesModule } from "./modules/media-devices";
 import { emitMouseEventScreenModule } from "./modules/mouse-event-screen";
 import { emitNavigatorModule } from "./modules/navigator";
 import { emitNetworkInfoModule } from "./modules/network-info";
+import { emitPerformanceTimingModule } from "./modules/performance-timing";
 import { emitPermissionsModule } from "./modules/permissions";
 import { emitPluginsModule } from "./modules/plugins";
 import { emitScreenModule } from "./modules/screen";
@@ -109,6 +110,7 @@ export function buildPayload(matrix: MatrixV1): PayloadResult {
   // we keep an alphabetical-ish grouping for human readability of the dump.
   parts.push(wrapTry("media-devices", emitMediaDevicesModule(matrix)));
   parts.push(wrapTry("network-info", emitNetworkInfoModule(matrix)));
+  parts.push(wrapTry("performance-timing", emitPerformanceTimingModule(matrix)));
   parts.push(wrapTry("permissions", emitPermissionsModule(matrix)));
   parts.push(wrapTry("screen-orientation", emitScreenOrientationModule(matrix)));
   parts.push(wrapTry("webgpu", emitWebgpuModule(matrix)));
