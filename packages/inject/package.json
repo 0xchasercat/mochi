@@ -1,6 +1,6 @@
 {
   "name": "@mochi.js/inject",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Zero-jitter stealth payload for mochi — JIT-friendly proxies installed before any page script.",
   "license": "MIT",
   "type": "module",

@@ -1,6 +1,6 @@
 {
   "name": "@mochi.js/behavioral",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Biomechanical input synthesis for mochi — cubic Bezier + Fitts's Law + Gaussian jitter for humanClick / humanType / humanScroll.",
   "license": "MIT",
   "type": "module",
