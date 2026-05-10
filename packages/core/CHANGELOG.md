@@ -1,5 +1,12 @@
 # @mochi.js/core
 
+## 0.9.1
+
+### Patch Changes
+
+- Updated dependencies [a884318]
+  - @mochi.js/inject@0.4.1
+
 ## 0.9.0
 
 ### Minor Changes

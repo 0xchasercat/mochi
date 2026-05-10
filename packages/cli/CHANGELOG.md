@@ -1,5 +1,12 @@
 # @mochi.js/cli
 
+## 0.2.8
+
+### Patch Changes
+
+- @mochi.js/core@0.9.1
+- @mochi.js/harness@0.1.13
+
 ## 0.2.7
 
 ### Patch Changes
