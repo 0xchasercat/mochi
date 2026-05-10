@@ -710,7 +710,7 @@ function synthesizePlaceholderProfile(profile: ProfileId): ProfileV1 {
       id: profile,
       version: "0.0.0-placeholder",
       engine: "chromium",
-      browser: { name: "chrome", channel: "stable", minVersion: "148", maxVersion: "148" },
+      browser: { name: "chrome", channel: "stable", minVersion: "147", maxVersion: "147" },
       os: { name: "macos", version: "14", arch: "arm64" },
       device: {
         vendor: "Apple",
@@ -739,9 +739,9 @@ function synthesizePlaceholderProfile(profile: ProfileId): ProfileV1 {
       locale: "en-US",
       languages: ["en-US", "en"],
       behavior: { hand: "right", tremor: 0.18, wpm: 60, scrollStyle: "smooth" },
-      wreqPreset: "chrome_148_macos",
+      wreqPreset: "chrome_147_macos",
       userAgent:
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
       uaCh: {},
       entropyBudget: { fixed: [], perSeed: [] },
     };
@@ -752,7 +752,7 @@ function synthesizePlaceholderProfile(profile: ProfileId): ProfileV1 {
       id: profile,
       version: "0.0.0-placeholder",
       engine: "chromium",
-      browser: { name: "chrome", channel: "stable", minVersion: "148", maxVersion: "148" },
+      browser: { name: "chrome", channel: "stable", minVersion: "147", maxVersion: "147" },
       os: { name: "windows", version: "11", arch: "x64" },
       device: {
         vendor: "generic",
@@ -783,9 +783,9 @@ function synthesizePlaceholderProfile(profile: ProfileId): ProfileV1 {
       locale: "en-US",
       languages: ["en-US", "en"],
       behavior: { hand: "right", tremor: 0.18, wpm: 60, scrollStyle: "smooth" },
-      wreqPreset: "chrome_148_windows",
+      wreqPreset: "chrome_147_windows",
       userAgent:
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
       uaCh: {},
       entropyBudget: { fixed: [], perSeed: [] },
     };
@@ -796,7 +796,7 @@ function synthesizePlaceholderProfile(profile: ProfileId): ProfileV1 {
     id: profile,
     version: "0.0.0-placeholder",
     engine: "chromium",
-    browser: { name: "chrome", channel: "stable", minVersion: "148", maxVersion: "148" },
+    browser: { name: "chrome", channel: "stable", minVersion: "147", maxVersion: "147" },
     os: { name: "linux", version: "22", arch: "x64" },
     device: {
       vendor: "generic",
@@ -825,9 +825,9 @@ function synthesizePlaceholderProfile(profile: ProfileId): ProfileV1 {
     // back-compat (see `schemas/profile.schema.json`). The runtime no
     // longer reads it — `Session.fetch` rides Chromium's network stack via
     // CDP, so JA4 is real Chrome by definition. Drops in a future major.
-    wreqPreset: "chrome_148_linux",
+    wreqPreset: "chrome_147_linux",
     userAgent:
-      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
     uaCh: {},
     entropyBudget: { fixed: [], perSeed: [] },
   };
