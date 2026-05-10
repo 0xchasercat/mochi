@@ -1,5 +1,15 @@
 # @mochi.js/core
 
+## 0.9.4
+
+### Patch Changes
+
+- Updated dependencies [7bd80bb]
+  - @mochi.js/consistency@0.1.5
+  - @mochi.js/behavioral@0.1.7
+  - @mochi.js/inject@0.4.2
+  - @mochi.js/profiles@0.2.1
+
 ## 0.9.3
 
 ### Patch Changes

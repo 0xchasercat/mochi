@@ -1,5 +1,12 @@
 # @mochi.js/inject
 
+## 0.4.2
+
+### Patch Changes
+
+- Updated dependencies [7bd80bb]
+  - @mochi.js/consistency@0.1.5
+
 ## 0.4.1
 
 ### Patch Changes
