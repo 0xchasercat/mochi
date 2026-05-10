@@ -650,11 +650,41 @@ async function loadProfileWithFallback(id: ProfileId): Promise<ProfileV1> {
 }
 
 /**
+ * Pattern-match a profile id to the OS axis it implies. Used by
+ * {@link synthesizePlaceholderProfile} so a `mac-*` / `win11-*` id
+ * doesn't synthesize a Linux profile, which produced the "Linux profile
+ * forced on macOS / Windows" bug for the 5 catalog ids that lack a
+ * captured baseline (`mac-m2-`, `mac-m1-`, `mac-intel-`, `win11-`,
+ * `win11-edge-`).
+ *
+ * The mapping is conservative — anything that doesn't match a known
+ * prefix falls back to Linux to preserve the long-standing default.
+ *
+ * Exported as `@internal` for unit tests; not part of the public surface.
+ *
+ * @internal
+ */
+export function inferPlaceholderOsFromId(id: string): "macos" | "windows" | "linux" {
+  if (id.startsWith("mac-") || id.startsWith("macos-")) return "macos";
+  if (id.startsWith("win11-") || id.startsWith("windows-") || id.startsWith("win10-"))
+    return "windows";
+  return "linux";
+}
+
+/**
  * Synthesize a generic placeholder `ProfileV1` from a profile id, used as
  * a fallback when the catalog declares an id but no captured baseline
  * ships in `@mochi.js/profiles` yet. The consistency engine still produces
  * a real, relationally-locked Matrix from this skeleton — the id is what
  * flows into `sha256(profile.id + seed)`.
+ *
+ * The OS axis derives from the id (see {@link inferPlaceholderOsFromId})
+ * so a `mac-*` or `win11-*` id never lands a Linux profile. Pre-fix: the
+ * placeholder was unconditionally Linux, which silently broke the 5
+ * catalog ids that lack captured baselines (`mac-m2-`, `mac-m1-`,
+ * `mac-intel-`, `win11-`, `win11-edge-`). Users on macOS or Windows
+ * passing one of those ids saw a Linux UA against their host's actual
+ * Chromium-for-Testing binary — the canonical R-004 mismatch.
  *
  * The major version pinned here MUST track the live Chromium-for-Testing
  * pin (`packages/cli/src/browsers/manifest.ts:PINNED_FALLBACK_VERSION`)
@@ -665,6 +695,103 @@ async function loadProfileWithFallback(id: ProfileId): Promise<ProfileV1> {
  * meant to prevent. Bump all three together.
  */
 function synthesizePlaceholderProfile(profile: ProfileId): ProfileV1 {
+  const os = inferPlaceholderOsFromId(profile);
+
+  // Per-OS skeletons — every field that varies by OS axis is bound here so
+  // the matrix the consistency engine produces stays self-coherent.
+  // (Display / audio / locale / behavior stay platform-neutral; the
+  // consistency DAG handles per-rule cross-references downstream.)
+  if (os === "macos") {
+    // arm64 is the modern default — Apple Silicon has been shipping since
+    // 2020 and the catalog's tip captures (mac-m4, mac-chrome-stable) are
+    // arm64. Intel Mac users should pass an inline ProfileV1 if they want
+    // strict x64 placement.
+    return {
+      id: profile,
+      version: "0.0.0-placeholder",
+      engine: "chromium",
+      browser: { name: "chrome", channel: "stable", minVersion: "148", maxVersion: "148" },
+      os: { name: "macos", version: "14", arch: "arm64" },
+      device: {
+        vendor: "Apple",
+        model: "Mac15,3",
+        cpuFamily: "apple-silicon-m3",
+        cores: 8,
+        memoryGB: 16,
+      },
+      display: { width: 1728, height: 1117, dpr: 2, colorDepth: 30, pixelDepth: 30 },
+      gpu: {
+        vendor: "Apple Inc.",
+        renderer: "Apple M3",
+        webglUnmaskedVendor: "Google Inc. (Apple)",
+        webglUnmaskedRenderer: "ANGLE (Apple, ANGLE Metal Renderer: Apple M3, Unspecified Version)",
+        webglMaxTextureSize: 16384,
+        webglMaxColorAttachments: 8,
+        webglExtensions: [],
+      },
+      audio: {
+        contextSampleRate: 48000,
+        audioWorkletLatency: 0.005,
+        destinationMaxChannelCount: 2,
+      },
+      fonts: { family: "macos-baseline", list: ["Helvetica"] },
+      timezone: "America/Los_Angeles",
+      locale: "en-US",
+      languages: ["en-US", "en"],
+      behavior: { hand: "right", tremor: 0.18, wpm: 60, scrollStyle: "smooth" },
+      wreqPreset: "chrome_148_macos",
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+      uaCh: {},
+      entropyBudget: { fixed: [], perSeed: [] },
+    };
+  }
+
+  if (os === "windows") {
+    return {
+      id: profile,
+      version: "0.0.0-placeholder",
+      engine: "chromium",
+      browser: { name: "chrome", channel: "stable", minVersion: "148", maxVersion: "148" },
+      os: { name: "windows", version: "11", arch: "x64" },
+      device: {
+        vendor: "generic",
+        model: "generic-x64",
+        cpuFamily: "intel-core-i7",
+        cores: 8,
+        memoryGB: 16,
+      },
+      display: { width: 1920, height: 1080, dpr: 1, colorDepth: 24, pixelDepth: 24 },
+      gpu: {
+        vendor: "Google Inc. (Intel)",
+        renderer:
+          "ANGLE (Intel, Intel(R) UHD Graphics 770 (0x00004680) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        webglUnmaskedVendor: "Google Inc. (Intel)",
+        webglUnmaskedRenderer:
+          "ANGLE (Intel, Intel(R) UHD Graphics 770 (0x00004680) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        webglMaxTextureSize: 16384,
+        webglMaxColorAttachments: 8,
+        webglExtensions: [],
+      },
+      audio: {
+        contextSampleRate: 48000,
+        audioWorkletLatency: 0.005,
+        destinationMaxChannelCount: 2,
+      },
+      fonts: { family: "windows-baseline", list: ["Segoe UI"] },
+      timezone: "America/New_York",
+      locale: "en-US",
+      languages: ["en-US", "en"],
+      behavior: { hand: "right", tremor: 0.18, wpm: 60, scrollStyle: "smooth" },
+      wreqPreset: "chrome_148_windows",
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+      uaCh: {},
+      entropyBudget: { fixed: [], perSeed: [] },
+    };
+  }
+
+  // Linux fallback (also catches anything that didn't match macos/windows).
   return {
     id: profile,
     version: "0.0.0-placeholder",
@@ -697,7 +824,7 @@ function synthesizePlaceholderProfile(profile: ProfileId): ProfileV1 {
     // `wreqPreset` is required by the ProfileV1 schema for one release of
     // back-compat (see `schemas/profile.schema.json`). The runtime no
     // longer reads it — `Session.fetch` rides Chromium's network stack via
-    // CDP, so JA4 is real Chrome by definition. Drops in 0.8.
+    // CDP, so JA4 is real Chrome by definition. Drops in a future major.
     wreqPreset: "chrome_148_linux",
     userAgent:
       "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
