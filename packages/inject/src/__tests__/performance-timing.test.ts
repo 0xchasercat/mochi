@@ -37,7 +37,12 @@ describe("performance-timing — PerformanceNavigationTiming shim", () => {
     expect(code).toContain('prop === "connectEnd"');
     expect(code).toContain('prop === "secureConnectionStart"');
     expect(code).toContain('prop === "nextHopProtocol"');
-    expect(code).toContain("Reflect.get(target, prop, receiver)");
+    // The fall-through Reflect.get must pass `target` (the real entry)
+    // as receiver — NOT `receiver` (the proxy). Native getters on
+    // PerformanceNavigationTiming.prototype brand-check `this` and
+    // throw "Illegal invocation" against the proxy. See issue #47.
+    expect(code).toContain("Reflect.get(target, prop, target)");
+    expect(code).not.toContain("Reflect.get(target, prop, receiver)");
   });
 
   it("uses idempotent patching — only injects when end <= start", () => {

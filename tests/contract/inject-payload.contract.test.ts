@@ -72,8 +72,18 @@ const CANONICAL_SEED = "contract-pin-seed";
  * fail the test. Update this hash AND the harness baselines together when
  * the payload's bytes intentionally change.
  *
- * Last updated 2026-05-09 alongside the PerformanceNavigationTiming spoof
- * (new `performance-timing` inject module — closes the
+ * Last updated 2026-05-10 alongside the performance-timing hotfix
+ * (issue #47 — Reflect.get receiver bug). The Proxy's `get` trap was
+ * forwarding `receiver === proxy` to native getters on
+ * PerformanceNavigationTiming.prototype, which brand-check `this` and
+ * throw `TypeError: Illegal invocation` against the proxy. Page scripts
+ * reading `responseStart` / `transferSize` / etc. (browserscan.net's
+ * Nuxt 500 page, bbc.com/news's React error boundary) crashed their
+ * own render path. Fix: pass `target` (the real entry) as receiver so
+ * brand checks pass. One-line patch + comment shifts the payload bytes.
+ *
+ * Previously last updated 2026-05-09 alongside the PerformanceNavigationTiming
+ * spoof (new `performance-timing` inject module — closes the
  * `dns:0 / tcp:0 / nextHopProtocol:""` headless tell observed under
  * `--remote-debugging-pipe` launches against FPJS. Module count: 18
  * (was 17). Payload-size budget unchanged at 80KB. See
@@ -122,7 +132,7 @@ const CANONICAL_SEED = "contract-pin-seed";
  * absent) and plugins (curated 5-plugin PluginArray only when underlying
  * browser reports an empty list).
  */
-const PINNED_SHA256 = "422a58cada1756d7c37f93da70f79195bd166e34d230badcc231f3940b086015";
+const PINNED_SHA256 = "95f67fa40e368ded51e597fe8ee2b07387b8202e37794bb90f915327e28bf82d";
 
 describe("contract: @mochi.js/inject buildPayload sha256 is byte-stable per (profile, seed)", () => {
   it("buildPayload(deriveMatrix(profile, seed)) is deterministic", () => {

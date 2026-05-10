@@ -117,7 +117,14 @@ export function emitPerformanceTimingModule(matrix: MatrixV1): string {
             return orig;
           };
         }
-        return Reflect.get(target, prop, receiver);
+        // CRITICAL: receiver MUST be the real entry (target), not the
+        // proxy. Native getters on PerformanceNavigationTiming.prototype
+        // (responseStart, requestStart, transferSize, ...) brand-check
+        // "this" and throw "TypeError: Illegal invocation" against the
+        // proxy. Page scripts that read those getters (Nuxt apps,
+        // React error boundaries on bbc.com/news, browserscan.net) crash
+        // their own render path. See issue #47.
+        return Reflect.get(target, prop, target);
       },
     });
   }
