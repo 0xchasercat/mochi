@@ -28,6 +28,7 @@ import {
   Sha256MismatchError,
   UnzipError,
 } from "./install";
+import { PINNED_FALLBACK_VERSION } from "./manifest";
 import {
   binaryPathFor,
   type CftPlatform,
@@ -227,6 +228,23 @@ async function runInstall(args: readonly string[]): Promise<number> {
     root = resolveRootFlag(parsed.flags.root);
   } catch (err) {
     return reportError(err);
+  }
+
+  // CRITICAL — default to the PINNED_FALLBACK_VERSION when the user passed
+  // no flags. The captured profile catalog in @mochi.js/profiles is pinned
+  // against a specific Chrome major (147 today); installing whatever CfT
+  // calls "Stable" right now (which can be 148+) ships a UA-vs-binary
+  // mismatch on every fingerprint surface — the canonical R-004 detection
+  // vector. The docs (`docs/getting-started/install.md`) advertise
+  // `mochi browsers install` as "downloads the pinned Chromium-for-Testing
+  // build"; this matches that contract.
+  //
+  // Users who explicitly want the live channel-stable still get it via
+  // `--channel stable` (we detect explicit-flag presence below) or by
+  // passing an explicit `--version`.
+  const channelExplicit = parsed.flags.channel !== undefined;
+  if (version === undefined && !channelExplicit) {
+    version = PINNED_FALLBACK_VERSION;
   }
 
   const expectedSha = asString(parsed.flags.sha256);
