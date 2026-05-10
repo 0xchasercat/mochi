@@ -54,16 +54,24 @@ const CACHE_TTL_MS = 60 * 60 * 1000;
  *      mismatch — detectors fingerprint UA-vs-binary divergence as
  *      "Different browser version".
  *
- * 2026-05-10: rolled back from 148.0.7778.97 → 147.0.7727.138. The
+ * 2026-05-10: rolled back from 148.0.7778.97 → 147.0.7727.117. The
  * captured-profile catalog is still on Chrome 146/147; pinning 148
- * shipped a 1-major UA-vs-binary mismatch on every install. The
- * three most-used captures (linux-chrome-stable, mac-m4-chrome-stable,
- * mac-chrome-beta) now match this pin byte-exactly. The three older
- * 146 captures (mac-chrome-stable, windows-chrome-stable,
- * mac-brave-stable) still mismatch by 1 minor — tracked for the
- * next recapture pass.
+ * shipped a 1-major UA-vs-binary mismatch on every install — the
+ * canonical R-004 detection vector. We picked .117 because that is
+ * the latest 147.x build the CfT catalog actually publishes for all
+ * platforms (linux64, mac-arm64, mac-x64, win32, win64). The captured
+ * mac-m4-chrome-stable profile's UA happens to read .138 because the
+ * capture was taken against real Chrome (which gets more frequent
+ * patches than CfT); the patch-level drift is much smaller than the
+ * 147→148 major drift it replaces and is below most fingerprinters'
+ * resolution. Major-level match is what closes "Different browser
+ * version" detection.
+ *
+ * The three older 146 captures (mac-chrome-stable, windows-chrome-stable,
+ * mac-brave-stable) still mismatch by 1 minor — tracked for the next
+ * recapture pass.
  */
-export const PINNED_FALLBACK_VERSION = "147.0.7727.138" as const;
+export const PINNED_FALLBACK_VERSION = "147.0.7727.117" as const;
 export const PINNED_FALLBACK_CHANNEL: Channel = "stable";
 
 /** A single download entry as exposed in the CfT manifest. */

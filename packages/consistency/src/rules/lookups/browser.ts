@@ -162,7 +162,12 @@ export const BROWSER_TIP_FULL_VERSION: Readonly<
 > = {
   chrome: {
     "148": "148.0.7778.97",
-    "147": "147.0.7727.138",
+    // 147 tip patch in the CfT catalog is .117 (the captured mac-m4
+    // baseline reads .138 because that was taken against real Chrome,
+    // which ships patches CfT doesn't always publish). We mirror the
+    // CfT-available patch so PINNED_FALLBACK_VERSION + this lookup
+    // agree byte-exactly on the binary that gets installed.
+    "147": "147.0.7727.117",
     "146": "146.0.7390.122",
     "145": "145.0.7242.79",
     "144": "144.0.7180.65",
@@ -182,7 +187,8 @@ export const BROWSER_TIP_FULL_VERSION: Readonly<
   },
   brave: {
     "148": "148.0.7778.97",
-    "147": "147.0.7727.138",
+    // Mirror the chrome 147 patch — see comment on `chrome["147"]` above.
+    "147": "147.0.7727.117",
     "131": "131.0.6778.110",
   },
   arc: {
