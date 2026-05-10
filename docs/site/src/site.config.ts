@@ -10,7 +10,7 @@
  */
 
 /** Latest @mochi.js/core release. Sync on every Version PR merge. */
-export const VERSION = "0.9.2";
+export const VERSION = "0.9.3";
 
 /** Public site URL. */
 export const SITE_URL = "https://mochijs.com";
