@@ -25,7 +25,7 @@
  * @see PLAN.md §5.2 and §9
  */
 
-export const VERSION = "0.1.4" as const;
+export const VERSION = "0.1.5" as const;
 
 export { deriveMatrix } from "./derive";
 export { CONSISTENCY_ENGINE_VERSION } from "./engine-version";

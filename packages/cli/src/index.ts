@@ -6,7 +6,7 @@
  *
  * @see PLAN.md §5.8
  */
-export const VERSION = "0.2.10" as const;
+export const VERSION = "0.2.11" as const;
 
 /**
  * Programmatic re-exports for downstream consumers (notably `@mochi.js/core`,
