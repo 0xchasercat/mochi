@@ -120,11 +120,32 @@ RUN bun install && bunx mochi browsers install
 CMD ["bun", "run", "app.ts"]
 ```
 
+## Ubuntu 23.10+ / Kubuntu 25.10+ — AppArmor user-namespace restriction
+
+Ubuntu 23.10 (Mantic Minotaur) and later — including Kubuntu 25.10 — ship with `kernel.apparmor_restrict_unprivileged_userns=1` enabled by default. AppArmor blocks unprivileged user namespaces, which is exactly the kernel feature Chromium's sandbox needs to initialize. The result for any non-root user on the host:
+
+```
+FATAL: ... No usable sandbox! If you are running on Ubuntu 23.10+ or another
+Linux distro that has disabled unprivileged user namespaces with AppArmor, ...
+```
+
+mochi detects this at launch time by reading `/proc/sys/kernel/apparmor_restrict_unprivileged_userns`; if the value is `1`, the auto-`--no-sandbox` fallback fires the same way it does for root, with a clear warning naming the fingerprint trade-off. You don't need to do anything for the launch to succeed.
+
+For stealth-critical workloads where you don't want `--no-sandbox` in the command line, you have three options:
+
+- **Install an AppArmor profile for the Chromium binary** ([Chromium docs](https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md)) — the chromium-side recommended fix.
+- **Temporarily lift the restriction system-wide** with `sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0`. Weakens host security; revert with `=1`.
+- **Run on a distro without the restriction** (anything pre-23.10, or non-Ubuntu desktops that don't ship the AppArmor profile).
+
+Track this via the warning line — if you don't see it, the auto-fallback didn't trigger (either you're not on a restricted host, or you already passed `--no-sandbox` yourself).
+
 ## Troubleshooting
 
 **"Linux server detected (no DISPLAY / WAYLAND_DISPLAY) — defaulting to --headless=new"** — this is the env-aware default doing its job. Pass `headlessMode: "off"` if you have a display server you want to attach to.
 
 **`EPIPE: broken pipe` immediately after `mochi.launch()`** — usually the root + no-sandbox case. See [Installation § Linux gotcha](/docs/getting-started/install#linux-gotcha--chromium-and-root). The early-exit diagnostic in `proc.ts` heuristic-classifies this and surfaces a remediation hint when it can.
+
+**`Chromium exited (code 133) within 750ms of spawn` with stderr `No usable sandbox!`** — Ubuntu 23.10+ / Kubuntu 25.10+ AppArmor restriction (see the section above). If you see this on a fresh `bun run hello.ts`, mochi's proactive detection missed — please file an issue with the output of `cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns` so we can adjust the probe.
 
 **Chromium starts but pages render blank under `--headless=new`** — confirm you're on Chromium 118+. The pinned `mochi browsers install` build is well past that floor; if you've overridden with `binary: <path>`, check the version.
 

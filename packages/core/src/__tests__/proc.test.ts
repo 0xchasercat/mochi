@@ -380,4 +380,19 @@ describe("diagnoseEarlyExitTail", () => {
     expect(hint).toContain("Chromium refuses to start as root");
     expect(hint).not.toContain("libnss3.so");
   });
+
+  it("emits the AppArmor user-namespace hint for the canonical 'No usable sandbox' message (issue #52)", () => {
+    // The exact stderr emitted by Chromium on Kubuntu 25.10 — captured
+    // verbatim in the issue report.
+    const tail =
+      "[759176:759176:0511/132845.681682:FATAL:content/browser/zygote_host/" +
+      "zygote_host_impl_linux.cc:128] No usable sandbox! If you are running on " +
+      "Ubuntu 23.10+ or another Linux distro that has disabled unprivileged user " +
+      "namespaces with AppArmor, see ...";
+    const hint = diagnoseEarlyExitTail(tail);
+    expect(hint).toContain("user-namespace sandbox cannot initialize");
+    expect(hint).toContain("apparmor_restrict_unprivileged_userns");
+    expect(hint).toContain("Install an AppArmor profile");
+    expect(hint).toContain("--no-sandbox");
+  });
 });

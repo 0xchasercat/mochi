@@ -7,7 +7,7 @@
  * @see PLAN.md §8.5 / §8.6
  */
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PipeReader, PipeWriter } from "./cdp/transport";
@@ -251,34 +251,65 @@ export async function spawnChromium(cfg: SpawnConfig): Promise<ChromiumProcess> 
   const envExtra = process.env.MOCHI_EXTRA_ARGS;
   const args = buildChromiumArgs(cfg, userDataDir, envExtra);
 
-  // Linux + uid 0 (root) + no `--no-sandbox` anywhere → Chromium will refuse
-  // to start with the user-namespace sandbox. We auto-inject `--no-sandbox`
-  // (with a one-line warning naming the fingerprint trade-off) instead of
-  // letting `spawnChromium` crash with `EPIPE`. Users who explicitly want
-  // the sandbox under root can either run as a non-root user, `chmod 4755`
-  // the chrome-sandbox SUID helper, or pass their own `--no-sandbox` (which
-  // we'd see in args and skip this branch).
+  // Auto-fallback: --no-sandbox when Chromium's user-namespace sandbox
+  // CANNOT initialize. Two host configurations trigger this on Linux:
+  //
+  //   1. Running as root (uid 0). Chromium refuses to start under root with
+  //      the user-namespace sandbox enabled. Hits CI containers, Docker
+  //      defaults, etc.
+  //   2. Unprivileged user namespaces blocked by the kernel/AppArmor. This
+  //      is the default on Ubuntu 23.10+ and Kubuntu 25.10+ (per the
+  //      `apparmor_restrict_unprivileged_userns` knob) — Chromium emits
+  //      `FATAL: No usable sandbox!` and exits. Issue #52. ANY non-root
+  //      user on those distros hits this without intervention.
+  //
+  // In either case Chromium dies in the first few hundred ms with no CDP
+  // pipe ever opened. We inject `--no-sandbox` (with a one-line warning
+  // naming the fingerprint trade-off) instead of letting `spawnChromium`
+  // crash with `EPIPE`. Users who explicitly want the sandbox can:
+  //   - run as a non-root user on a distro that allows unprivileged userns,
+  //   - `chmod 4755` the `chrome-sandbox` SUID helper next to the CfT binary,
+  //   - on Ubuntu 23.10+, install an AppArmor profile for the Chromium binary
+  //     (see https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md),
+  //   - or pass their own `--no-sandbox` in `args` (which we'd see and skip
+  //     this branch).
   //
   // We DO NOT add `--no-sandbox` to DEFAULT_CHROMIUM_FLAGS (PLAN.md §8.6
   // explicitly omits it as a fingerprint leak). This is a runtime fallback,
   // not a default — only fires under the specific environment that would
-  // otherwise crash. The fingerprint-leak risk is documented in
-  // docs/quickstart.md "Linux gotcha — Chromium and root".
+  // otherwise crash.
   if (
     process.platform === "linux" &&
-    process.getuid?.() === 0 &&
     !args.some((a) => a === "--no-sandbox" || a.startsWith("--no-sandbox=")) &&
     !cfg.allowRootWithSandbox
   ) {
-    console.warn(
-      "[mochi] Detected root + Linux + missing --no-sandbox. " +
-        "Auto-adding --no-sandbox so Chromium can launch. " +
-        "This is a fingerprint leak per PLAN.md §8.6 — run as non-root or " +
-        "use the chrome-sandbox SUID helper for stealth-critical workloads. " +
-        "See docs/quickstart.md 'Linux gotcha — Chromium and root'. " +
-        "Pass `allowRootWithSandbox: true` to mochi.launch() to opt out of this fallback.",
-    );
-    args.push("--no-sandbox");
+    const isRoot = process.getuid?.() === 0;
+    const usernsBlocked = !isRoot && (await apparmorRestrictsUserns());
+    if (isRoot) {
+      console.warn(
+        "[mochi] Detected root + Linux + missing --no-sandbox. " +
+          "Auto-adding --no-sandbox so Chromium can launch. " +
+          "This is a fingerprint leak per PLAN.md §8.6 — run as non-root or " +
+          "use the chrome-sandbox SUID helper for stealth-critical workloads. " +
+          "See docs/getting-started/linux-server.md 'Linux gotcha — Chromium and root'. " +
+          "Pass `allowRootWithSandbox: true` to mochi.launch() to opt out of this fallback.",
+      );
+      args.push("--no-sandbox");
+    } else if (usernsBlocked) {
+      console.warn(
+        "[mochi] Detected AppArmor unprivileged user-namespace restriction " +
+          "(/proc/sys/kernel/apparmor_restrict_unprivileged_userns=1). " +
+          "Chromium's user-namespace sandbox cannot initialize on this host " +
+          "(Ubuntu 23.10+ / Kubuntu 25.10+ default). " +
+          "Auto-adding --no-sandbox so Chromium can launch. " +
+          "This is a fingerprint leak per PLAN.md §8.6 — for stealth-critical " +
+          "workloads, install an AppArmor profile for the Chromium binary " +
+          "(https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md) " +
+          "or run on a distro without the restriction. " +
+          "Pass `allowRootWithSandbox: true` to mochi.launch() to opt out of this fallback.",
+      );
+      args.push("--no-sandbox");
+    }
   }
 
   const proc = Bun.spawn([cfg.binary, ...args], {
@@ -502,6 +533,35 @@ export function buildChromiumArgs(
  * the regexes against regressions without spawning Chromium.
  *
  */
+/**
+ * Returns `true` when the host is Ubuntu 23.10+ / Kubuntu 25.10+ (or any
+ * Linux with the AppArmor knob enabled), where unprivileged user
+ * namespaces are blocked and Chromium's sandbox cannot initialize for
+ * non-root processes.
+ *
+ * Probes `/proc/sys/kernel/apparmor_restrict_unprivileged_userns` —
+ * value `1` means blocked. Missing file (older kernels, non-AppArmor
+ * distros) returns `false` so we don't false-positive into auto-
+ * `--no-sandbox` on systems that don't need it. Issue #52.
+ *
+ * Side-effect-free, sub-millisecond on Linux. Returns `false` on every
+ * non-Linux host.
+ *
+ * @internal
+ */
+export async function apparmorRestrictsUserns(): Promise<boolean> {
+  if (process.platform !== "linux") return false;
+  try {
+    const buf = await readFile("/proc/sys/kernel/apparmor_restrict_unprivileged_userns", "utf8");
+    return buf.trim() === "1";
+  } catch {
+    // ENOENT, EACCES, or anything else — assume not blocked. The
+    // post-spawn `diagnoseEarlyExitTail` still catches the "No usable
+    // sandbox" stderr pattern as the safety net.
+    return false;
+  }
+}
+
 export function diagnoseEarlyExitTail(tail: string): string {
   if (/running.*root.*without.*--no-sandbox|--no-sandbox.*required/i.test(tail)) {
     return (
@@ -511,6 +571,30 @@ export function diagnoseEarlyExitTail(tail: string): string {
       "  2. `chmod 4755 chrome-sandbox` on the SUID helper next to the CfT binary.\n" +
       "  3. Pass args: ['--no-sandbox'] to mochi.launch() — fingerprint leak (PLAN §8.6),\n" +
       "     OK for testing, not for stealth-critical production."
+    );
+  }
+  // Ubuntu 23.10+ / Kubuntu 25.10+ — AppArmor blocks unprivileged user
+  // namespaces. Chromium emits "FATAL: ... No usable sandbox!" with a
+  // pointer to its own AppArmor docs. If the proactive AppArmor probe in
+  // spawnChromium() missed (e.g., AppArmor on without the
+  // `apparmor_restrict_unprivileged_userns` sysctl set), surface the
+  // remediation here. Issue #52.
+  if (/No usable sandbox|unprivileged.+user namespace|apparmor/i.test(tail)) {
+    return (
+      "\n\nChromium's user-namespace sandbox cannot initialize on this host.\n" +
+      "This is the Ubuntu 23.10+ / Kubuntu 25.10+ default — AppArmor blocks\n" +
+      "unprivileged user namespaces. Check the knob with:\n\n" +
+      "  cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns   # 1 = blocked\n\n" +
+      "Fixes (preferred → workaround):\n" +
+      "  1. Install an AppArmor profile for the Chromium binary —\n" +
+      "     https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md\n" +
+      "  2. Temporarily lift the restriction (system-wide; weakens host security):\n" +
+      "     sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0\n" +
+      "  3. Pass args: ['--no-sandbox'] to mochi.launch() — fingerprint leak\n" +
+      "     (PLAN §8.6), acceptable for local dev / CI, not stealth-critical prod.\n" +
+      "     mochi auto-applies this fallback when it detects the AppArmor\n" +
+      "     restriction; if you saw this error, the detection missed —\n" +
+      "     please file an issue with `cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns`."
     );
   }
   const libMatch = /error while loading shared libraries:\s+([^\s:]+)/i.exec(tail);
