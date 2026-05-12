@@ -59,7 +59,7 @@ const mobileTocItems = headings.filter((h) => h.depth === 2 || h.depth === 3);
       </article>
       <PageFooter prev={prev} next={next} />
     </main>
-    <Toc headings={headings} editUrl={editUrl} lastUpdated={lastUpdated} />
+    <Toc headings={headings} editUrl={editUrl} lastUpdated={lastUpdated} currentId={currentId} />
   </div>
 </BaseLayout>
 

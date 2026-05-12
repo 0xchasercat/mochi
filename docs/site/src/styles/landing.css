@@ -251,7 +251,7 @@ a { color: inherit; text-decoration: none; }
   display: grid; grid-template-columns: 1.2fr 2fr; gap: 60px;
 }
 .m-footer-tag { font-size: 13px; color: var(--fg-muted); margin-top: 8px; }
-.m-footer-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.m-footer-cols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
 .m-footer-h {
   font-family: var(--font-mono); font-size: 11px;
   letter-spacing: 0.08em; text-transform: uppercase;
