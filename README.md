@@ -14,6 +14,16 @@
   <a href="https://bun.sh"><img src="https://img.shields.io/badge/runtime-bun%20%E2%89%A5%201.1-fbf0b2" alt="bun >= 1.1"></a>
 </p>
 
+
+---
+
+<p align="center">
+  <sub>Sponsored by heretic bot mitigation and anti-fraud</sub><br/>
+  <a href="https://heretic.tech">
+    <img src="https://raw.githubusercontent.com/heretic-hq/.github/refs/heads/main/heretic-gh.png" width="800" alt="Sponsored by Heretic" />
+  </a>
+</p>
+
 ---
 
 ## The 30-second pitch
